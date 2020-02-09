@@ -287,14 +287,14 @@
     <Error Text="examples tests (.\examples) failed" 
            Condition="$(ExamplesTestExitCode) != 0"/>
 
-    <Exec Command="go test -v -timeout 40m -cover -parallel $(TestParallelism) .\tests\integration"
-          IgnoreExitCode="true"
-          WorkingDirectory="$(RepoRootDirectory)">
-      <Output TaskParameter="ExitCode" PropertyName="IntegrationTestExitCode" />
-    </Exec>
+<!--     <Exec Command="go test -v -timeout 40m -cover -parallel $(TestParallelism) .\tests\integration" -->
+<!--           IgnoreExitCode="true" -->
+<!--           WorkingDirectory="$(RepoRootDirectory)"> -->
+<!--       <Output TaskParameter="ExitCode" PropertyName="IntegrationTestExitCode" /> -->
+<!--     </Exec> -->
 
-    <Error Text="integration tests (.\tests\integration) failed"
-           Condition="$(IntegrationTestExitCode) != 0"/>
+<!--     <Error Text="integration tests (.\tests\integration) failed" -->
+<!--            Condition="$(IntegrationTestExitCode) != 0"/> -->
   </Target>
 
   <Target Name="Publish">
@@ -306,5 +306,4 @@
 
   <Target Name="CIBuild"
           DependsOnTargets="Build;Tests" />
-
 </Project>
