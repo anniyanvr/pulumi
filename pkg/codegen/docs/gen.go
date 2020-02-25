@@ -142,37 +142,38 @@ func resourceName(r *schema.Resource) string {
 	return tokenToName(r.Token)
 }
 
-func (mod *modContext) pulumiTypeString(t schema.Type) string {
+func (mod *modContext) pulumiTypeString(t schema.Type, link bool) string {
 	var typ string
 	switch t := t.(type) {
 	case *schema.ArrayType:
-		typ = fmt.Sprintf("Array<%s>", mod.pulumiTypeString(t.ElementType))
+		typ = fmt.Sprintf("%s[]", mod.pulumiTypeString(t.ElementType, link))
 	case *schema.MapType:
-		typ = fmt.Sprintf("Map<String, %s>", mod.pulumiTypeString(t.ElementType))
+		typ = fmt.Sprintf("map[string]%s", mod.pulumiTypeString(t.ElementType, link))
 	case *schema.ObjectType:
-		typ = tokenToName(t.Token)
+		//typ = tokenToName(t.Token)
+		return fmt.Sprintf("<a href=\"#%s\">%s</a>", lower(tokenToName(t.Token)), tokenToName(t.Token))
 	case *schema.TokenType:
 		typ = tokenToName(t.Token)
 	case *schema.UnionType:
 		var elements []string
 		for _, e := range t.ElementTypes {
-			elements = append(elements, mod.pulumiTypeString(e))
+			elements = append(elements, mod.pulumiTypeString(e, link))
 		}
-		return fmt.Sprintf("Union<%s>", strings.Join(elements, ", "))
+		return strings.Join(elements, " | ")
 	default:
 		switch t {
 		case schema.BoolType:
-			typ = "Boolean"
+			typ = "boolean"
 		case schema.IntType, schema.NumberType:
-			typ = "Number"
+			typ = "number"
 		case schema.StringType:
-			typ = "String"
+			typ = "string"
 		case schema.ArchiveType:
 			typ = "Archive"
 		case schema.AssetType:
-			typ = "Union<Asset, Archive>"
+			typ = "Asset | Archive"
 		case schema.AnyType:
-			typ = "Any"
+			typ = "any"
 		}
 	}
 	return typ
@@ -367,30 +368,46 @@ func (mod *modContext) getDefaultValue(dv *schema.DefaultValue, t schema.Type) (
 }
 
 func (mod *modContext) genProperties(w io.Writer, properties []*schema.Property, input bool) {
-	for _, prop := range properties {
-		fmt.Fprintf(w, "#### %s - %s\n\n", escape(prop.Name), escape(mod.pulumiTypeString(prop.Type)))
-
-		// TODO(justinvp): deprecation message
-
-		fmt.Fprintf(w, "```typescript\n")
-		if input {
-			mod.genProperty(w, prop, false, true, true, false, 0)
-		} else {
-			fmt.Fprintf(w, "public %s: pulumi.Output<%s>;\n", escape(prop.Name), escape(mod.typeString(prop.Type, false, false, !prop.IsRequired)))
-		}
-		fmt.Fprintf(w, "```\n\n")
-
-		preamble := "(Optional) "
-		if prop.IsRequired {
-			preamble = "(Required) "
-		}
-
-		if !input {
-			preamble = ""
-		}
-
-		fmt.Fprintf(w, "%s%s\n\n", preamble, escape(prop.Comment))
+	if len(properties) == 0 {
+		return
 	}
+
+	for _, prop := range properties {
+		var required string
+		if input {
+			required = "Optional "
+			if prop.IsRequired {
+				required = "Required "
+			}
+		}
+
+		fmt.Fprintf(w, "* `%s` -- (%s<code>%s</code>) %s\n", prop.Name, required, mod.pulumiTypeString(prop.Type, true), prop.Comment)
+	}
+
+	// for _, prop := range properties {
+	// 	fmt.Fprintf(w, "#### %s - %s\n\n", escape(prop.Name), escape(mod.pulumiTypeString(prop.Type)))
+
+	// 	// TODO(justinvp): deprecation message
+
+	// 	fmt.Fprintf(w, "```typescript\n")
+	// 	if input {
+	// 		mod.genProperty(w, prop, false, true, true, false, 0)
+	// 	} else {
+	// 		fmt.Fprintf(w, "public %s: pulumi.Output<%s>;\n", escape(prop.Name), escape(mod.typeString(prop.Type, false, false, !prop.IsRequired)))
+	// 	}
+	// 	fmt.Fprintf(w, "```\n\n")
+
+	// 	preamble := "(Optional) "
+	// 	if prop.IsRequired {
+	// 		preamble = "(Required) "
+	// 	}
+
+	// 	if !input {
+	// 		preamble = ""
+	// 	}
+
+	// 	fmt.Fprintf(w, "%s%s\n\n", preamble, escape(prop.Comment))
+	// }
 }
 
 func (mod *modContext) genNested(w io.Writer, properties []*schema.Property, input bool) {
@@ -408,7 +425,7 @@ func (mod *modContext) genNested(w io.Writer, properties []*schema.Property, inp
 		return tokenToName(objs[i].Token) < tokenToName(objs[j].Token)
 	})
 	for _, obj := range objs {
-		fmt.Fprintf(w, "### %s\n\n", tokenToName(obj.Token))
+		fmt.Fprintf(w, "#### %s\n\n", tokenToName(obj.Token))
 
 		mod.genProperties(w, obj.Properties, input)
 	}
@@ -435,18 +452,19 @@ func (mod *modContext) genGet(w io.Writer, r *schema.Resource) {
 	fmt.Fprintf(w, "* `id` - (Required) The _unique_ provider ID of the resource to lookup.\n")
 	fmt.Fprintf(w, "* `state` - (Optional) Any extra arguments used during the lookup.\n\n")
 
-	if r.StateInputs != nil {
-		fmt.Fprintf(w, "### %s\n\n", stateType)
+	// TODO(justinvp): Do we actually want to generate teh State object here? It's essentially the same
+	// if r.StateInputs != nil {
+	// 	fmt.Fprintf(w, "#### %s\n\n", stateType)
 
-		mod.genProperties(w, r.StateInputs.Properties, true)
-	}
+	// 	mod.genProperties(w, r.StateInputs.Properties, true)
+	// }
 }
 
 func (mod *modContext) genResource(w io.Writer, r *schema.Resource) {
 	// Create a resource module file into which all of this resource's types will go.
 	name := resourceName(r)
 
-	fmt.Fprintf(w, "%s\n\n", escape(r.Comment))
+	fmt.Fprintf(w, "%s\n\n", r.Comment)
 
 	// TODO(justinvp): Remove this. It's just temporary to include some data we don't have here yet.
 	mod.genMockupExamples(w, r)
@@ -475,28 +493,28 @@ func (mod *modContext) genResource(w io.Writer, r *schema.Resource) {
 	fmt.Fprintf(w, "* `args` - (%s) The arguments to use to populate this resource's properties.\n", argsRequired)
 	fmt.Fprintf(w, "* `opts` - (Optional) A bag of options that control this resource's behavior.\n\n")
 
-	fmt.Fprintf(w, "### %sArgs\n\n", name)
+	fmt.Fprintf(w, "The following arguments are supported:\n\n")
 
 	mod.genProperties(w, r.InputProperties, true)
 
-	mod.genNested(w, r.InputProperties, true)
-
-	fmt.Fprintf(w, "## Output Properties\n\n")
-
-	fmt.Fprintf(w, "### %s\n\n", name)
+	fmt.Fprintf(w, "## %s Output Properties\n\n", name)
 
 	fmt.Fprintf(w, "The following output properties are available:\n\n")
 
-	// Emit all properties (using their output types).
 	mod.genProperties(w, r.Properties, false)
-
-	mod.genNested(w, r.Properties, false)
 
 	fmt.Fprintf(w, "## Look up an Existing %s Resource\n\n", name)
 
 	mod.genGet(w, r)
 
-	// TODO(justinvp): import?
+	fmt.Fprintf(w, "## Import an Existing %s Resource\n\n", name)
+
+	// TODO(justinvp): How do we want to show import?
+	fmt.Fprintf(w, "TODO\n\n")
+
+	fmt.Fprintf(w, "## Support Types\n\n")
+
+	mod.genNested(w, r.InputProperties, true)
 }
 
 func (mod *modContext) genFunction(w io.Writer, fun *schema.Function) {
@@ -684,6 +702,7 @@ func (mod *modContext) getNestedTypes(t schema.Type, types stringSet) {
 		mod.getNestedTypes(t.ElementType, types)
 	case *schema.ObjectType:
 		types.add(t.Token)
+		mod.getTypes(t.Properties, types)
 	case *schema.UnionType:
 		for _, e := range t.ElementTypes {
 			mod.getNestedTypes(e, types)
