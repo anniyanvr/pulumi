@@ -14,6 +14,9 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/cheggaaa/pb v1.0.18
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
+	github.com/coreos/etcd v3.3.18+incompatible // indirect
+	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
+	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/cpuguy83/go-md2man v1.0.8 // indirect
 	github.com/djherbis/times v1.0.1
 	github.com/docker/docker v0.0.0-20170504205632-89658bed64c2
@@ -53,10 +56,11 @@ require (
 	github.com/texttheater/golang-levenshtein v0.0.0-20180516184445-d188e65d659e
 	github.com/uber/jaeger-client-go v2.15.0+incompatible
 	github.com/uber/jaeger-lib v1.5.0 // indirect
+	go.uber.org/zap v1.14.0 // indirect
 	gocloud.dev v0.18.0
 	gocloud.dev/secrets/hashivault v0.18.0
 	golang.org/x/crypto v0.0.0-20190605123033-f99c8df09eb5
-	golang.org/x/net v0.0.0-20190619014844-b5b0513f8c1b
+	golang.org/x/net v0.0.0-20190620200207-3b0461eec859
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
 	golang.org/x/sync v0.0.0-20190423024810-112230192c58
 	golang.org/x/sys v0.0.0-20190620070143-6f217b454f45
