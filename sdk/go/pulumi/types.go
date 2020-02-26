@@ -577,7 +577,7 @@ func awaitInputs(ctx context.Context, v, resolved reflect.Value) (bool, bool, er
 			valueType = v.Type()
 		} else {
 			// Handle pointer inputs.
-			if v.Kind() == reflect.Ptr {
+			if v.Kind() == reflect.Ptr && resolved.Kind() == reflect.Ptr {
 				v, valueType = v.Elem(), valueType.Elem()
 
 				resolved.Set(reflect.New(resolved.Type().Elem()))
@@ -603,8 +603,12 @@ func awaitInputs(ctx context.Context, v, resolved reflect.Value) (bool, bool, er
 		}
 	case reflect.Ptr:
 		if !v.IsNil() {
-			resolved.Set(reflect.New(resolved.Type().Elem()))
-			return awaitInputs(ctx, v.Elem(), resolved.Elem())
+			if resolved.Kind() == reflect.Ptr {
+				resolved.Set(reflect.New(resolved.Type().Elem()))
+				return awaitInputs(ctx, v.Elem(), resolved.Elem())
+			}
+			// resolved is a struct
+			return awaitInputs(ctx, v.Elem(), resolved)
 		}
 	case reflect.Struct:
 		typ := v.Type()
