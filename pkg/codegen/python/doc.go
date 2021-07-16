@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 // DocLanguageHelper is the Python-specific implementation of the DocLanguageHelper.
@@ -73,14 +73,14 @@ func (d DocLanguageHelper) GetDocLinkForFunctionInputOrOutputType(pkg *schema.Pa
 }
 
 // GetLanguageTypeString returns the Python-specific type given a Pulumi schema type.
-func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName string, t schema.Type, input, optional bool) string {
+func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName string, t schema.Type, input bool) string {
 	typeDetails := map[*schema.ObjectType]*typeDetails{}
 	mod := &modContext{
 		pkg:         pkg,
 		mod:         moduleName,
 		typeDetails: typeDetails,
 	}
-	typeName := mod.typeString(t, input, false /*wrapInput*/, optional /*optional*/, false /*acceptMapping*/)
+	typeName := mod.typeString(t, input, false /*acceptMapping*/)
 
 	// Remove any package qualifiers from the type name.
 	if !input {
@@ -121,12 +121,12 @@ func (d DocLanguageHelper) GetPropertyName(p *schema.Property) (string, error) {
 }
 
 // GetEnumName returns the enum name specific to Python.
-func (d DocLanguageHelper) GetEnumName(e *schema.Enum) (string, error) {
+func (d DocLanguageHelper) GetEnumName(e *schema.Enum, typeName string) (string, error) {
 	name := fmt.Sprintf("%v", e.Value)
 	if e.Name != "" {
 		name = e.Name
 	}
-	return makeSafeEnumName(name)
+	return makeSafeEnumName(name, typeName)
 }
 
 // GetModuleDocLink returns the display name and the link for a module.

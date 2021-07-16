@@ -15,7 +15,6 @@
 package cmdutil
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"runtime"
@@ -24,7 +23,7 @@ import (
 
 	"golang.org/x/crypto/ssh/terminal"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/ciutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/ciutil"
 )
 
 // Emoji controls whether emojis will by default be printed in the output.
@@ -69,13 +68,18 @@ func ReadConsole(prompt string) (string, error) {
 		fmt.Print(prompt + ": ")
 	}
 
-	reader := bufio.NewReader(os.Stdin)
-	raw, err := reader.ReadString('\n')
-	if err != nil {
-		return "", err
+	var raw strings.Builder
+	for {
+		var b [1]byte
+		if _, err := os.Stdin.Read(b[:]); err != nil {
+			return "", err
+		}
+		if b[0] == '\n' {
+			break
+		}
+		raw.WriteByte(b[0])
 	}
-
-	return RemoveTrailingNewline(raw), nil
+	return RemoveTrailingNewline(raw.String()), nil
 }
 
 // IsTruthy returns true if the given string represents a CLI input interpreted as "true".

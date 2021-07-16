@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 // DocLanguageHelper is the NodeJS-specific implementation of the DocLanguageHelper.
@@ -69,12 +69,18 @@ func (d DocLanguageHelper) GetDocLinkForFunctionInputOrOutputType(pkg *schema.Pa
 }
 
 // GetLanguageTypeString returns the language-specific type given a Pulumi schema type.
-func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName string, t schema.Type, input, optional bool) string {
+func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName string, t schema.Type, input bool) string {
+	// Remove the union with `undefined` for optional types,
+	// since we will show that information separately anyway.
+	if optional, ok := t.(*schema.OptionalType); ok {
+		t = optional.ElementType
+	}
+
 	modCtx := &modContext{
 		pkg: pkg,
 		mod: moduleName,
 	}
-	typeName := modCtx.typeString(t, input, false, optional, nil)
+	typeName := modCtx.typeString(t, input, nil)
 
 	// Remove any package qualifiers from the type name.
 	typeQualifierPackage := "inputs"
@@ -84,11 +90,6 @@ func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName
 	typeName = strings.ReplaceAll(typeName, typeQualifierPackage+".", "")
 	typeName = strings.ReplaceAll(typeName, "enums.", "")
 
-	// Remove the union with `undefined` for optional types,
-	// since we will show that information separately anyway.
-	if optional {
-		typeName = strings.ReplaceAll(typeName, " | undefined", "?")
-	}
 	return typeName
 }
 
@@ -109,12 +110,12 @@ func (d DocLanguageHelper) GetPropertyName(p *schema.Property) (string, error) {
 }
 
 // GetEnumName returns the enum name specific to NodeJS.
-func (d DocLanguageHelper) GetEnumName(e *schema.Enum) (string, error) {
+func (d DocLanguageHelper) GetEnumName(e *schema.Enum, typeName string) (string, error) {
 	name := fmt.Sprintf("%v", e.Value)
 	if e.Name != "" {
 		name = e.Name
 	}
-	return makeSafeEnumName(name)
+	return makeSafeEnumName(name, typeName)
 }
 
 // GetModuleDocLink returns the display name and the link for a module.

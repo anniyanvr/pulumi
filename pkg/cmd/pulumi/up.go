@@ -22,18 +22,18 @@ import (
 	"os"
 
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/v2/backend"
-	"github.com/pulumi/pulumi/pkg/v2/backend/display"
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/pkg/v2/resource/stack"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/config"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	"github.com/pulumi/pulumi/pkg/v3/backend/display"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/pkg/v3/resource/stack"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 	"github.com/spf13/cobra"
 )
 
@@ -48,6 +48,7 @@ func newUpCmd() *cobra.Command {
 	var expectNop bool
 	var message string
 	var execKind string
+	var execAgent string
 	var stack string
 	var configArray []string
 	var path bool
@@ -66,7 +67,7 @@ func newUpCmd() *cobra.Command {
 	var showReads bool
 	var skipPreview bool
 	var suppressOutputs bool
-	var suppressPermaLink bool
+	var suppressPermaLink string
 	var yes bool
 	var secretsProvider string
 	var targets []string
@@ -76,7 +77,7 @@ func newUpCmd() *cobra.Command {
 
 	// up implementation used when the source of the Pulumi program is in the current working directory.
 	upWorkingDirectory := func(opts backend.UpdateOptions) result.Result {
-		s, err := requireStack(stack, true, opts.Display, true /*setCurrent*/)
+		s, err := requireStack(stack, true, opts.Display, false /*setCurrent*/)
 		if err != nil {
 			return result.FromError(err)
 		}
@@ -91,7 +92,7 @@ func newUpCmd() *cobra.Command {
 			return result.FromError(err)
 		}
 
-		m, err := getUpdateMetadata(message, root, execKind)
+		m, err := getUpdateMetadata(message, root, execKind, execAgent)
 		if err != nil {
 			return result.FromError(errors.Wrap(err, "gathering environment metadata"))
 		}
@@ -122,16 +123,17 @@ func newUpCmd() *cobra.Command {
 		}
 
 		opts.Engine = engine.UpdateOptions{
-			LocalPolicyPacks:       engine.MakeLocalPolicyPacks(policyPackPaths, policyPackConfigPaths),
-			Parallel:               parallel,
-			Debug:                  debug,
-			Refresh:                refresh,
-			RefreshTargets:         targetURNs,
-			ReplaceTargets:         replaceURNs,
-			UseLegacyDiff:          useLegacyDiff(),
-			DisableProviderPreview: disableProviderPreview(),
-			UpdateTargets:          targetURNs,
-			TargetDependents:       targetDependents,
+			LocalPolicyPacks:          engine.MakeLocalPolicyPacks(policyPackPaths, policyPackConfigPaths),
+			Parallel:                  parallel,
+			Debug:                     debug,
+			Refresh:                   refresh,
+			RefreshTargets:            targetURNs,
+			ReplaceTargets:            replaceURNs,
+			UseLegacyDiff:             useLegacyDiff(),
+			DisableProviderPreview:    disableProviderPreview(),
+			DisableResourceReferences: disableResourceReferences(),
+			UpdateTargets:             targetURNs,
+			TargetDependents:          targetDependents,
 		}
 
 		changes, res := s.Update(commandContext(), backend.UpdateOperation{
@@ -269,7 +271,7 @@ func newUpCmd() *cobra.Command {
 			return result.FromError(err)
 		}
 
-		m, err := getUpdateMetadata(message, root, execKind)
+		m, err := getUpdateMetadata(message, root, execKind, execAgent)
 		if err != nil {
 			return result.FromError(errors.Wrap(err, "gathering environment metadata"))
 		}
@@ -363,11 +365,29 @@ func newUpCmd() *cobra.Command {
 				ShowSameResources:    showSames,
 				ShowReads:            showReads,
 				SuppressOutputs:      suppressOutputs,
-				SuppressPermaLink:    suppressPermaLink,
 				IsInteractive:        interactive,
 				Type:                 displayType,
 				EventLogPath:         eventLogPath,
 				Debug:                debug,
+			}
+
+			// we only suppress permalinks if the user passes true. the default is an empty string
+			// which we pass as 'false'
+			if suppressPermaLink == "true" {
+				opts.Display.SuppressPermaLink = true
+			} else {
+				opts.Display.SuppressPermaLink = false
+			}
+
+			filestateBackend, err := isFilestateBackend(opts.Display)
+			if err != nil {
+				return result.FromError(err)
+			}
+
+			// by default, we are going to suppress the permalink when using self-managed backends
+			// this can be re-enabled by explicitly passing "false" to the `supppress-permalink` flag
+			if suppressPermaLink != "false" && filestateBackend {
+				opts.Display.SuppressPermaLink = true
 			}
 
 			if len(args) > 0 {
@@ -460,9 +480,10 @@ func newUpCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolVar(
 		&suppressOutputs, "suppress-outputs", false,
 		"Suppress display of stack outputs (in case they contain sensitive values)")
-	cmd.PersistentFlags().BoolVar(
-		&suppressPermaLink, "suppress-permalink", false,
+	cmd.PersistentFlags().StringVar(
+		&suppressPermaLink, "suppress-permalink", "",
 		"Suppress display of the state permalink")
+	cmd.Flag("suppress-permalink").NoOptDefVal = "false"
 	cmd.PersistentFlags().BoolVarP(
 		&yes, "yes", "y", false,
 		"Automatically approve and perform the update after previewing it")
@@ -473,10 +494,13 @@ func newUpCmd() *cobra.Command {
 			"Log events to a file at this path")
 	}
 
-	// internal flag
+	// internal flags
 	cmd.PersistentFlags().StringVar(&execKind, "exec-kind", "", "")
 	// ignore err, only happens if flag does not exist
 	_ = cmd.PersistentFlags().MarkHidden("exec-kind")
+	cmd.PersistentFlags().StringVar(&execAgent, "exec-agent", "", "")
+	// ignore err, only happens if flag does not exist
+	_ = cmd.PersistentFlags().MarkHidden("exec-agent")
 
 	return cmd
 }

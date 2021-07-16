@@ -9,7 +9,8 @@
         "directory": "sdk/nodejs"
     },
     "dependencies": {
-        "@grpc/grpc-js": "^0.6.15",
+        "@grpc/grpc-js": "^1.2.7",
+        "@logdna/tail-file": "^2.0.6",
         "@pulumi/query": "^0.3.0",
         "google-protobuf": "^3.5.0",
         "js-yaml": "^3.14.0",
@@ -32,6 +33,7 @@
         "@types/normalize-package-data": "^2.4.0",
         "@types/read-package-tree": "^5.2.0",
         "@types/semver": "^5.5.0",
+        "@types/split2": "^2.1.6",
         "istanbul": "^0.4.5",
         "mocha": "^3.5.0",
         "tslint": "^5.11.0"

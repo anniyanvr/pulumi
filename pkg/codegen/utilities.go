@@ -21,7 +21,7 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 type StringSet map[string]struct{}
@@ -36,6 +36,10 @@ func NewStringSet(values ...string) StringSet {
 
 func (ss StringSet) Add(s string) {
 	ss[s] = struct{}{}
+}
+
+func (ss StringSet) Any() bool {
+	return len(ss) > 0
 }
 
 func (ss StringSet) Delete(s string) {
@@ -54,6 +58,28 @@ func (ss StringSet) SortedValues() []string {
 	}
 	sort.Strings(values)
 	return values
+}
+
+// Contains returns true if all elements of the subset are also present in the current set. It also returns true
+// if subset is empty.
+func (ss StringSet) Contains(subset StringSet) bool {
+	for v := range subset {
+		if !ss.Has(v) {
+			return false
+		}
+	}
+	return true
+}
+
+// Subtract returns a new string set with all elements of the current set that are not present in the other set.
+func (ss StringSet) Subtract(other StringSet) StringSet {
+	result := NewStringSet()
+	for v := range ss {
+		if !other.Has(v) {
+			result.Add(v)
+		}
+	}
+	return result
 }
 
 type Set map[interface{}]struct{}

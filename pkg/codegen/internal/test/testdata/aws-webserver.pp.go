@@ -5,7 +5,7 @@ import (
 
 	"github.com/pulumi/pulumi-aws/sdk/v2/go/aws"
 	"github.com/pulumi/pulumi-aws/sdk/v2/go/aws/ec2"
-	"github.com/pulumi/pulumi/sdk/v2/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 func main() {
@@ -26,9 +26,9 @@ func main() {
 			return err
 		}
 		opt0 := true
-		ami, err := aws.GetAmi(ctx, &aws.GetAmiArgs{
-			Filters: []aws.GetAmiFilter{
-				aws.GetAmiFilter{
+		ami, err := aws.GetAmi(ctx, &GetAmiArgs{
+			Filters: []GetAmiFilter{
+				GetAmiFilter{
 					Name: "name",
 					Values: []string{
 						"amzn-ami-hvm-*-x86_64-ebs",

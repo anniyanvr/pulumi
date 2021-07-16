@@ -34,26 +34,26 @@ import (
 	"github.com/pkg/errors"
 	"github.com/skratchdot/open-golang/open"
 
-	"github.com/pulumi/pulumi/pkg/v2/backend"
-	"github.com/pulumi/pulumi/pkg/v2/backend/display"
-	"github.com/pulumi/pulumi/pkg/v2/backend/filestate"
-	"github.com/pulumi/pulumi/pkg/v2/backend/httpstate/client"
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/pkg/v2/operations"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/pkg/v2/secrets"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag/colors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/config"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/retry"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	"github.com/pulumi/pulumi/pkg/v3/backend/display"
+	"github.com/pulumi/pulumi/pkg/v3/backend/filestate"
+	"github.com/pulumi/pulumi/pkg/v3/backend/httpstate/client"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/pkg/v3/operations"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/pkg/v3/secrets"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/retry"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 )
 
 const (
@@ -80,7 +80,7 @@ func DefaultURL() string {
 func ValueOrDefaultURL(cloudURL string) string {
 	// If we have a cloud URL, just return it.
 	if cloudURL != "" {
-		return cloudURL
+		return strings.TrimSuffix(cloudURL, "/")
 	}
 
 	// Otherwise, respect the PULUMI_API override.
@@ -647,6 +647,11 @@ func (b *cloudBackend) Logout() error {
 	return workspace.DeleteAccount(b.CloudURL())
 }
 
+// LogoutAll logs out of all accounts
+func (b *cloudBackend) LogoutAll() error {
+	return workspace.DeleteAllAccounts()
+}
+
 // DoesProjectExist returns true if a project with the given name exists in this backend, or false otherwise.
 func (b *cloudBackend) DoesProjectExist(ctx context.Context, projectName string) (bool, error) {
 	owner, err := b.currentUser(ctx)
@@ -848,8 +853,8 @@ func (b *cloudBackend) Destroy(ctx context.Context, stack backend.Stack,
 }
 
 func (b *cloudBackend) Watch(ctx context.Context, stack backend.Stack,
-	op backend.UpdateOperation) result.Result {
-	return backend.Watch(ctx, b, stack, op, b.apply)
+	op backend.UpdateOperation, paths []string) result.Result {
+	return backend.Watch(ctx, b, stack, op, b.apply, paths)
 }
 
 func (b *cloudBackend) Query(ctx context.Context, op backend.QueryOperation) result.Result {
@@ -1093,13 +1098,17 @@ func (b *cloudBackend) CancelCurrentUpdate(ctx context.Context, stackRef backend
 	return b.client.CancelUpdate(ctx, updateID)
 }
 
-func (b *cloudBackend) GetHistory(ctx context.Context, stackRef backend.StackReference) ([]backend.UpdateInfo, error) {
+func (b *cloudBackend) GetHistory(
+	ctx context.Context,
+	stackRef backend.StackReference,
+	pageSize int,
+	page int) ([]backend.UpdateInfo, error) {
 	stack, err := b.getCloudStackIdentifier(stackRef)
 	if err != nil {
 		return nil, err
 	}
 
-	updates, err := b.client.GetStackUpdates(ctx, stack)
+	updates, err := b.client.GetStackUpdates(ctx, stack, pageSize, page)
 	if err != nil {
 		return nil, err
 	}
@@ -1114,6 +1123,7 @@ func (b *cloudBackend) GetHistory(ctx context.Context, stackRef backend.StackRef
 		}
 
 		beUpdates = append(beUpdates, backend.UpdateInfo{
+			Version:         update.Version,
 			Kind:            update.Kind,
 			Message:         update.Message,
 			Environment:     update.Environment,

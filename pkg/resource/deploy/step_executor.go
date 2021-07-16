@@ -21,10 +21,10 @@ import (
 	"sync/atomic"
 
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
 )
 
 const (
@@ -293,7 +293,7 @@ func (se *stepExecutor) executeStep(workerID int, step Step) error {
 		}
 
 		// If this is not a resource that is managed by Pulumi, then we can ignore it.
-		if !newState.External && se.deployment.news != nil {
+		if _, hasGoal := se.deployment.goals.get(newState.URN); hasGoal {
 			se.deployment.news.set(newState.URN, newState)
 		}
 	}

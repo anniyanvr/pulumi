@@ -28,24 +28,24 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/pulumi/pulumi/pkg/v2/backend"
-	"github.com/pulumi/pulumi/pkg/v2/backend/display"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/dotnet"
-	gogen "github.com/pulumi/pulumi/pkg/v2/codegen/go"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/importer"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/nodejs"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/python"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/pkg/v2/resource/stack"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	"github.com/pulumi/pulumi/pkg/v3/backend/display"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/dotnet"
+	gogen "github.com/pulumi/pulumi/pkg/v3/codegen/go"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/importer"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/nodejs"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/python"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/pkg/v3/resource/stack"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
 )
 
 func parseResourceSpec(spec string) (string, resource.URN, error) {
@@ -198,6 +198,20 @@ func generateImportedDefinitions(out io.Writer, stackName tokens.QName, projectN
 	snap *deploy.Snapshot, programGenerator programGeneratorFunc, names importer.NameTable,
 	imports []deploy.Import, protectResources bool) (bool, error) {
 
+	defer func() {
+		v := recover()
+		if v != nil {
+			errMsg := strings.Builder{}
+			errMsg.WriteString("Your resource has been imported into Pulumi state, but there was an error generating the import code.\n") //nolint:lll
+			errMsg.WriteString("\n")
+			if strings.Contains(fmt.Sprintf("%v", v), "invalid Go source code:") {
+				errMsg.WriteString("You will need to copy and paste the generated code into your Pulumi application and manually edit it to correct any errors.\n\n") //nolint:lll
+			}
+			errMsg.WriteString(fmt.Sprintf("%v\n", v))
+			fmt.Print(errMsg.String())
+		}
+	}()
+
 	resourceTable := map[resource.URN]*resource.State{}
 	for _, r := range snap.Resources {
 		if !r.Delete {
@@ -262,6 +276,7 @@ func newImportCmd() *cobra.Command {
 	var message string
 	var stack string
 	var execKind string
+	var execAgent string
 
 	// Flags for engine.UpdateOptions.
 	var diffDisplay bool
@@ -270,7 +285,7 @@ func newImportCmd() *cobra.Command {
 	var showConfig bool
 	var skipPreview bool
 	var suppressOutputs bool
-	var suppressPermaLink bool
+	var suppressPermaLink string
 	var yes bool
 	var protectResources bool
 
@@ -317,7 +332,7 @@ func newImportCmd() *cobra.Command {
 			"    }\n" +
 			"\n" +
 			"The name table maps language names to parent and provider URNs. These names are\n" +
-			"used in the genrated definitions, and should match the corresponding declarations\n" +
+			"used in the generated definitions, and should match the corresponding declarations\n" +
 			"in the source program. This table is required if any parents or providers are\n" +
 			"specified by the resources to import.\n" +
 			"\n" +
@@ -383,14 +398,32 @@ func newImportCmd() *cobra.Command {
 			}
 
 			opts.Display = display.Options{
-				Color:             cmdutil.GetGlobalColorization(),
-				ShowConfig:        showConfig,
-				SuppressOutputs:   suppressOutputs,
-				SuppressPermaLink: suppressPermaLink,
-				IsInteractive:     interactive,
-				Type:              displayType,
-				EventLogPath:      eventLogPath,
-				Debug:             debug,
+				Color:           cmdutil.GetGlobalColorization(),
+				ShowConfig:      showConfig,
+				SuppressOutputs: suppressOutputs,
+				IsInteractive:   interactive,
+				Type:            displayType,
+				EventLogPath:    eventLogPath,
+				Debug:           debug,
+			}
+
+			// we only suppress permalinks if the user passes true. the default is an empty string
+			// which we pass as 'false'
+			if suppressPermaLink == "true" {
+				opts.Display.SuppressPermaLink = true
+			} else {
+				opts.Display.SuppressPermaLink = false
+			}
+
+			filestateBackend, err := isFilestateBackend(opts.Display)
+			if err != nil {
+				return result.FromError(err)
+			}
+
+			// by default, we are going to suppress the permalink when using self-managed backends
+			// this can be re-enabled by explicitly passing "false" to the `supppress-permalink` flag
+			if suppressPermaLink != "false" && filestateBackend {
+				opts.Display.SuppressPermaLink = true
 			}
 
 			// Fetch the project.
@@ -414,12 +447,12 @@ func newImportCmd() *cobra.Command {
 			}
 
 			// Fetch the current stack.
-			s, err := requireStack(stack, false, opts.Display, true /*setCurrent*/)
+			s, err := requireStack(stack, false, opts.Display, false /*setCurrent*/)
 			if err != nil {
 				return result.FromError(err)
 			}
 
-			m, err := getUpdateMetadata(message, root, execKind)
+			m, err := getUpdateMetadata(message, root, execKind, execAgent)
 			if err != nil {
 				return result.FromError(errors.Wrap(err, "gathering environment metadata"))
 			}
@@ -480,7 +513,7 @@ func newImportCmd() *cobra.Command {
 						return result.FromError(err)
 					}
 					if protectResources {
-						_, err := helperWriter.Write([]byte("Please note, that the imported resources are marked as protected. " +
+						_, err := helperWriter.Write([]byte("Please note that the imported resources are marked as protected. " +
 							"To destroy them\n" +
 							"you will need to remove the `protect` option and run `pulumi update` *before*\n" +
 							"the destroy will take effect.\n\n"))
@@ -505,9 +538,11 @@ func newImportCmd() *cobra.Command {
 	}
 
 	cmd.PersistentFlags().StringVar(
-		&parentSpec, "parent", "", "The name and URN of the parent resource in the format name=urn")
+		//nolint:lll
+		&parentSpec, "parent", "", "The name and URN of the parent resource in the format name=urn, where name is the variable name of the parent resource")
 	cmd.PersistentFlags().StringVar(
-		&providerSpec, "provider", "", "The name and URN of the provider to use for the import in the format name=urn")
+		//nolint:lll
+		&providerSpec, "provider", "", "The name and URN of the provider to use for the import in the format name=urn, where name is the variable name for the provider resource")
 	cmd.PersistentFlags().StringVarP(
 		&importFilePath, "file", "f", "", "The path to a JSON-encoded file containing a list of resources to import")
 	cmd.PersistentFlags().StringVarP(
@@ -539,9 +574,10 @@ func newImportCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolVar(
 		&suppressOutputs, "suppress-outputs", false,
 		"Suppress display of stack outputs (in case they contain sensitive values)")
-	cmd.PersistentFlags().BoolVar(
-		&suppressPermaLink, "suppress-permalink", false,
+	cmd.PersistentFlags().StringVar(
+		&suppressPermaLink, "suppress-permalink", "",
 		"Suppress display of the state permalink")
+	cmd.Flag("suppress-permalink").NoOptDefVal = "false"
 	cmd.PersistentFlags().BoolVarP(
 		&yes, "yes", "y", false,
 		"Automatically approve and perform the refresh after previewing it")
@@ -555,10 +591,13 @@ func newImportCmd() *cobra.Command {
 			"Log events to a file at this path")
 	}
 
-	// internal flag
+	// internal flags
 	cmd.PersistentFlags().StringVar(&execKind, "exec-kind", "", "")
 	// ignore err, only happens if flag does not exist
 	_ = cmd.PersistentFlags().MarkHidden("exec-kind")
+	cmd.PersistentFlags().StringVar(&execAgent, "exec-agent", "", "")
+	// ignore err, only happens if flag does not exist
+	_ = cmd.PersistentFlags().MarkHidden("exec-agent")
 
 	return cmd
 }

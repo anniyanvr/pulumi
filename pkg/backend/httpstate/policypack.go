@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -12,19 +13,19 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/v2/backend"
-	"github.com/pulumi/pulumi/pkg/v2/backend/httpstate/client"
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	resourceanalyzer "github.com/pulumi/pulumi/pkg/v2/resource/analyzer"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/archive"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
-	"github.com/pulumi/pulumi/sdk/v2/nodejs/npm"
-	"github.com/pulumi/pulumi/sdk/v2/python"
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	"github.com/pulumi/pulumi/pkg/v3/backend/httpstate/client"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	resourceanalyzer "github.com/pulumi/pulumi/pkg/v3/resource/analyzer"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/archive"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
+	"github.com/pulumi/pulumi/sdk/v3/nodejs/npm"
+	"github.com/pulumi/pulumi/sdk/v3/python"
 )
 
 type cloudRequiredPolicy struct {
@@ -248,7 +249,7 @@ func (pack *cloudPolicyPack) Remove(ctx context.Context, op backend.PolicyPackOp
 
 const packageDir = "package"
 
-func installRequiredPolicy(finalDir string, tarball []byte) error {
+func installRequiredPolicy(finalDir string, tgz io.ReadCloser) error {
 	// If part of the directory tree is missing, ioutil.TempDir will return an error, so make sure
 	// the path we're going to create the temporary folder in actually exists.
 	if err := os.MkdirAll(filepath.Dir(finalDir), 0700); err != nil {
@@ -272,7 +273,7 @@ func installRequiredPolicy(finalDir string, tarball []byte) error {
 	}()
 
 	// Uncompress the policy pack.
-	err = archive.UnTGZ(tarball, tempDir)
+	err = archive.ExtractTGZ(tgz, tempDir)
 	if err != nil {
 		return err
 	}
@@ -310,7 +311,7 @@ func installRequiredPolicy(finalDir string, tarball []byte) error {
 }
 
 func completeNodeJSInstall(finalDir string) error {
-	if bin, err := npm.Install(finalDir, nil, os.Stderr); err != nil {
+	if bin, err := npm.Install(finalDir, false /*production*/, nil, os.Stderr); err != nil {
 		return errors.Wrapf(
 			err,
 			"failed to install dependencies of policy pack; you may need to re-run `%s install` "+

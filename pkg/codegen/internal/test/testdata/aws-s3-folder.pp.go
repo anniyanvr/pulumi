@@ -7,8 +7,9 @@ import (
 	"mime"
 	"path"
 
+	"github.com/pulumi/pulumi-aws/sdk/v2/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v2/go/aws/s3"
-	"github.com/pulumi/pulumi/sdk/v2/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 func main() {
@@ -36,7 +37,7 @@ func main() {
 				Bucket:      siteBucket.ID(),
 				Key:         pulumi.String(val0),
 				Source:      pulumi.NewFileAsset(fmt.Sprintf("%v%v%v", siteDir, "/", val0)),
-				ContentType: pulumi.String(mime.TypeByExtension(path.Ext(val0))),
+				ContentType: mime.TypeByExtension(path.Ext(val0)),
 			})
 			if err != nil {
 				return err
@@ -66,7 +67,7 @@ func main() {
 					return _zero, err
 				}
 				json0 := string(tmpJSON0)
-				return pulumi.String(json0), nil
+				return json0, nil
 			}).(pulumi.StringOutput),
 		})
 		if err != nil {

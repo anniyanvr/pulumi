@@ -23,18 +23,18 @@ import (
 	uuid "github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy/providers"
-	"github.com/pulumi/pulumi/pkg/v2/resource/graph"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy/providers"
+	"github.com/pulumi/pulumi/pkg/v3/resource/graph"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
 )
 
-// BackendClient provides an interface for retrieving information about other stacks.
+// BackendClient is used to retrieve information about stacks from a backend.
 type BackendClient interface {
 	// GetStackOutputs returns the outputs (if any) for the named stack or an error if the stack cannot be found.
 	GetStackOutputs(ctx context.Context, name string) (resource.PropertyMap, error)
@@ -49,17 +49,18 @@ type BackendClient interface {
 
 // Options controls the deployment process.
 type Options struct {
-	Events            Events         // an optional events callback interface.
-	Parallel          int            // the degree of parallelism for resource operations (<=1 for serial).
-	Refresh           bool           // whether or not to refresh before executing the deployment.
-	RefreshOnly       bool           // whether or not to exit after refreshing.
-	RefreshTargets    []resource.URN // The specific resources to refresh during a refresh op.
-	ReplaceTargets    []resource.URN // Specific resources to replace.
-	DestroyTargets    []resource.URN // Specific resources to destroy.
-	UpdateTargets     []resource.URN // Specific resources to update.
-	TargetDependents  bool           // true if we're allowing things to proceed, even with unspecified targets
-	TrustDependencies bool           // whether or not to trust the resource dependency graph.
-	UseLegacyDiff     bool           // whether or not to use legacy diffing behavior.
+	Events                    Events         // an optional events callback interface.
+	Parallel                  int            // the degree of parallelism for resource operations (<=1 for serial).
+	Refresh                   bool           // whether or not to refresh before executing the deployment.
+	RefreshOnly               bool           // whether or not to exit after refreshing.
+	RefreshTargets            []resource.URN // The specific resources to refresh during a refresh op.
+	ReplaceTargets            []resource.URN // Specific resources to replace.
+	DestroyTargets            []resource.URN // Specific resources to destroy.
+	UpdateTargets             []resource.URN // Specific resources to update.
+	TargetDependents          bool           // true if we're allowing things to proceed, even with unspecified targets
+	TrustDependencies         bool           // whether or not to trust the resource dependency graph.
+	UseLegacyDiff             bool           // whether or not to use legacy diffing behavior.
+	DisableResourceReferences bool           // true to disable resource reference support.
 }
 
 // DegreeOfParallelism returns the degree of parallelism that should be used during the
@@ -83,7 +84,7 @@ type StepExecutorEvents interface {
 	OnResourceOutputs(step Step) error
 }
 
-// PolicyEvents is an interface that can be used to hook policy violation events.
+// PolicyEvents is an interface that can be used to hook policy events.
 type PolicyEvents interface {
 	OnPolicyViolation(resource.URN, plugin.AnalyzeDiagnostic)
 }
@@ -103,6 +104,22 @@ type PlanPendingOperationsError struct {
 
 func (p PlanPendingOperationsError) Error() string {
 	return "one or more operations are currently pending"
+}
+
+type goalMap struct {
+	m sync.Map
+}
+
+func (m *goalMap) set(urn resource.URN, goal *resource.Goal) {
+	m.m.Store(urn, goal)
+}
+
+func (m *goalMap) get(urn resource.URN) (*resource.Goal, bool) {
+	g, ok := m.m.Load(urn)
+	if !ok {
+		return nil, false
+	}
+	return g.(*resource.Goal), true
 }
 
 type resourceMap struct {
@@ -141,9 +158,10 @@ type Deployment struct {
 	source               Source                           // the source of new resources.
 	localPolicyPackPaths []string                         // the policy packs to run during this deployment's generation.
 	preview              bool                             // true if this deployment is to be previewed.
-	depGraph             *graph.DependencyGraph           // the dependency graph of the old snapshot
+	depGraph             *graph.DependencyGraph           // the dependency graph of the old snapshot.
 	providers            *providers.Registry              // the provider registry for this deployment.
-	news                 *resourceMap                     // the set of new resources generated by the deployment
+	goals                *goalMap                         // the set of resource goals generated by the deployment.
+	news                 *resourceMap                     // the set of new resources generated by the deployment.
 }
 
 // addDefaultProviders adds any necessary default provider definitions and references to the given snapshot. Version
@@ -303,6 +321,9 @@ func NewDeployment(ctx *plugin.Context, target *Target, prev *Snapshot, source S
 	// Build the dependency graph for the old resources.
 	depGraph := graph.NewDependencyGraph(oldResources)
 
+	// Create a goal map for the deployment.
+	newGoals := &goalMap{}
+
 	// Create a resource map for the deployment.
 	newResources := &resourceMap{}
 
@@ -327,6 +348,7 @@ func NewDeployment(ctx *plugin.Context, target *Target, prev *Snapshot, source S
 		preview:              preview,
 		depGraph:             depGraph,
 		providers:            reg,
+		goals:                newGoals,
 		news:                 newResources,
 	}, nil
 }

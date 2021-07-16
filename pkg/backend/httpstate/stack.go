@@ -19,15 +19,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pulumi/pulumi/pkg/v2/backend"
-	"github.com/pulumi/pulumi/pkg/v2/backend/httpstate/client"
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/pkg/v2/operations"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	"github.com/pulumi/pulumi/pkg/v3/backend/httpstate/client"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/pkg/v3/operations"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
 )
 
 // Stack is a cloud stack.  This simply adds some cloud-specific properties atop the standard backend stack interface.
@@ -161,8 +161,8 @@ func (s *cloudStack) Destroy(ctx context.Context, op backend.UpdateOperation) (e
 	return backend.DestroyStack(ctx, s, op)
 }
 
-func (s *cloudStack) Watch(ctx context.Context, op backend.UpdateOperation) result.Result {
-	return backend.WatchStack(ctx, s, op)
+func (s *cloudStack) Watch(ctx context.Context, op backend.UpdateOperation, paths []string) result.Result {
+	return backend.WatchStack(ctx, s, op, paths)
 }
 
 func (s *cloudStack) GetLogs(ctx context.Context, cfg backend.StackConfiguration,

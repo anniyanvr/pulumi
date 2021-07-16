@@ -30,15 +30,15 @@ import (
 	"github.com/docker/docker/pkg/term"
 	"golang.org/x/crypto/ssh/terminal"
 
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag/colors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // Progress describes a message we want to show in the display.  There are two types of messages,
@@ -326,6 +326,13 @@ func ShowProgressEvents(op string, action apitype.UpdateKind, stack tokens.QName
 			display.isTerminal = opts.IsInteractive
 			display.terminalWidth = terminalWidth
 			display.terminalHeight = terminalHeight
+
+			// Don't bother attempting to treat this display as a terminal if it has no width/height.
+			if display.isTerminal && (display.terminalWidth == 0 || display.terminalHeight == 0) {
+				display.isTerminal = false
+				_, err = fmt.Fprintln(stderr, "Treating display as non-terminal due to 0 width/height.")
+				contract.IgnoreError(err)
+			}
 
 			// Fetch the canonical stdout stream, configured appropriately.
 			_, stdout, _ = term.StdStreams()

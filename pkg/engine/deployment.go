@@ -16,19 +16,21 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy/providers"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/fsutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy/providers"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/fsutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 )
 
 const clientRuntimeName = "client"
@@ -47,7 +49,7 @@ func ProjectInfoContext(projinfo *Projinfo, host plugin.Host, config plugin.Conf
 	}
 
 	// Create a context for plugins.
-	ctx, err := plugin.NewContext(diag, statusDiag, host, config, pwd,
+	ctx, err := plugin.NewContextWithRoot(diag, statusDiag, host, config, pwd, projinfo.Root,
 		projinfo.Proj.Runtime.Options(), disableProviderPreview, tracingSpan)
 	if err != nil {
 		return "", "", nil, err
@@ -173,6 +175,12 @@ func newDeployment(ctx *Context, info *deploymentContext, opts deploymentOptions
 		}
 		for i := range opts.imports {
 			imp := &opts.imports[i]
+			_, err := tokens.ParseTypeToken(imp.Type.String())
+			if err != nil {
+				return nil, errors.New(fmt.Sprintf("import type %q is not a valid resource type token. "+
+					"Type tokens must be of the format <package>:<module>:<type> - "+
+					"refer to the import section of the provider resource documentation.", imp.Type.String()))
+			}
 			if imp.Provider == "" && imp.Version == nil {
 				imp.Version = defaultProviderVersions[imp.Type.Package()]
 			}
@@ -236,17 +244,18 @@ func (deployment *deployment) run(cancelCtx *Context, actions runActions, policy
 	var walkResult result.Result
 	go func() {
 		opts := deploy.Options{
-			Events:            actions,
-			Parallel:          deployment.Options.Parallel,
-			Refresh:           deployment.Options.Refresh,
-			RefreshOnly:       deployment.Options.isRefresh,
-			RefreshTargets:    deployment.Options.RefreshTargets,
-			ReplaceTargets:    deployment.Options.ReplaceTargets,
-			DestroyTargets:    deployment.Options.DestroyTargets,
-			UpdateTargets:     deployment.Options.UpdateTargets,
-			TargetDependents:  deployment.Options.TargetDependents,
-			TrustDependencies: deployment.Options.trustDependencies,
-			UseLegacyDiff:     deployment.Options.UseLegacyDiff,
+			Events:                    actions,
+			Parallel:                  deployment.Options.Parallel,
+			Refresh:                   deployment.Options.Refresh,
+			RefreshOnly:               deployment.Options.isRefresh,
+			RefreshTargets:            deployment.Options.RefreshTargets,
+			ReplaceTargets:            deployment.Options.ReplaceTargets,
+			DestroyTargets:            deployment.Options.DestroyTargets,
+			UpdateTargets:             deployment.Options.UpdateTargets,
+			TargetDependents:          deployment.Options.TargetDependents,
+			TrustDependencies:         deployment.Options.trustDependencies,
+			UseLegacyDiff:             deployment.Options.UseLegacyDiff,
+			DisableResourceReferences: deployment.Options.DisableResourceReferences,
 		}
 		walkResult = deployment.Deployment.Execute(ctx, opts, preview)
 		close(done)

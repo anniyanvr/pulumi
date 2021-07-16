@@ -3,7 +3,7 @@ package main
 import (
 	corev1 "github.com/pulumi/pulumi-kubernetes/sdk/v2/go/kubernetes/core/v1"
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v2/go/kubernetes/meta/v1"
-	"github.com/pulumi/pulumi/sdk/v2/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 func main() {
@@ -16,7 +16,7 @@ func main() {
 				Name:      pulumi.String("bar"),
 			},
 			Spec: &corev1.PodSpecArgs{
-				Containers: corev1.ContainerArray{
+				Containers: []corev1.ContainerArgs{
 					&corev1.ContainerArgs{
 						Name:  pulumi.String("nginx"),
 						Image: pulumi.String("nginx:1.14-alpine"),

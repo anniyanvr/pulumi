@@ -24,7 +24,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 func isKubernetesPackage(pkg *schema.Package) bool {
@@ -131,10 +131,9 @@ func getKubernetesMod(pkg *schema.Package, token string, modules map[string]*mod
 	mod, ok := modules[modName]
 	if !ok {
 		mod = &modContext{
-			pkg:          pkg,
-			mod:          modName,
-			tool:         tool,
-			emitAPILinks: true,
+			pkg:  pkg,
+			mod:  modName,
+			tool: tool,
 		}
 
 		if modName != "" {

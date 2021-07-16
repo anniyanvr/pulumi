@@ -20,13 +20,13 @@ import (
 	"sort"
 
 	"github.com/blang/semver"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy/providers"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy/providers"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
 )
 
 // An Import specifies a resource to import.
@@ -73,6 +73,9 @@ func NewImportDeployment(ctx *plugin.Context, target *Target, projectName tokens
 		return nil, err
 	}
 
+	// Create a goal map for the deployment.
+	newGoals := &goalMap{}
+
 	builtins := newBuiltinProvider(nil, nil)
 
 	// Create a new provider registry.
@@ -87,6 +90,7 @@ func NewImportDeployment(ctx *plugin.Context, target *Target, projectName tokens
 		target:       target,
 		prev:         prev,
 		olds:         olds,
+		goals:        newGoals,
 		imports:      imports,
 		isImport:     true,
 		schemaLoader: schema.NewPluginLoader(ctx.Host),

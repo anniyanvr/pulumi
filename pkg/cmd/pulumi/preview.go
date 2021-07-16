@@ -18,12 +18,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/pulumi/pulumi/pkg/v2/backend"
-	"github.com/pulumi/pulumi/pkg/v2/backend/display"
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	"github.com/pulumi/pulumi/pkg/v3/backend/display"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
 )
 
 func newPreviewCmd() *cobra.Command {
@@ -31,6 +31,7 @@ func newPreviewCmd() *cobra.Command {
 	var expectNop bool
 	var message string
 	var execKind string
+	var execAgent string
 	var stack string
 	var configArray []string
 	var configPath bool
@@ -49,7 +50,7 @@ func newPreviewCmd() *cobra.Command {
 	var showSames bool
 	var showReads bool
 	var suppressOutputs bool
-	var suppressPermaLink bool
+	var suppressPermaLink string
 	var targets []string
 	var replaces []string
 	var targetReplaces []string
@@ -85,7 +86,6 @@ func newPreviewCmd() *cobra.Command {
 				ShowSameResources:    showSames,
 				ShowReads:            showReads,
 				SuppressOutputs:      suppressOutputs,
-				SuppressPermaLink:    suppressPermaLink,
 				IsInteractive:        cmdutil.Interactive(),
 				Type:                 displayType,
 				JSONDisplay:          jsonDisplay,
@@ -93,11 +93,29 @@ func newPreviewCmd() *cobra.Command {
 				Debug:                debug,
 			}
 
+			// we only suppress permalinks if the user passes true. the default is an empty string
+			// which we pass as 'false'
+			if suppressPermaLink == "true" {
+				displayOpts.SuppressPermaLink = true
+			} else {
+				displayOpts.SuppressPermaLink = false
+			}
+			filestateBackend, err := isFilestateBackend(displayOpts)
+			if err != nil {
+				return result.FromError(err)
+			}
+
+			// by default, we are going to suppress the permalink when using self-managed backends
+			// this can be re-enabled by explicitly passing "false" to the `supppress-permalink` flag
+			if suppressPermaLink != "false" && filestateBackend {
+				displayOpts.SuppressPermaLink = true
+			}
+
 			if err := validatePolicyPackConfig(policyPackPaths, policyPackConfigPaths); err != nil {
 				return result.FromError(err)
 			}
 
-			s, err := requireStack(stack, true, displayOpts, true /*setCurrent*/)
+			s, err := requireStack(stack, true, displayOpts, false /*setCurrent*/)
 			if err != nil {
 				return result.FromError(err)
 			}
@@ -112,7 +130,7 @@ func newPreviewCmd() *cobra.Command {
 				return result.FromError(err)
 			}
 
-			m, err := getUpdateMetadata(message, root, execKind)
+			m, err := getUpdateMetadata(message, root, execKind, execAgent)
 			if err != nil {
 				return result.FromError(errors.Wrap(err, "gathering environment metadata"))
 			}
@@ -144,15 +162,16 @@ func newPreviewCmd() *cobra.Command {
 
 			opts := backend.UpdateOptions{
 				Engine: engine.UpdateOptions{
-					LocalPolicyPacks:       engine.MakeLocalPolicyPacks(policyPackPaths, policyPackConfigPaths),
-					Parallel:               parallel,
-					Debug:                  debug,
-					Refresh:                refresh,
-					ReplaceTargets:         replaceURNs,
-					UseLegacyDiff:          useLegacyDiff(),
-					DisableProviderPreview: disableProviderPreview(),
-					UpdateTargets:          targetURNs,
-					TargetDependents:       targetDependents,
+					LocalPolicyPacks:          engine.MakeLocalPolicyPacks(policyPackPaths, policyPackConfigPaths),
+					Parallel:                  parallel,
+					Debug:                     debug,
+					Refresh:                   refresh,
+					ReplaceTargets:            replaceURNs,
+					UseLegacyDiff:             useLegacyDiff(),
+					DisableProviderPreview:    disableProviderPreview(),
+					DisableResourceReferences: disableResourceReferences(),
+					UpdateTargets:             targetURNs,
+					TargetDependents:          targetDependents,
 				},
 				Display: displayOpts,
 			}
@@ -252,13 +271,14 @@ func newPreviewCmd() *cobra.Command {
 	cmd.PersistentFlags().BoolVar(
 		&showReads, "show-reads", false,
 		"Show resources that are being read in, alongside those being managed directly in the stack")
-
 	cmd.PersistentFlags().BoolVar(
 		&suppressOutputs, "suppress-outputs", false,
 		"Suppress display of stack outputs (in case they contain sensitive values)")
-	cmd.PersistentFlags().BoolVar(
-		&suppressPermaLink, "suppress-permalink", false,
+
+	cmd.PersistentFlags().StringVar(
+		&suppressPermaLink, "suppress-permalink", "",
 		"Suppress display of the state permalink")
+	cmd.Flag("suppress-permalink").NoOptDefVal = "false"
 
 	if hasDebugCommands() {
 		cmd.PersistentFlags().StringVar(
@@ -266,10 +286,13 @@ func newPreviewCmd() *cobra.Command {
 			"Log events to a file at this path")
 	}
 
-	// internal flag
+	// internal flags
 	cmd.PersistentFlags().StringVar(&execKind, "exec-kind", "", "")
 	// ignore err, only happens if flag does not exist
 	_ = cmd.PersistentFlags().MarkHidden("exec-kind")
+	cmd.PersistentFlags().StringVar(&execAgent, "exec-agent", "", "")
+	// ignore err, only happens if flag does not exist
+	_ = cmd.PersistentFlags().MarkHidden("exec-agent")
 
 	return cmd
 }

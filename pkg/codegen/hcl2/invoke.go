@@ -17,7 +17,7 @@ package hcl2
 import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -69,7 +69,7 @@ func (b *binder) bindInvokeSignature(args []model.Expression) (model.StaticFunct
 		return signature, hcl.Diagnostics{tokenMustBeStringLiteral(args[0])}
 	}
 	lit, ok := template.Parts[0].(*model.LiteralValueExpression)
-	if !ok || lit.Type() != model.StringType {
+	if !ok || model.StringType.ConversionFrom(lit.Type()) == model.NoConversion {
 		return signature, hcl.Diagnostics{tokenMustBeStringLiteral(args[0])}
 	}
 

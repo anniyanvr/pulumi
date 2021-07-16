@@ -15,9 +15,11 @@
 package deploytest
 
 import (
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"context"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 )
 
 type ProgramFunc func(runInfo plugin.RunInfo, monitor *ResourceMonitor) error
@@ -43,7 +45,7 @@ func (p *languageRuntime) GetRequiredPlugins(info plugin.ProgInfo) ([]workspace.
 }
 
 func (p *languageRuntime) Run(info plugin.RunInfo) (string, bool, error) {
-	monitor, err := dialMonitor(info.MonitorAddress)
+	monitor, err := dialMonitor(context.Background(), info.MonitorAddress)
 	if err != nil {
 		return "", false, err
 	}

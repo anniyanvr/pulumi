@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016-2021, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,16 +15,14 @@
 """The Resource module, containing all resource-related definitions."""
 
 import asyncio
-
-from typing import Optional, List, Any, Mapping, Union, Callable, TYPE_CHECKING, cast
-
 import copy
-
-from .runtime import known_types
-from .runtime.resource import get_resource, register_resource, register_resource_outputs, read_resource
-from .runtime.settings import get_root_resource
-
+from typing import Optional, List, Any, Mapping, Union, Callable, TYPE_CHECKING, cast
+from . import _types
 from .metadata import get_project, get_stack
+from .runtime import known_types
+from .runtime.resource import get_resource, register_resource, register_resource_outputs, read_resource, \
+    convert_providers
+from .runtime.settings import get_root_resource
 
 if TYPE_CHECKING:
     from .output import Input, Inputs, Output
@@ -383,6 +381,13 @@ class ResourceOptions:
     The URN of a previously-registered resource of this type to read from the engine.
     """
 
+    replace_on_changes: Optional[List[str]]
+    """
+    Changes to any of these property paths will force a replacement.  If this list includes `"*"`, changes
+    to any properties will force a replacement.  Initialization errors from previous deployments will
+    require replacement instead of update only if `"*"` is passed.
+    """
+
     # pylint: disable=redefined-builtin
     def __init__(self,
                  parent: Optional['Resource'] = None,
@@ -399,7 +404,8 @@ class ResourceOptions:
                  import_: Optional[str] = None,
                  custom_timeouts: Optional['CustomTimeouts'] = None,
                  transformations: Optional[List[ResourceTransformation]] = None,
-                 urn: Optional[str] = None) -> None:
+                 urn: Optional[str] = None,
+                 replace_on_changes: Optional[List[str]] = None) -> None:
         """
         :param Optional[Resource] parent: If provided, the currently-constructing resource should be the child of
                the provided parent resource.
@@ -432,6 +438,9 @@ class ResourceOptions:
         :param Optional[List[ResourceTransformation]] transformations: If provided, a list of transformations to apply
                to this resource during construction.
         :param Optional[str] urn: The URN of a previously-registered resource of this type to read from the engine.
+        :param Optional[List[str]] replace_on_changes: Changes to any of these property paths will force a replacement.
+               If this list includes `"*"`, changes to any properties will force a replacement.  Initialization errors
+               from previous deployments will require replacement instead of update only if `"*"` is passed.
         """
 
         # Expose 'merge' again this this object, but this time as an instance method.
@@ -454,6 +463,7 @@ class ResourceOptions:
         self.import_ = import_
         self.transformations = transformations
         self.urn = urn
+        self.replace_on_changes = replace_on_changes
 
         if depends_on is not None:
             for dep in depends_on:
@@ -476,15 +486,15 @@ class ResourceOptions:
 
         Conceptually attributes merging follows these basic rules:
 
-        1. if the attributes is a collection, the final value will be a collection containing the
-            values from each options object. Both original collections in each options object will
-            be unchanged.
+        1. If the attributes is a collection, the final value will be a collection containing the
+           values from each options object. Both original collections in each options object will
+           be unchanged.
 
         2. Simple scalar values from `opts2` (i.e. strings, numbers, bools) will replace the values
-            from `opts1`.
+           from `opts1`.
 
         3. For the purposes of merging `depends_on`, `provider` and `providers` are always treated
-            as collections, even if only a single value was provided.
+           as collections, even if only a single value was provided.
 
         4. Attributes with value 'None' will not be copied over.
 
@@ -513,6 +523,7 @@ class ResourceOptions:
         dest.providers = _merge_lists(dest.providers, source.providers)
         dest.depends_on = _merge_lists(dest.depends_on, source.depends_on)
         dest.ignore_changes = _merge_lists(dest.ignore_changes, source.ignore_changes)
+        dest.replace_on_changes = _merge_lists(dest.replace_on_changes, source.replace_on_changes)
         dest.aliases = _merge_lists(dest.aliases, source.aliases)
         dest.additional_secret_outputs = _merge_lists(dest.additional_secret_outputs, source.additional_secret_outputs)
         dest.transformations = _merge_lists(dest.transformations, source.transformations)
@@ -587,6 +598,16 @@ class Resource:
     The set of providers to use for child resources. Keyed by package name (e.g. "aws").
     """
 
+    _provider: Optional['ProviderResource']
+    """
+    The specified provider or provider determined from the parent for custom resources, or None.
+    """
+
+    _version: Optional[str]
+    """
+    The specified provider version or None.
+    """
+
     _protect: bool
     """
     When set to true, protect ensures this resource cannot be deleted.
@@ -622,7 +643,10 @@ class Resource:
         :param str t: The type of this resource.
         :param str name: The name of this resource.
         :param bool custom: True if this resource is a custom resource.
-        :param Optional[dict] props: An optional list of input properties to use as inputs for the resource.
+        :param Optional[Inputs] props: An optional list of input properties to use as inputs for the resource.
+               If props is an input type (decorated with `@input_type`), dict keys will be translated using
+               the type's and resource's type/name metadata rather than using the `translate_input_property`
+               and `translate_output_property` methods.
         :param Optional[ResourceOptions] opts: Optional set of :class:`pulumi.ResourceOptions` to use for this
                resource.
         :param bool remote: True if this is a remote component resource.
@@ -648,6 +672,15 @@ class Resource:
             opts = ResourceOptions()
         elif not isinstance(opts, ResourceOptions):
             raise TypeError('Expected resource options to be a ResourceOptions instance')
+
+        # If `props` is an input type, convert it into an untranslated dictionary.
+        # Translation of the keys will happen later using the type's and resource's type/name metadata.
+        # If `props` is not an input type, set `typ` to None to make translation behave as it has previously.
+        typ = type(props)
+        if _types.is_input_type(typ):
+            props = _types.input_type_to_untranslated_dict(props)
+        else:
+            typ = None  # type: ignore
 
         # Before anything else - if there are transformations registered, give them a chance to run to modify the user
         # provided properties and options assigned to this resource.
@@ -715,10 +748,12 @@ class Resource:
                     [pkg, _, _] = type_components
                     self._providers = {**self._providers, pkg: provider}
         else:
-            providers = self._convert_providers(opts.provider, opts.providers)
+            providers = convert_providers(opts.provider, opts.providers)
             self._providers = {**self._providers, **providers}
 
         self._protect = bool(opts.protect)
+        self._provider = opts.provider if custom else None
+        self._version = opts.version
 
         # Collapse any `Alias`es down to URNs. We have to wait until this point to do so because we
         # do not know the default `name` and `type` to apply until we are inside the resource
@@ -731,15 +766,15 @@ class Resource:
 
         if opts.urn is not None:
             # This is a resource that already exists. Read its state from the engine.
-            get_resource(self, props, custom, opts.urn)
+            get_resource(self, props, custom, opts.urn, typ)
         elif opts.id is not None:
             # If this is a custom resource that already exists, read its state from the provider.
             if not custom:
                 raise Exception(
                     "Cannot read an existing resource unless it has a custom provider")
-            read_resource(cast('CustomResource', self), t, name, props, opts)
+            read_resource(cast('CustomResource', self), t, name, props, opts, typ)
         else:
-            register_resource(self, t, name, custom, remote, DependencyResource, props, opts)
+            register_resource(self, t, name, custom, remote, DependencyResource, props, opts, typ)
 
     @property
     def urn(self) -> 'Output[str]':
@@ -749,26 +784,14 @@ class Resource:
         """
         return self.__dict__["urn"]
 
-    def _convert_providers(self, provider: Optional['ProviderResource'], providers: Optional[Union[Mapping[str, 'ProviderResource'], List['ProviderResource']]]) -> Mapping[str, 'ProviderResource']:
-        if provider is not None:
-            return self._convert_providers(None, [provider])
-
-        if providers is None:
-            return {}
-
-        if not isinstance(providers, list):
-            return providers
-
-        result = {}
-        for p in providers:
-            result[p.package] = p
-
-        return result
-
     def translate_output_property(self, prop: str) -> str:
         """
         Provides subclasses of Resource an opportunity to translate names of output properties
         into a format of their choosing before writing those properties to the resource object.
+
+        If the `props` passed to `__init__` is an input type (decorated with `@input_type`), the
+        type/name metadata of the resource will be used to translate names instead of calling this
+        method.
 
         :param str prop: A property name.
         :return: A potentially transformed property name.
@@ -780,6 +803,10 @@ class Resource:
         """
         Provides subclasses of Resource an opportunity to translate names of input properties into
         a format of their choosing before sending those properties to the Pulumi engine.
+
+        If the `props` passed to `__init__` is an input type (decorated with `@input_type`), the
+        type/name metadata of `props` will be used to translate names instead of calling this
+        method.
 
         :param str prop: A property name.
         :return: A potentially transformed property name.
@@ -814,12 +841,6 @@ class CustomResource(Resource):
     dynamically loaded plugin for the defining package.
     """
 
-    __pulumi_type: str
-    """
-    Private field containing the type ID for this object. Useful for implementing `isInstance` on
-    classes that inherit from `CustomResource`.
-    """
-
     def __init__(self,
                  t: str,
                  name: str,
@@ -835,7 +856,6 @@ class CustomResource(Resource):
         :param bool dependency: True if this is a synthetic resource used internally for dependency tracking.
         """
         Resource.__init__(self, t, name, True, props, opts, False, dependency)
-        self.__pulumi_type = t
 
     @property
     def id(self) -> 'Output[str]':

@@ -52,31 +52,54 @@ export function transferProperties(onto: Resource, label: string, props: Inputs)
         }
 
         let resolveValue: (v: any) => void;
+        let rejectValue: (err: Error) => void;
         let resolveIsKnown: (v: boolean) => void;
+        let rejectIsKnown: (err: Error) => void;
         let resolveIsSecret: (v: boolean) => void;
+        let rejectIsSecret: (err: Error) => void;
         let resolveDeps: (v: Resource[]) => void;
+        let rejectDeps: (err: Error) => void;
 
         resolvers[k] = (v: any, isKnown: boolean, isSecret: boolean, deps: Resource[] = [], err?: Error) => {
-            resolveValue(v);
-            resolveIsKnown(err ? false : isKnown);
-            resolveIsSecret(isSecret);
-            resolveDeps(deps);
+            if (!!err) {
+                rejectValue(err);
+                rejectIsKnown(err);
+                rejectIsSecret(err);
+                rejectDeps(err);
+            } else {
+                resolveValue(v);
+                resolveIsKnown(isKnown);
+                resolveIsSecret(isSecret);
+                resolveDeps(deps);
+            }
         };
 
         const propString = Output.isInstance(props[k]) ? "Output<T>" : `${props[k]}`;
         (<any>onto)[k] = new Output(
             onto,
             debuggablePromise(
-                new Promise<any>(resolve => resolveValue = resolve),
+                new Promise<any>((resolve, reject) => {
+                    resolveValue = resolve;
+                    rejectValue = reject;
+                }),
                 `transferProperty(${label}, ${k}, ${propString})`),
             debuggablePromise(
-                new Promise<boolean>(resolve => resolveIsKnown = resolve),
+                new Promise<boolean>((resolve, reject) => {
+                    resolveIsKnown = resolve;
+                    rejectIsKnown = reject;
+                }),
                 `transferIsStable(${label}, ${k}, ${propString})`),
             debuggablePromise(
-                new Promise<boolean>(resolve => resolveIsSecret = resolve),
-                `transferIsSecret(${label}, ${k}, ${props[k]})`),
+                new Promise<boolean>((resolve, reject) => {
+                    resolveIsSecret = resolve;
+                    rejectIsSecret = reject;
+                }),
+                `transferIsSecret(${label}, ${k}, ${propString})`),
             debuggablePromise(
-                new Promise<Resource[]>(resolve => resolveDeps = resolve),
+                new Promise<Resource[]>((resolve, reject) => {
+                    resolveDeps = resolve;
+                    rejectDeps = reject;
+                }),
                 `transferDeps(${label}, ${k}, ${propString})`));
     }
 
@@ -127,6 +150,11 @@ export async function serializeResourceProperties(label: string, props: Inputs) 
 export async function serializeProperties(label: string, props: Inputs) {
     const [result] = await serializeFilteredProperties(label, props, _ => true);
     return result;
+}
+
+/** @internal */
+export async function serializePropertiesReturnDeps(label: string, props: Inputs) {
+    return serializeFilteredProperties(label, props, _ => true);
 }
 
 /**
@@ -599,12 +627,19 @@ function checkVersion(want?: semver.SemVer, have?: semver.SemVer): boolean {
 }
 
 /** @internal */
-export function register<T extends { readonly version?: string }>(source: Map<string, T[]>, registrationType: string, key: string, item: T): void {
+export function register<T extends { readonly version?: string }>(source: Map<string, T[]>, registrationType: string, key: string, item: T): boolean {
     let items = source.get(key);
     if (items) {
         for (const existing of items) {
             if (sameVersion(existing.version, item.version)) {
-                throw new Error(`Cannot re-register ${registrationType} ${key}@${item.version}. Previous registration was ${existing}, new registration was ${item}.`);
+                // It is possible for the same version of the same provider SDK to be loaded multiple times in Node.js.
+                // In this case, we might legitimately get multiple registrations of the same resource.  It should not
+                // matter which we use, so we can just skip re-registering.  De-serialized resources will always be
+                // instances of classes from the first registered package.
+                if (excessiveDebugOutput) {
+                    log.debug(`skip re-registering already registered ${registrationType} ${key}@${item.version}.`);
+                }
+                return false;
             }
         }
     } else {
@@ -612,8 +647,11 @@ export function register<T extends { readonly version?: string }>(source: Map<st
         source.set(key, items);
     }
 
-    log.debug(`registering ${registrationType} ${key}@${item.version}`);
+    if (excessiveDebugOutput) {
+        log.debug(`registering ${registrationType} ${key}@${item.version}`);
+    }
     items.push(item);
+    return true;
 }
 
 /** @internal */
@@ -645,6 +683,11 @@ export interface ResourcePackage {
 
 const resourcePackages = new Map<string, ResourcePackage[]>();
 
+/** @internal Used only for testing purposes. */
+export function _resetResourcePackages() {
+    resourcePackages.clear();
+}
+
 /**
  * registerResourcePackage registers a resource package that will be used to construct providers for any URNs matching
  * the package name and version that are deserialized by the current instance of the Pulumi JavaScript SDK.
@@ -669,6 +712,11 @@ const resourceModules = new Map<string, ResourceModule[]>();
 
 function moduleKey(pkg: string, mod: string): string {
     return `${pkg}:${mod}`;
+}
+
+/** @internal Used only for testing purposes. */
+export function _resetResourceModules() {
+    resourceModules.clear();
 }
 
 /**

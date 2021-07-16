@@ -21,9 +21,9 @@ import (
 	structpb "github.com/golang/protobuf/ptypes/struct"
 	"github.com/pkg/errors"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
 )
 
 // MarshalOptions controls the marshaling of RPC structures.
@@ -115,7 +115,9 @@ func MarshalPropertyValue(v resource.PropertyValue, opts MarshalOptions) (*struc
 			if err != nil {
 				return nil, err
 			}
-			elems = append(elems, e)
+			if e != nil {
+				elems = append(elems, e)
+			}
 		}
 		return &structpb.Value{
 			Kind: &structpb.Value_ListValue{
@@ -166,8 +168,8 @@ func MarshalPropertyValue(v resource.PropertyValue, opts MarshalOptions) (*struc
 		ref := v.ResourceReferenceValue()
 		if !opts.KeepResources {
 			val := string(ref.URN)
-			if ref.ID != "" {
-				val = string(ref.ID)
+			if !ref.ID.IsNull() {
+				return MarshalPropertyValue(ref.ID, opts)
 			}
 			logging.V(5).Infof("marshalling resource value as raw URN or ID as opts.KeepResources is false")
 			return MarshalString(val, opts), nil
@@ -176,8 +178,8 @@ func MarshalPropertyValue(v resource.PropertyValue, opts MarshalOptions) (*struc
 			resource.SigKey: resource.NewStringProperty(resource.ResourceReferenceSig),
 			"urn":           resource.NewStringProperty(string(ref.URN)),
 		}
-		if ref.HasID {
-			m["id"] = resource.NewStringProperty(string(ref.ID))
+		if id, hasID := ref.IDString(); hasID {
+			m["id"] = resource.NewStringProperty(id)
 		}
 		if ref.PackageVersion != "" {
 			m["packageVersion"] = resource.NewStringProperty(ref.PackageVersion)
@@ -286,9 +288,8 @@ func UnmarshalPropertyValue(v *structpb.Value, opts MarshalOptions) (*resource.P
 		m := resource.NewStringProperty(s)
 		return &m, nil
 	case *structpb.Value_ListValue:
-		// If there's already an array, prefer to swap elements within it.
-		var elems []resource.PropertyValue
 		lst := v.GetListValue()
+		elems := make([]resource.PropertyValue, len(lst.GetValues()))
 		for i, elem := range lst.GetValues() {
 			e, err := UnmarshalPropertyValue(elem, opts)
 			if err != nil {
@@ -399,15 +400,27 @@ func UnmarshalPropertyValue(v *structpb.Value, opts MarshalOptions) (*resource.P
 
 			if !opts.KeepResources {
 				value := urn.StringValue()
-				if id != "" {
+				if hasID {
+					isIDUnknown := id == ""
+					if isIDUnknown && opts.KeepUnknowns {
+						v := structpb.Value{
+							Kind: &structpb.Value_StringValue{StringValue: UnknownStringValue},
+						}
+						return UnmarshalPropertyValue(&v, opts)
+					}
 					value = id
 				}
 				r := resource.NewStringProperty(value)
 				return &r, nil
 			}
 
-			r := resource.MakeResourceReference(resource.URN(urn.StringValue()), resource.ID(id), hasID, packageVersion)
-			return &r, nil
+			var ref resource.PropertyValue
+			if hasID {
+				ref = resource.MakeCustomResourceReference(resource.URN(urn.StringValue()), resource.ID(id), packageVersion)
+			} else {
+				ref = resource.MakeComponentResourceReference(resource.URN(urn.StringValue()), packageVersion)
+			}
+			return &ref, nil
 		default:
 			return nil, errors.Errorf("unrecognized signature '%v' in property map", sig)
 		}

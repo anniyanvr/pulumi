@@ -31,23 +31,23 @@ import (
 	survey "gopkg.in/AlecAivazis/survey.v1"
 	surveycore "gopkg.in/AlecAivazis/survey.v1/core"
 
-	"github.com/pulumi/pulumi/pkg/v2/backend"
-	"github.com/pulumi/pulumi/pkg/v2/backend/display"
-	"github.com/pulumi/pulumi/pkg/v2/backend/httpstate"
-	"github.com/pulumi/pulumi/pkg/v2/backend/state"
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag/colors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/config"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/executable"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/goversion"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
-	"github.com/pulumi/pulumi/sdk/v2/nodejs/npm"
-	"github.com/pulumi/pulumi/sdk/v2/python"
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	"github.com/pulumi/pulumi/pkg/v3/backend/display"
+	"github.com/pulumi/pulumi/pkg/v3/backend/httpstate"
+	"github.com/pulumi/pulumi/pkg/v3/backend/state"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/executable"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/goversion"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
+	"github.com/pulumi/pulumi/sdk/v3/nodejs/npm"
+	"github.com/pulumi/pulumi/sdk/v3/python"
 )
 
 type promptForValueFunc func(yes bool, valueType string, defaultValue string, secret bool,
@@ -348,7 +348,17 @@ func newNewCmd() *cobra.Command {
 			"* `pulumi new --secrets-provider=\"awskms://1234abcd-12ab-34cd-56ef-1234567890ab?region=us-east-1\"`\n" +
 			"* `pulumi new --secrets-provider=\"azurekeyvault://mykeyvaultname.vault.azure.net/keys/mykeyname\"`\n" +
 			"* `pulumi new --secrets-provider=\"gcpkms://projects/p/locations/l/keyRings/r/cryptoKeys/k\"`\n" +
-			"* `pulumi new --secrets-provider=\"hashivault://mykey\"`",
+			"* `pulumi new --secrets-provider=\"hashivault://mykey\"`" +
+			"\n\n" +
+			"To create a project from a specific source control location, pass the url as follows e.g.\n" +
+			"* `pulumi new https://gitlab.com/<user>/<repo>`\n" +
+			"* `pulumi new https://bitbucket.org/<user>/<repo>`\n" +
+			"* `pulumi new https://github.com/<user>/<repo>`\n" +
+			"\n" +
+			"To create the project from a branch of a specific source control location, pass the url to the branch, e.g.\n" +
+			"* `pulumi new https://gitlab.com/<user>/<repo>/tree/<branch>`\n" +
+			"* `pulumi new https://bitbucket.org/<user>/<repo>/tree/<branch>`\n" +
+			"* `pulumi new https://github.com/<user>/<repo>/tree/<branch>`\n",
 		Args: cmdutil.MaximumNArgs(1),
 		Run: cmdutil.RunFunc(func(cmd *cobra.Command, cliArgs []string) error {
 			if len(cliArgs) > 0 {
@@ -589,7 +599,7 @@ func nodeInstallDependencies() (string, error) {
 	fmt.Println("Installing dependencies...")
 	fmt.Println()
 
-	bin, err := npm.Install("", os.Stdout, os.Stderr)
+	bin, err := npm.Install("", false /*production*/, os.Stdout, os.Stderr)
 	if err != nil {
 		return bin, err
 	}

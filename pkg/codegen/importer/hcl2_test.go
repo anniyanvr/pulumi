@@ -24,18 +24,18 @@ import (
 	"testing"
 
 	"github.com/hashicorp/hcl/v2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/internal/test"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy/providers"
-	"github.com/pulumi/pulumi/pkg/v2/resource/stack"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/config"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/internal/test"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy/providers"
+	"github.com/pulumi/pulumi/pkg/v3/resource/stack"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/stretchr/testify/assert"
 	"github.com/zclconf/go-cty/cty"
 )
@@ -133,6 +133,24 @@ func renderTupleCons(t *testing.T, x *model.TupleConsExpression) resource.Proper
 
 func renderFunctionCall(t *testing.T, x *model.FunctionCallExpression) resource.PropertyValue {
 	switch x.Name {
+	case "fileArchive":
+		if !assert.Len(t, x.Args, 1) {
+			return resource.NewNullProperty()
+		}
+		path, ok := renderExpr(t, x.Args[0]).V.(string)
+		if !assert.True(t, ok) {
+			return resource.NewNullProperty()
+		}
+		return resource.NewStringProperty(path)
+	case "fileAsset":
+		if !assert.Len(t, x.Args, 1) {
+			return resource.NewNullProperty()
+		}
+		path, ok := renderExpr(t, x.Args[0]).V.(string)
+		if !assert.True(t, ok) {
+			return resource.NewNullProperty()
+		}
+		return resource.NewStringProperty(path)
 	case "secret":
 		if !assert.Len(t, x.Args, 1) {
 			return resource.NewNullProperty()
@@ -291,32 +309,28 @@ func TestSimplerType(t *testing.T) {
 		&schema.ObjectType{
 			Properties: []*schema.Property{
 				{
-					Name:       "foo",
-					Type:       schema.BoolType,
-					IsRequired: true,
+					Name: "foo",
+					Type: schema.BoolType,
 				},
 			},
 		},
 		&schema.ObjectType{
 			Properties: []*schema.Property{
 				{
-					Name:       "foo",
-					Type:       schema.IntType,
-					IsRequired: true,
+					Name: "foo",
+					Type: schema.IntType,
 				},
 			},
 		},
 		&schema.ObjectType{
 			Properties: []*schema.Property{
 				{
-					Name:       "foo",
-					Type:       schema.IntType,
-					IsRequired: true,
+					Name: "foo",
+					Type: schema.IntType,
 				},
 				{
-					Name:       "bar",
-					Type:       schema.IntType,
-					IsRequired: true,
+					Name: "bar",
+					Type: schema.IntType,
 				},
 			},
 		},

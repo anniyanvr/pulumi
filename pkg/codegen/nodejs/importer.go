@@ -17,11 +17,14 @@ package nodejs
 import (
 	"encoding/json"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 // Compatibility mode for Kubernetes 2.0 SDK
 const kubernetes20 = "kubernetes20"
+
+// Compatibility mode for tfbridge 2.x SDKs
+const tfbridge20 = "tfbridge20"
 
 // NodePackageInfo contains NodeJS-specific information for a package.
 type NodePackageInfo struct {
@@ -49,6 +52,8 @@ type NodePackageInfo struct {
 	DisableUnionOutputTypes bool `json:"disableUnionOutputTypes,omitempty"`
 	// An indicator for whether the package contains enums.
 	ContainsEnums bool `json:"containsEnums,omitempty"`
+	// A map allowing you to map the name of a provider to the name of the module encapsulating the provider
+	ProviderNameToModuleName map[string]string `json:"providerNameToModuleName,omitempty"`
 }
 
 // NodeObjectInfo contains NodeJS-specific information for an object.

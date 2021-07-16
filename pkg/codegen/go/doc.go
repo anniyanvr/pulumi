@@ -24,8 +24,8 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 // DocLanguageHelper is the Go-specific implementation of the DocLanguageHelper.
@@ -82,16 +82,13 @@ func (d DocLanguageHelper) GetDocLinkForFunctionInputOrOutputType(pkg *schema.Pa
 }
 
 // GetLanguageTypeString returns the Go-specific type given a Pulumi schema type.
-func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName string, t schema.Type, input, optional bool) string {
+func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName string, t schema.Type, input bool) string {
 	modPkg, ok := d.packages[moduleName]
 	if !ok {
 		glog.Errorf("cannot calculate type string for type %q. could not find a package for module %q", t.String(), moduleName)
 		os.Exit(1)
 	}
-	if _, ok := t.(*schema.EnumType); ok {
-		return modPkg.inputType(t, optional)
-	}
-	return modPkg.plainType(t, optional)
+	return modPkg.typeString(t)
 }
 
 // GeneratePackagesMap generates a map of Go packages for resources, functions and types.
@@ -105,12 +102,12 @@ func (d DocLanguageHelper) GetPropertyName(p *schema.Property) (string, error) {
 }
 
 // GetEnumName returns the enum name specific to Go.
-func (d DocLanguageHelper) GetEnumName(e *schema.Enum) (string, error) {
+func (d DocLanguageHelper) GetEnumName(e *schema.Enum, typeName string) (string, error) {
 	name := fmt.Sprintf("%v", e.Value)
 	if e.Name != "" {
 		name = e.Name
 	}
-	return makeSafeEnumName(name)
+	return makeSafeEnumName(name, typeName)
 }
 
 func (d DocLanguageHelper) GetFunctionName(modName string, f *schema.Function) string {

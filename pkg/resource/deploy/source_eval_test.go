@@ -22,14 +22,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy/deploytest"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy/providers"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy/deploytest"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy/providers"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 )
 
 type testRegEvent struct {
@@ -149,16 +149,16 @@ func TestRegisterNoDefaultProviders(t *testing.T) {
 		// Register a component resource.
 		&testRegEvent{
 			goal: resource.NewGoal(componentURN.Type(), componentURN.Name(), false, resource.PropertyMap{}, "", false,
-				nil, "", []string{}, nil, nil, nil, nil, nil, "", nil),
+				nil, "", []string{}, nil, nil, nil, nil, nil, "", nil, nil),
 		},
 		// Register a couple resources using provider A.
 		&testRegEvent{
 			goal: resource.NewGoal("pkgA:index:typA", "res1", true, resource.PropertyMap{}, componentURN, false, nil,
-				providerARef.String(), []string{}, nil, nil, nil, nil, nil, "", nil),
+				providerARef.String(), []string{}, nil, nil, nil, nil, nil, "", nil, nil),
 		},
 		&testRegEvent{
 			goal: resource.NewGoal("pkgA:index:typA", "res2", true, resource.PropertyMap{}, componentURN, false, nil,
-				providerARef.String(), []string{}, nil, nil, nil, nil, nil, "", nil),
+				providerARef.String(), []string{}, nil, nil, nil, nil, nil, "", nil, nil),
 		},
 		// Register two more providers.
 		newProviderEvent("pkgA", "providerB", nil, ""),
@@ -166,11 +166,11 @@ func TestRegisterNoDefaultProviders(t *testing.T) {
 		// Register a few resources that use the new providers.
 		&testRegEvent{
 			goal: resource.NewGoal("pkgB:index:typB", "res3", true, resource.PropertyMap{}, "", false, nil,
-				providerBRef.String(), []string{}, nil, nil, nil, nil, nil, "", nil),
+				providerBRef.String(), []string{}, nil, nil, nil, nil, nil, "", nil, nil),
 		},
 		&testRegEvent{
 			goal: resource.NewGoal("pkgB:index:typC", "res4", true, resource.PropertyMap{}, "", false, nil,
-				providerCRef.String(), []string{}, nil, nil, nil, nil, nil, "", nil),
+				providerCRef.String(), []string{}, nil, nil, nil, nil, nil, "", nil, nil),
 		},
 	}
 
@@ -233,25 +233,25 @@ func TestRegisterDefaultProviders(t *testing.T) {
 		// Register a component resource.
 		&testRegEvent{
 			goal: resource.NewGoal(componentURN.Type(), componentURN.Name(), false, resource.PropertyMap{}, "", false,
-				nil, "", []string{}, nil, nil, nil, nil, nil, "", nil),
+				nil, "", []string{}, nil, nil, nil, nil, nil, "", nil, nil),
 		},
 		// Register a couple resources from package A.
 		&testRegEvent{
 			goal: resource.NewGoal("pkgA:m:typA", "res1", true, resource.PropertyMap{},
-				componentURN, false, nil, "", []string{}, nil, nil, nil, nil, nil, "", nil),
+				componentURN, false, nil, "", []string{}, nil, nil, nil, nil, nil, "", nil, nil),
 		},
 		&testRegEvent{
 			goal: resource.NewGoal("pkgA:m:typA", "res2", true, resource.PropertyMap{},
-				componentURN, false, nil, "", []string{}, nil, nil, nil, nil, nil, "", nil),
+				componentURN, false, nil, "", []string{}, nil, nil, nil, nil, nil, "", nil, nil),
 		},
 		// Register a few resources from other packages.
 		&testRegEvent{
 			goal: resource.NewGoal("pkgB:m:typB", "res3", true, resource.PropertyMap{}, "", false,
-				nil, "", []string{}, nil, nil, nil, nil, nil, "", nil),
+				nil, "", []string{}, nil, nil, nil, nil, nil, "", nil, nil),
 		},
 		&testRegEvent{
 			goal: resource.NewGoal("pkgB:m:typC", "res4", true, resource.PropertyMap{}, "", false,
-				nil, "", []string{}, nil, nil, nil, nil, nil, "", nil),
+				nil, "", []string{}, nil, nil, nil, nil, nil, "", nil, nil),
 		},
 	}
 

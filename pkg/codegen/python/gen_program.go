@@ -19,15 +19,16 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/hashicorp/hcl/v2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model/format"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model/format"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 type generator struct {
@@ -68,6 +69,8 @@ func GenerateProgram(program *hcl2.Program) (map[string][]byte, hcl.Diagnostics,
 	return files, g.diagnostics, nil
 }
 
+var caseTableCache sync.Map
+
 func newGenerator(program *hcl2.Program) (*generator, error) {
 	// Import Python-specific schema info.
 	casingTables := map[string]map[string]string{}
@@ -77,9 +80,14 @@ func newGenerator(program *hcl2.Program) (*generator, error) {
 		}
 
 		// Build the case mapping table.
-		camelCaseToSnakeCase := map[string]string{}
-		seenTypes := codegen.Set{}
-		buildCaseMappingTables(p, nil, camelCaseToSnakeCase, seenTypes)
+		var camelCaseToSnakeCase map[string]string
+		if table, ok := caseTableCache.Load(p); ok {
+			camelCaseToSnakeCase = table.(map[string]string)
+		} else {
+			seenTypes := codegen.Set{}
+			buildCaseMappingTables(p, nil, camelCaseToSnakeCase, seenTypes)
+			caseTableCache.Store(p, camelCaseToSnakeCase)
+		}
 		casingTables[PyName(p.Name)] = camelCaseToSnakeCase
 	}
 
@@ -210,6 +218,8 @@ func (g *generator) argumentTypeName(expr model.Expression, destType model.Type)
 	if !ok {
 		return ""
 	}
+
+	schemaType = codegen.UnwrapType(schemaType)
 
 	objType, ok := schemaType.(*schema.ObjectType)
 	if !ok {

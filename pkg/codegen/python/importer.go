@@ -17,11 +17,14 @@ package python
 import (
 	"encoding/json"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 // Compatibility mode for Kubernetes 2.0 SDK
 const kubernetes20 = "kubernetes20"
+
+// Compatibility mode for tfbridge 2.x SDKs
+const tfbridge20 = "tfbridge20"
 
 // PropertyInfo tracks Python-specific information associated with properties in a package.
 type PropertyInfo struct {
@@ -30,7 +33,9 @@ type PropertyInfo struct {
 
 // PackageInfo tracks Python-specific information associated with a package.
 type PackageInfo struct {
-	Requires map[string]string `json:"requires,omitempty"`
+	// PackageName is an override for the name of the generated python package.
+	PackageName string            `json:"packageName,omitempty"`
+	Requires    map[string]string `json:"requires,omitempty"`
 	// Readme contains the text for the package's README.md files.
 	Readme string `json:"readme,omitempty"`
 	// Optional overrides for Pulumi module names

@@ -126,25 +126,6 @@ func TestOutputApply(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Nil(t, v)
 	}
-	// Test builtin applies.
-	{
-		out := newIntOutput()
-		go func() { out.resolve(42, true, false, nil) }()
-
-{{range .Builtins}}
-		t.Run("Apply{{.Name}}", func(t *testing.T) {
-			o2 := out.Apply{{.Name}}(func(v int) {{.ElementType}} { return *new({{.ElementType}}) })
-			_, known, _, _, err := await(o2)
-			assert.True(t, known)
-			assert.NoError(t, err)
-
-			o2 = out.Apply{{.Name}}WithContext(context.Background(), func(_ context.Context, v int) {{.ElementType}} { return *new({{.ElementType}}) })
-			_, known, _, _, err = await(o2)
-			assert.True(t, known)
-			assert.NoError(t, err)
-		})
-{{end}}
-	}
 	// Test that applies return appropriate concrete implementations of Output based on the callback type
 	{
 		out := newIntOutput()
@@ -167,7 +148,7 @@ func TestOutputApply(t *testing.T) {
 		out := newIntOutput()
 		go func() { out.resolve(42, true, false, nil) }()
 
-		out2 := StringOutput{newOutputState(reflect.TypeOf(""))}
+		out2 := StringOutput{newOutputState(nil, reflect.TypeOf(""))}
 		go func() { out2.resolve("hello", true, false, nil) }()
 
 		res := out.
@@ -220,7 +201,7 @@ func TestOutputApply(t *testing.T) {
 			}
 		})
 
-		res5 := All(res3, res4).Apply(func (v interface{}) (interface{}, error) {
+		res5 := All(res3, res4).ApplyT(func (v interface{}) (interface{}, error) {
 			vs := v.([]interface{})
 			res3 := vs[0].(string)
 			res4 := vs[1].(*myStructType)
@@ -410,9 +391,42 @@ func Test{{.Name}}Index(t *testing.T) {
 	iv, known, _, _, err := await(out.Index(Int(0)))
 	assert.True(t, known)
 	assert.NoError(t, err)
+	assert.EqualValues(t, av.([]{{.IndexElementType}})[0], iv)
+
+	iv, known, _, _, err = await(out.Index(Int(-1)))
+	assert.True(t, known)
+	assert.NoError(t, err)
+	assert.Zero(t, iv)
+}
+{{if .DefineToFunction}}
+func TestTo{{.Name}}(t *testing.T) {
+	out := To{{.Name}}([]{{.IndexElementType}}{{.ElemExample}}).To{{.Name}}Output()
+
+	av, known, _, _, err := await(out)
+	assert.True(t, known)
+	assert.NoError(t, err)
+
+	iv, known, _, _, err := await(out.Index(Int(0)))
+	assert.True(t, known)
+	assert.NoError(t, err)
 
 	assert.EqualValues(t, av.([]{{.IndexElementType}})[0], iv)
 }
+
+func TestTopLevelTo{{.Name}}Output(t *testing.T) {
+	out := To{{.Name}}Output([]{{.IndexReturnType}}Output{ ToOutput({{.ItemExample}}).({{.IndexReturnType}}Output) })
+
+	av, known, _, _, err := await(out)
+	assert.True(t, known)
+	assert.NoError(t, err)
+
+	iv, known, _, _, err := await(out.Index(Int(0)))
+	assert.True(t, known)
+	assert.NoError(t, err)
+
+	assert.EqualValues(t, av.([]{{.IndexElementType}})[0], iv)
+}
+{{end}}
 {{end}}
 {{end}}
 
@@ -429,8 +443,41 @@ func Test{{.Name}}Index(t *testing.T) {
 	iv, known, _, _, err := await(out.MapIndex(String("baz")))
 	assert.True(t, known)
 	assert.NoError(t, err)
+	assert.EqualValues(t, av.(map[string]{{.MapIndexElementType}})["baz"], iv)
+
+	iv, known, _, _, err = await(out.MapIndex(String("notfound")))
+	assert.True(t, known)
+	assert.NoError(t, err)
+	assert.Zero(t, iv)
+}
+{{if .DefineToFunction}}
+func TestTo{{.Name}}(t *testing.T) {
+	out := To{{.Name}}(map[string]{{.MapIndexElementType}}{{.ElemExample}}).To{{.Name}}Output()
+
+	av, known, _, _, err := await(out)
+	assert.True(t, known)
+	assert.NoError(t, err)
+
+	iv, known, _, _, err := await(out.MapIndex(String("baz")))
+	assert.True(t, known)
+	assert.NoError(t, err)
 
 	assert.EqualValues(t, av.(map[string]{{.MapIndexElementType}})["baz"], iv)
 }
+
+func TestTopLevelTo{{.Name}}Output(t *testing.T) {
+	out := To{{.Name}}Output(map[string]{{.MapIndexReturnType}}Output{"baz": ToOutput({{.ItemExample}}).({{.MapIndexReturnType}}Output)})
+
+	av, known, _, _, err := await(out)
+	assert.True(t, known)
+	assert.NoError(t, err)
+
+	iv, known, _, _, err := await(out.MapIndex(String("baz")))
+	assert.True(t, known)
+	assert.NoError(t, err)
+
+	assert.EqualValues(t, av.(map[string]{{.MapIndexElementType}})["baz"], iv)
+}
+{{end}}
 {{end}}
 {{end}}

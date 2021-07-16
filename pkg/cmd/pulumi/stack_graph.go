@@ -19,12 +19,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/pulumi/pulumi/pkg/v2/backend/display"
-	"github.com/pulumi/pulumi/pkg/v2/graph"
-	"github.com/pulumi/pulumi/pkg/v2/graph/dotconv"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/pkg/v3/backend/display"
+	"github.com/pulumi/pulumi/pkg/v3/graph"
+	"github.com/pulumi/pulumi/pkg/v3/graph/dotconv"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
 	"github.com/spf13/cobra"
 )
 
@@ -57,7 +57,7 @@ func newStackGraphCmd() *cobra.Command {
 				Color: cmdutil.GetGlobalColorization(),
 			}
 
-			s, err := requireStack(stackName, false, opts, true /*setCurrent*/)
+			s, err := requireStack(stackName, false, opts, false /*setCurrent*/)
 			if err != nil {
 				return err
 			}

@@ -20,18 +20,20 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/zclconf/go-cty/cty"
 )
 
 type bindOptions struct {
-	allowMissingVariables bool
-	loader                schema.Loader
-	packageCache          *PackageCache
+	allowMissingVariables  bool
+	allowMissingProperties bool
+	skipResourceTypecheck  bool
+	loader                 schema.Loader
+	packageCache           *PackageCache
 }
 
 func (opts bindOptions) modelOptions() []model.BindOption {
@@ -45,7 +47,7 @@ type binder struct {
 	options bindOptions
 
 	referencedPackages map[string]*schema.Package
-	typeSchemas        map[model.Type]schema.Type
+	schemaTypes        map[schema.Type]model.Type
 
 	tokens syntax.TokenMap
 	nodes  []Node
@@ -56,6 +58,14 @@ type BindOption func(*bindOptions)
 
 func AllowMissingVariables(options *bindOptions) {
 	options.allowMissingVariables = true
+}
+
+func AllowMissingProperties(options *bindOptions) {
+	options.allowMissingProperties = true
+}
+
+func SkipResourceTypechecking(options *bindOptions) {
+	options.skipResourceTypecheck = true
 }
 
 func PluginHost(host plugin.Host) BindOption {
@@ -82,6 +92,9 @@ func BindProgram(files []*syntax.File, opts ...BindOption) (*Program, hcl.Diagno
 		o(&options)
 	}
 
+	// TODO: remove this once the latest pulumi-terraform-bridge has been rolled out
+	options.skipResourceTypecheck = true
+
 	if options.loader == nil {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -104,7 +117,7 @@ func BindProgram(files []*syntax.File, opts ...BindOption) (*Program, hcl.Diagno
 		options:            options,
 		tokens:             syntax.NewTokenMapForFiles(files),
 		referencedPackages: map[string]*schema.Package{},
-		typeSchemas:        map[model.Type]schema.Type{},
+		schemaTypes:        map[schema.Type]model.Type{},
 		root:               model.NewRootScope(syntax.None),
 	}
 

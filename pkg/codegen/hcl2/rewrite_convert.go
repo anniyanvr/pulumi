@@ -1,12 +1,14 @@
 package hcl2
 
 import (
+	"strings"
+
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
 )
@@ -90,6 +92,10 @@ func rewriteConversions(x model.Expression, to model.Type) (model.Expression, bo
 	case *model.IndexExpression:
 		x.Key, _ = rewriteConversions(x.Key, x.KeyType())
 	case *model.ObjectConsExpression:
+		if v := resolveDiscriminatedUnions(x, to); v != nil {
+			to = v
+			typecheck = true
+		}
 		for i := range x.Items {
 			item := &x.Items[i]
 
@@ -138,6 +144,48 @@ func rewriteConversions(x model.Expression, to model.Type) (model.Expression, bo
 
 	// Otherwise, wrap the expression in a call to __convert.
 	return NewConvertCall(x, to), true
+}
+
+// resolveDiscriminatedUnions reduces discriminated unions of object types to the type that matches
+// the shape of the given object cons expression. A given object expression would only match a single
+// case of the union.
+func resolveDiscriminatedUnions(obj *model.ObjectConsExpression, modelType model.Type) model.Type {
+	modelUnion, ok := modelType.(*model.UnionType)
+	if !ok {
+		return nil
+	}
+	schType, ok := GetSchemaForType(modelUnion)
+	if !ok {
+		return nil
+	}
+	schType = codegen.UnwrapType(schType)
+	union, ok := schType.(*schema.UnionType)
+	if !ok || union.Discriminator == "" {
+		return nil
+	}
+
+	objTypes := GetDiscriminatedUnionObjectMapping(modelUnion)
+	for _, item := range obj.Items {
+		name, ok := item.Key.(*model.LiteralValueExpression)
+		if !ok || name.Value.AsString() != union.Discriminator {
+			continue
+		}
+
+		lit, ok := item.Value.(*model.TemplateExpression)
+		if !ok {
+			continue
+		}
+
+		discriminatorValue := lit.Parts[0].(*model.LiteralValueExpression).Value.AsString()
+		if ref, ok := union.Mapping[discriminatorValue]; ok {
+			discriminatorValue = strings.TrimPrefix(ref, "#/types/")
+		}
+		if t, ok := objTypes[discriminatorValue]; ok {
+			return t
+		}
+	}
+
+	return nil
 }
 
 // RewriteConversions wraps automatic conversions indicated by the HCL2 spec and conversions to schema-annotated types
@@ -215,7 +263,7 @@ func extractStringValue(arg model.Expression) (string, bool) {
 		return "", false
 	}
 	lit, ok := template.Parts[0].(*model.LiteralValueExpression)
-	if !ok || lit.Type() != model.StringType {
+	if !ok || model.StringType.ConversionFrom(lit.Type()) == model.NoConversion {
 		return "", false
 	}
 	return lit.Value.AsString(), true

@@ -15,16 +15,17 @@
 package deploytest
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/blang/semver"
 	uuid "github.com/gofrs/uuid"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 )
 
 type Provider struct {
@@ -60,6 +61,9 @@ type Provider struct {
 
 	InvokeF func(tok tokens.ModuleMember,
 		inputs resource.PropertyMap) (resource.PropertyMap, []plugin.CheckFailure, error)
+
+	CallF func(monitor *ResourceMonitor, tok tokens.ModuleMember, args resource.PropertyMap, info plugin.CallInfo,
+		options plugin.CallOptions) (plugin.CallResult, error)
 
 	CancelF func() error
 }
@@ -176,7 +180,7 @@ func (prov *Provider) Construct(info plugin.ConstructInfo, typ tokens.Type, name
 	if prov.ConstructF == nil {
 		return plugin.ConstructResult{}, nil
 	}
-	monitor, err := dialMonitor(info.MonitorAddress)
+	monitor, err := dialMonitor(context.Background(), info.MonitorAddress)
 	if err != nil {
 		return plugin.ConstructResult{}, err
 	}
@@ -196,4 +200,16 @@ func (prov *Provider) StreamInvoke(
 	onNext func(resource.PropertyMap) error) ([]plugin.CheckFailure, error) {
 
 	return nil, fmt.Errorf("not implemented")
+}
+
+func (prov *Provider) Call(tok tokens.ModuleMember, args resource.PropertyMap, info plugin.CallInfo,
+	options plugin.CallOptions) (plugin.CallResult, error) {
+	if prov.CallF == nil {
+		return plugin.CallResult{}, nil
+	}
+	monitor, err := dialMonitor(context.Background(), info.MonitorAddress)
+	if err != nil {
+		return plugin.CallResult{}, err
+	}
+	return prov.CallF(monitor, tok, args, info, options)
 }

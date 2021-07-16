@@ -11,11 +11,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	"github.com/pulumi/pulumi/pkg/v2/backend"
-	"github.com/pulumi/pulumi/pkg/v2/backend/display"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag/colors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/config"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	"github.com/pulumi/pulumi/pkg/v3/backend/display"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
 )
 
 const errorDecryptingValue = "ERROR_UNABLE_TO_DECRYPT"
@@ -24,6 +24,9 @@ func newStackHistoryCmd() *cobra.Command {
 	var stack string
 	var jsonOut bool
 	var showSecrets bool
+	var pageSize int
+	var page int
+	var showFullDates bool
 
 	cmd := &cobra.Command{
 		Use:        "history",
@@ -42,7 +45,7 @@ This command displays data about previous updates for a stack.`,
 				return err
 			}
 			b := s.Backend()
-			updates, err := b.GetHistory(commandContext(), s.Ref())
+			updates, err := b.GetHistory(commandContext(), s.Ref(), pageSize, page)
 			if err != nil {
 				return errors.Wrap(err, "getting history")
 			}
@@ -59,7 +62,7 @@ This command displays data about previous updates for a stack.`,
 				return displayUpdatesJSON(updates, decrypter)
 			}
 
-			return displayUpdatesConsole(updates, opts)
+			return displayUpdatesConsole(updates, page, opts, showFullDates)
 		}),
 	}
 
@@ -71,12 +74,19 @@ This command displays data about previous updates for a stack.`,
 		"Show secret values when listing config instead of displaying blinded values")
 	cmd.PersistentFlags().BoolVarP(
 		&jsonOut, "json", "j", false, "Emit output as JSON")
+	cmd.PersistentFlags().BoolVar(
+		&showFullDates, "full-dates", false, "Show full dates, instead of relative dates")
+	cmd.PersistentFlags().IntVar(
+		&pageSize, "page-size", 10, "Used with 'page' to control number of results returned")
+	cmd.PersistentFlags().IntVar(
+		&page, "page", 1, "Used with 'page-size' to paginate results")
 	return cmd
 }
 
 // updateInfoJSON is the shape of the --json output for a configuration value.  While we can add fields to this
 // structure in the future, we should not change existing fields.
 type updateInfoJSON struct {
+	Version     int                        `json:"version"`
 	Kind        string                     `json:"kind"`
 	StartTime   string                     `json:"startTime"`
 	Message     string                     `json:"message"`
@@ -97,6 +107,7 @@ func displayUpdatesJSON(updates []backend.UpdateInfo, decrypter config.Decrypter
 	updatesJSON := make([]updateInfoJSON, len(updates))
 	for idx, update := range updates {
 		info := updateInfoJSON{
+			Version:     update.Version,
 			Kind:        string(update.Kind),
 			StartTime:   time.Unix(update.StartTime, 0).UTC().Format(timeFormat),
 			Message:     update.Message,
@@ -143,8 +154,12 @@ func displayUpdatesJSON(updates []backend.UpdateInfo, decrypter config.Decrypter
 	return printJSON(updatesJSON)
 }
 
-func displayUpdatesConsole(updates []backend.UpdateInfo, opts display.Options) error {
+func displayUpdatesConsole(updates []backend.UpdateInfo, page int, opts display.Options, noHumanize bool) error {
 	if len(updates) == 0 {
+		if page > 1 {
+			fmt.Printf("No stack updates found on page '%d'\n", page)
+			return nil
+		}
 		fmt.Println("Stack has never been updated")
 		return nil
 	}
@@ -155,7 +170,7 @@ func displayUpdatesConsole(updates []backend.UpdateInfo, opts display.Options) e
 	}
 
 	for _, update := range updates {
-
+		fmt.Printf("Version: %d\n", update.Version)
 		fmt.Printf("UpdateKind: %v\n", update.Kind)
 		if update.Result == "succeeded" {
 			fmt.Print(opts.Color.Colorize(fmt.Sprintf("%sStatus: %v%s\n", colors.Green, update.Result, colors.Reset)))
@@ -170,7 +185,12 @@ func displayUpdatesConsole(updates []backend.UpdateInfo, opts display.Options) e
 		printResourceChanges(colors.BlueBackground, colors.Black, " ", colors.Reset, update.ResourceChanges["same"])
 
 		timeStart := time.Unix(update.StartTime, 0)
-		timeCreated := humanize.Time(timeStart)
+		var timeCreated string
+		if noHumanize {
+			timeCreated = timeStart.String()
+		} else {
+			timeCreated = humanize.Time(timeStart)
+		}
 		timeEnd := time.Unix(update.EndTime, 0)
 		duration := timeEnd.Sub(timeStart)
 		fmt.Printf("%sUpdated %s took %s\n", " ", timeCreated, duration)

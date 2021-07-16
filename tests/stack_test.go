@@ -28,14 +28,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulumi/pulumi/pkg/v2/backend/filestate"
-	"github.com/pulumi/pulumi/pkg/v2/resource/stack"
-	"github.com/pulumi/pulumi/pkg/v2/testing/integration"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	ptesting "github.com/pulumi/pulumi/sdk/v2/go/common/testing"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/pkg/v3/backend/filestate"
+	"github.com/pulumi/pulumi/pkg/v3/resource/stack"
+	"github.com/pulumi/pulumi/pkg/v3/testing/integration"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	ptesting "github.com/pulumi/pulumi/sdk/v3/go/common/testing"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -232,6 +232,7 @@ func TestStackCommands(t *testing.T) {
 		if !assert.NoError(t, err) {
 			t.FailNow()
 		}
+		os.Setenv("PULUMI_CONFIG_PASSPHRASE", "correct horse battery staple")
 		snap, err := stack.DeserializeUntypedDeployment(&deployment, stack.DefaultSecretsProvider)
 		if !assert.NoError(t, err) {
 			t.FailNow()
@@ -260,6 +261,7 @@ func TestStackCommands(t *testing.T) {
 		if !assert.NoError(t, err) {
 			t.FailNow()
 		}
+		os.Unsetenv("PULUMI_CONFIG_PASSPHRASE")
 		_, stderr := e.RunCommand("pulumi", "stack", "import", "--file", "stack.json")
 		assert.Contains(t, stderr, fmt.Sprintf("removing pending operation 'deleting' on '%s'", res.URN))
 		// The engine should be happy now that there are no invalid resources.
@@ -403,6 +405,50 @@ func TestStackRenameAfterCreateServiceBackend(t *testing.T) {
 	e.RunCommand("pulumi", "stack", "rename", orgName+"/"+stackRenameBase+"2")
 	stdoutXyz2, _ := e.RunCommand("pulumi", "config", "get", "xyz")
 	assert.Equal(t, "abc", strings.Trim(stdoutXyz2, "\r\n"))
+}
+
+func TestLocalStateLocking(t *testing.T) {
+	e := ptesting.NewEnvironment(t)
+	defer func() {
+		if !t.Failed() {
+			e.DeleteEnvironment()
+		}
+	}()
+
+	integration.CreateBasicPulumiRepo(e)
+	e.ImportDirectory("integration/single_resource")
+	e.SetBackend(e.LocalURL())
+	e.RunCommand("pulumi", "stack", "init", "foo")
+	e.RunCommand("yarn", "install")
+	e.RunCommand("yarn", "link", "@pulumi/pulumi")
+
+	// Enable self-managed backend locking
+	e.SetEnvVars([]string{fmt.Sprintf("%s=1", filestate.PulumiFilestateLockingEnvVar)})
+
+	// Run 10 concurrent updates
+	count := 10
+	stderrs := make(chan string, count)
+	for i := 0; i < count; i++ {
+		go func() {
+			_, stderr, _ := e.GetCommandResults("pulumi", "up", "--non-interactive", "--skip-preview", "--yes")
+			stderrs <- stderr
+		}()
+	}
+
+	// Ensure that only one of the concurrent updates succeeded, and that failures
+	// were due to locking (and not state file corruption)
+	numsuccess := 0
+	for i := 0; i < count; i++ {
+		stderr := <-stderrs
+		if stderr == "" {
+			assert.Equal(t, 0, numsuccess, "more than one concurrent update succeeded")
+			numsuccess++
+		} else {
+			assert.Contains(t, stderr, "the stack is currently locked by 1 lock(s)")
+			t.Log(stderr)
+		}
+	}
+
 }
 
 func getFileNames(infos []os.FileInfo) []string {

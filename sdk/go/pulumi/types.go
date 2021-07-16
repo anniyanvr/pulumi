@@ -22,7 +22,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // Output helps encode the relationship between resources in a Pulumi application. Specifically an output property
@@ -32,20 +32,10 @@ import (
 type Output interface {
 	ElementType() reflect.Type
 
-	Apply(applier func(interface{}) (interface{}, error)) AnyOutput
-	ApplyWithContext(ctx context.Context, applier func(context.Context, interface{}) (interface{}, error)) AnyOutput
 	ApplyT(applier interface{}) Output
 	ApplyTWithContext(ctx context.Context, applier interface{}) Output
 
 	getState() *OutputState
-	dependencies() []Resource
-	fulfillValue(value reflect.Value, known, secret bool, deps []Resource, err error)
-	resolveValue(value reflect.Value, known, secret bool, deps []Resource)
-	fulfill(value interface{}, known, secret bool, deps []Resource, err error)
-	resolve(value interface{}, known, secret bool, deps []Resource)
-	reject(err error)
-	await(ctx context.Context) (interface{}, bool, bool, []Resource, error)
-	isSecret() bool
 }
 
 var outputType = reflect.TypeOf((*Output)(nil)).Elem()
@@ -63,6 +53,20 @@ func RegisterOutputType(output Output) {
 	}
 }
 
+type waitGroups []*sync.WaitGroup
+
+func (wgs waitGroups) add() {
+	for _, g := range wgs {
+		g.Add(1)
+	}
+}
+
+func (wgs waitGroups) done() {
+	for _, g := range wgs {
+		g.Done()
+	}
+}
+
 const (
 	outputPending = iota
 	outputResolved
@@ -74,6 +78,8 @@ type OutputState struct {
 	mutex sync.Mutex
 	cond  *sync.Cond
 
+	join *sync.WaitGroup // the wait group associated with this output, if any.
+
 	state uint32 // one of output{Pending,Resolved,Rejected}
 
 	value  interface{} // the value of this output if it is resolved.
@@ -83,6 +89,17 @@ type OutputState struct {
 
 	element reflect.Type // the element type of this output.
 	deps    []Resource   // the dependencies associated with this output property.
+}
+
+func getOutputState(v reflect.Value) (*OutputState, bool) {
+	if !v.IsValid() || !v.CanInterface() {
+		return nil, false
+	}
+	out, ok := v.Interface().(Output)
+	if !ok {
+		return nil, false
+	}
+	return out.getState(), true
 }
 
 func (o *OutputState) elementType() reflect.Type {
@@ -116,6 +133,33 @@ func (o *OutputState) fulfillValue(value reflect.Value, known, secret bool, deps
 
 	if o.state != outputPending {
 		return
+	}
+
+	// If there is a wait group associated with this output--which should be the case in all outputs created
+	// by a Context or a combinator that was passed any non-prompt value--ensure that we decrement its count
+	// before this function returns. This allows Contexts to remain alive until all outstanding asynchronous
+	// work that may reference that context has completed.
+	//
+	// Code that creates an output must take care to bump the count for any relevant waitgroups prior to
+	// creating asynchronous work associated with that output. For combinators, this means digging through
+	// inputs, collecting all wait groups, and calling Add (see toOutputTWithContext for an example). For
+	// code that creates outputs directly, this is as simple as passing the wait group for the associated
+	// context to newOutput.
+	//
+	// User code should use combinators or Context.NewOutput to ensure that all asynchronous work is
+	// associated with a Context.
+	if o.join != nil {
+		// If this output is being resolved to another output O' with a different wait group, ensure that we
+		// don't decrement the current output's wait group until O' completes.
+		if other, ok := getOutputState(value); ok && other.join != o.join {
+			go func() {
+				//nolint:errcheck
+				other.await(context.Background())
+				o.join.Done()
+			}()
+		} else {
+			defer o.join.Done()
+		}
 	}
 
 	if err != nil {
@@ -194,8 +238,13 @@ func (o *OutputState) getState() *OutputState {
 	return o
 }
 
-func newOutputState(elementType reflect.Type, deps ...Resource) *OutputState {
+func newOutputState(join *sync.WaitGroup, elementType reflect.Type, deps ...Resource) *OutputState {
+	if join != nil {
+		join.Add(1)
+	}
+
 	out := &OutputState{
+		join:    join,
 		element: elementType,
 		deps:    deps,
 	}
@@ -206,7 +255,7 @@ func newOutputState(elementType reflect.Type, deps ...Resource) *OutputState {
 var outputStateType = reflect.TypeOf((*OutputState)(nil))
 var outputTypeToOutputState sync.Map // map[reflect.Type]int
 
-func newOutput(typ reflect.Type, deps ...Resource) Output {
+func newOutput(wg *sync.WaitGroup, typ reflect.Type, deps ...Resource) Output {
 	contract.Assert(typ.Implements(outputType))
 
 	// All values that implement Output must embed a field of type `*OutputState` by virtue of the unexported
@@ -229,25 +278,31 @@ func newOutput(typ reflect.Type, deps ...Resource) Output {
 
 	// Create the new output.
 	output := reflect.New(typ).Elem()
-	state := newOutputState(output.Interface().(Output).ElementType(), deps...)
+	state := newOutputState(wg, output.Interface().(Output).ElementType(), deps...)
 	output.Field(outputFieldV.(int)).Set(reflect.ValueOf(state))
 	return output.Interface().(Output)
 }
 
-// NewOutput returns an output value that can be used to rendezvous with the production of a value or error.  The
-// function returns the output itself, plus two functions: one for resolving a value, and another for rejecting with an
-// error; exactly one function must be called. This acts like a promise.
-func NewOutput() (Output, func(interface{}), func(error)) {
-	out := newOutputState(anyType)
+func newAnyOutput(wg *sync.WaitGroup) (Output, func(interface{}), func(error)) {
+	out := newOutputState(wg, anyType)
 
 	resolve := func(v interface{}) {
 		out.resolve(v, true, false, nil)
 	}
 	reject := func(err error) {
-		out.reject(err)
+		out.getState().reject(err)
 	}
 
 	return AnyOutput{out}, resolve, reject
+}
+
+// NewOutput returns an output value that can be used to rendezvous with the production of a value or error.  The
+// function returns the output itself, plus two functions: one for resolving a value, and another for rejecting with an
+// error; exactly one function must be called. This acts like a promise.
+//
+// Deprecated: use Context.NewOutput instead.
+func NewOutput() (Output, func(interface{}), func(error)) {
+	return newAnyOutput(nil)
 }
 
 var contextType = reflect.TypeOf((*context.Context)(nil)).Elem()
@@ -315,22 +370,6 @@ func checkApplier(fn interface{}, elementType reflect.Type) reflect.Value {
 	return fv
 }
 
-// Apply transforms the data of the output property using the applier func. The result remains an output
-// property, and accumulates all implicated dependencies, so that resources can be properly tracked using a DAG.
-// This function does not block awaiting the value; instead, it spawns a Goroutine that will await its availability.
-func (o *OutputState) Apply(applier func(interface{}) (interface{}, error)) AnyOutput {
-	return o.ApplyWithContext(context.Background(), func(_ context.Context, v interface{}) (interface{}, error) {
-		return applier(v)
-	})
-}
-
-// ApplyWithContext transforms the data of the output property using the applier func. The result remains an output
-// property, and accumulates all implicated dependencies, so that resources can be properly tracked using a DAG.
-// This function does not block awaiting the value; instead, it spawns a Goroutine that will await its availability.
-func (o *OutputState) ApplyWithContext(ctx context.Context, applier func(context.Context, interface{}) (interface{}, error)) AnyOutput {
-	return o.ApplyTWithContext(ctx, applier).(AnyOutput)
-}
-
 // ApplyT transforms the data of the output property using the applier func. The result remains an output
 // property, and accumulates all implicated dependencies, so that resources can be properly tracked using a DAG.
 // This function does not block awaiting the value; instead, it spawns a Goroutine that will await its availability.
@@ -394,11 +433,11 @@ func (o *OutputState) ApplyTWithContext(ctx context.Context, applier interface{}
 		resultType = ot.(reflect.Type)
 	}
 
-	result := newOutput(resultType, o.dependencies()...)
+	result := newOutput(o.join, resultType, o.dependencies()...)
 	go func() {
-		v, known, secret, deps, err := o.await(ctx)
+		v, known, secret, deps, err := o.getState().await(ctx)
 		if err != nil || !known {
-			result.fulfill(nil, known, secret, deps, err)
+			result.getState().fulfill(nil, known, secret, deps, err)
 			return
 		}
 
@@ -409,19 +448,33 @@ func (o *OutputState) ApplyTWithContext(ctx context.Context, applier interface{}
 		}
 		results := fn.Call([]reflect.Value{reflect.ValueOf(ctx), val})
 		if len(results) == 2 && !results[1].IsNil() {
-			result.reject(results[1].Interface().(error))
+			result.getState().reject(results[1].Interface().(error))
 			return
 		}
 
 		// Fulfill the result.
-		result.fulfillValue(results[0], true, secret, deps, nil)
+		result.getState().fulfillValue(results[0], true, secret, deps, nil)
 	}()
 	return result
 }
 
-// isSecret returns a bool representing the secretness of the Output
-func (o *OutputState) isSecret() bool {
+// IsSecret returns a bool representing the secretness of the Output
+func IsSecret(o Output) bool {
 	return o.getState().secret
+}
+
+// Unsecret will unwrap a secret output as a new output with a resolved value and no secretness
+func Unsecret(input Output) Output {
+	return UnsecretWithContext(context.Background(), input)
+}
+
+// UnsecretWithContext will unwrap a secret output as a new output with a resolved value and no secretness
+func UnsecretWithContext(ctx context.Context, input Output) Output {
+	var x bool
+	o := toOutputWithContext(ctx, input.getState().join, input, &x)
+	// set immediate secretness ahead of resolution/fulfillment
+	o.getState().secret = false
+	return o
 }
 
 // ToSecret wraps the input in an Output marked as secret
@@ -433,7 +486,8 @@ func ToSecret(input interface{}) Output {
 // ToSecretWithContext wraps the input in an Output marked as secret
 // that will resolve when all Inputs contained in the given value have resolved.
 func ToSecretWithContext(ctx context.Context, input interface{}) Output {
-	o := toOutputWithContext(ctx, input, true)
+	x := true
+	o := toOutputWithContext(ctx, nil, input, &x)
 	// set immediate secretness ahead of resolution/fufillment
 	o.getState().secret = true
 	return o
@@ -453,33 +507,45 @@ func AllWithContext(ctx context.Context, inputs ...interface{}) ArrayOutput {
 	return ToOutputWithContext(ctx, inputs).(ArrayOutput)
 }
 
-func gatherDependencies(v interface{}) []Resource {
+func gatherDependencies(v interface{}) ([]Resource, waitGroups) {
 	if v == nil {
-		return nil
+		return nil, nil
 	}
 
 	depSet := make(map[Resource]struct{})
-	gatherDependencySet(reflect.ValueOf(v), depSet)
+	joinSet := make(map[*sync.WaitGroup]struct{})
+	gatherDependencySet(reflect.ValueOf(v), depSet, joinSet)
 
-	if len(depSet) == 0 {
-		return nil
+	var joins waitGroups
+	if len(joinSet) > 0 {
+		joins = make([]*sync.WaitGroup, 0, len(joinSet))
+		for j := range joinSet {
+			joins = append(joins, j)
+		}
 	}
 
-	deps := make([]Resource, 0, len(depSet))
-	for d := range depSet {
-		deps = append(deps, d)
+	var deps []Resource
+	if len(depSet) > 0 {
+		deps = make([]Resource, 0, len(depSet))
+		for d := range depSet {
+			deps = append(deps, d)
+		}
 	}
-	return deps
+
+	return deps, joins
 }
 
 var resourceType = reflect.TypeOf((*Resource)(nil)).Elem()
 
-func gatherDependencySet(v reflect.Value, deps map[Resource]struct{}) {
+func gatherDependencySet(v reflect.Value, deps map[Resource]struct{}, joins map[*sync.WaitGroup]struct{}) {
 	for {
 		// Check for an Output that we can pull dependencies off of.
 		if v.Type().Implements(outputType) && v.CanInterface() {
 			output := v.Convert(outputType).Interface().(Output)
-			for _, d := range output.dependencies() {
+			if join := output.getState().join; join != nil {
+				joins[join] = struct{}{}
+			}
+			for _, d := range output.getState().dependencies() {
 				deps[d] = struct{}{}
 			}
 			return
@@ -503,18 +569,18 @@ func gatherDependencySet(v reflect.Value, deps map[Resource]struct{}) {
 		case reflect.Struct:
 			numFields := v.Type().NumField()
 			for i := 0; i < numFields; i++ {
-				gatherDependencySet(v.Field(i), deps)
+				gatherDependencySet(v.Field(i), deps, joins)
 			}
 		case reflect.Array, reflect.Slice:
 			l := v.Len()
 			for i := 0; i < l; i++ {
-				gatherDependencySet(v.Index(i), deps)
+				gatherDependencySet(v.Index(i), deps, joins)
 			}
 		case reflect.Map:
 			iter := v.MapRange()
 			for iter.Next() {
-				gatherDependencySet(iter.Key(), deps)
-				gatherDependencySet(iter.Value(), deps)
+				gatherDependencySet(iter.Key(), deps, joins)
+				gatherDependencySet(iter.Value(), deps, joins)
 			}
 		}
 		return
@@ -559,8 +625,12 @@ func awaitInputs(ctx context.Context, v, resolved reflect.Value) (bool, bool, []
 	// await it.
 	valueType, isInput := v.Type(), false
 	if v.CanInterface() && valueType.Implements(inputType) {
-		input, isNonNil := v.Interface().(Input)
-		if !isNonNil {
+		input, ok := v.Interface().(Input)
+		if !ok {
+			// A non-input type is already fully-resolved.
+			return true, false, nil, nil
+		}
+		if val := reflect.ValueOf(input); val.Kind() == reflect.Ptr && val.IsNil() {
 			// A nil input is already fully-resolved.
 			return true, false, nil, nil
 		}
@@ -588,7 +658,7 @@ func awaitInputs(ctx context.Context, v, resolved reflect.Value) (bool, bool, []
 
 		// If the input is an Output, await its value. The returned value is fully resolved.
 		if output, ok := input.(Output); ok {
-			e, known, secret, deps, err := output.await(ctx)
+			e, known, secret, deps, err := output.getState().await(ctx)
 			if err != nil || !known {
 				return known, secret, deps, err
 			}
@@ -635,7 +705,7 @@ func awaitInputs(ctx context.Context, v, resolved reflect.Value) (bool, bool, []
 		}
 	}
 
-	contract.Assert(valueType.AssignableTo(resolved.Type()))
+	contract.Assertf(valueType.AssignableTo(resolved.Type()), "%s not assignable to %s", valueType.String(), resolved.Type().String())
 
 	// If the resolved type is an interface, make an appropriate destination from the value's type.
 	if resolved.Kind() == reflect.Interface {
@@ -726,6 +796,48 @@ func awaitInputs(ctx context.Context, v, resolved reflect.Value) (bool, bool, []
 	return known, secret, deps, err
 }
 
+func toOutputTWithContext(ctx context.Context, join *sync.WaitGroup, outputType reflect.Type, v interface{}, result reflect.Value, forceSecretVal *bool) Output {
+	deps, joins := gatherDependencies(v)
+
+	done := joins.done
+	if join == nil {
+		switch len(joins) {
+		case 0:
+			// OK
+		case 1:
+			join, joins, done = joins[0], nil, func() {}
+		default:
+			join = &sync.WaitGroup{}
+			done = func() {
+				join.Wait()
+				joins.done()
+			}
+		}
+	}
+	joins.add()
+
+	output := newOutput(join, outputType, deps...)
+	go func() {
+		defer done()
+
+		if v == nil {
+			output.getState().fulfill(nil, true, false, nil, nil)
+			return
+		}
+
+		known, secret, deps, err := awaitInputs(ctx, reflect.ValueOf(v), result)
+		if forceSecretVal != nil {
+			secret = *forceSecretVal
+		}
+		if err != nil || !known {
+			output.getState().fulfill(nil, known, secret, deps, err)
+			return
+		}
+		output.getState().resolveValue(result, true, secret, deps)
+	}()
+	return output
+}
+
 // ToOutput returns an Output that will resolve when all Inputs contained in the given value have resolved.
 func ToOutput(v interface{}) Output {
 	return ToOutputWithContext(context.Background(), v)
@@ -734,39 +846,25 @@ func ToOutput(v interface{}) Output {
 // ToOutputWithContext returns an Output that will resolve when all Outputs contained in the given value have
 // resolved.
 func ToOutputWithContext(ctx context.Context, v interface{}) Output {
-	return toOutputWithContext(ctx, v, false)
+	return toOutputWithContext(ctx, nil, v, nil)
 }
 
-func toOutputWithContext(ctx context.Context, v interface{}, forceSecret bool) Output {
-	resolvedType := reflect.TypeOf(v)
+func toOutputWithContext(ctx context.Context, join *sync.WaitGroup, v interface{}, forceSecretVal *bool) Output {
+	resultType := reflect.TypeOf(v)
 	if input, ok := v.(Input); ok {
-		resolvedType = input.ElementType()
+		resultType = input.ElementType()
+	}
+	var result reflect.Value
+	if v != nil {
+		result = reflect.New(resultType).Elem()
 	}
 
-	resultType := anyOutputType
-	if ot, ok := concreteTypeToOutputType.Load(resolvedType); ok {
-		resultType = ot.(reflect.Type)
+	outputType := anyOutputType
+	if ot, ok := concreteTypeToOutputType.Load(resultType); ok {
+		outputType = ot.(reflect.Type)
 	}
 
-	result := newOutput(resultType, gatherDependencies(v)...)
-	go func() {
-		if v == nil {
-			result.fulfill(nil, true, false, nil, nil)
-			return
-		}
-
-		element := reflect.New(resolvedType).Elem()
-
-		known, secret, deps, err := awaitInputs(ctx, reflect.ValueOf(v), element)
-		secret = secret || forceSecret
-		if err != nil || !known {
-			result.fulfill(nil, known, secret, deps, err)
-			return
-		}
-
-		result.resolveValue(element, true, secret, deps)
-	}()
-	return result
+	return toOutputTWithContext(ctx, join, outputType, v, result, forceSecretVal)
 }
 
 // Input is the type of a generic input value for a Pulumi resource. This type is used in conjunction with Output
@@ -840,18 +938,12 @@ func Any(v interface{}) AnyOutput {
 }
 
 func AnyWithContext(ctx context.Context, v interface{}) AnyOutput {
-	// Return an output that resolves when all nested inputs have resolved.
-	out := newOutput(anyOutputType, gatherDependencies(v)...)
-	go func() {
-		if v == nil {
-			out.fulfill(nil, true, false, nil, nil)
-			return
-		}
-		var result interface{}
-		known, secret, deps, err := awaitInputs(ctx, reflect.ValueOf(v), reflect.ValueOf(&result).Elem())
-		out.fulfill(result, known, secret, deps, err)
-	}()
-	return out.(AnyOutput)
+	return anyWithContext(ctx, nil, v)
+}
+
+func anyWithContext(ctx context.Context, join *sync.WaitGroup, v interface{}) AnyOutput {
+	var result interface{}
+	return toOutputTWithContext(ctx, join, anyOutputType, v, reflect.ValueOf(&result).Elem(), nil).(AnyOutput)
 }
 
 type AnyOutput struct{ *OutputState }

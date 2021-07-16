@@ -23,8 +23,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
 )
 
 // PulumiCredentialsPathEnvVar is a path to the folder where credentials are stored.
@@ -73,6 +73,18 @@ func DeleteAccount(key string) error {
 		creds.Current = ""
 	}
 	return StoreCredentials(creds)
+}
+
+func DeleteAllAccounts() error {
+	credsFile, err := getCredsFilePath()
+	if err != nil {
+		return err
+	}
+
+	if err = os.Remove(credsFile); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // StoreAccount saves the given account underneath the given key.
@@ -131,15 +143,15 @@ func getCredsFilePath() (string, error) {
 }
 
 // GetCurrentCloudURL returns the URL of the cloud we are currently connected to. This may be empty if we
-// have not logged in.
+// have not logged in. Note if PULUMI_BACKEND_URL is set, the corresponding value is returned
+// instead irrespective of the backend for current project or stored credentials.
 func GetCurrentCloudURL() (string, error) {
-	var url string
-
 	// Allow PULUMI_BACKEND_URL to override the current cloud URL selection
 	if backend := os.Getenv(PulumiBackendURLEnvVar); backend != "" {
-		url = backend
+		return backend, nil
 	}
 
+	var url string
 	// Try detecting backend from config
 	projPath, err := DetectProjectPath()
 	if err == nil && projPath != "" {
@@ -181,7 +193,8 @@ func GetStoredCredentials() (Credentials, error) {
 
 	var creds Credentials
 	if err = json.Unmarshal(c, &creds); err != nil {
-		return Credentials{}, errors.Wrapf(err, "unmarshalling credentials file")
+		return Credentials{}, errors.Wrapf(err, "failed to read Pulumi credentials file. Please re-run "+
+			"`pulumi login` to reset your credentials file")
 	}
 
 	var secrets []string

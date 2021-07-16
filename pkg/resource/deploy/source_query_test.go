@@ -19,8 +19,8 @@ import (
 	"testing"
 
 	pbempty "github.com/golang/protobuf/ptypes/empty"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
-	pulumirpc "github.com/pulumi/pulumi/sdk/v2/proto/go"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
+	pulumirpc "github.com/pulumi/pulumi/sdk/v3/proto/go"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -179,6 +179,11 @@ func (rm *mockQueryResmon) Cancel() error {
 }
 func (rm *mockQueryResmon) Invoke(ctx context.Context,
 	req *pulumirpc.InvokeRequest) (*pulumirpc.InvokeResponse, error) {
+
+	panic("not implemented")
+}
+func (rm *mockQueryResmon) Call(ctx context.Context,
+	req *pulumirpc.CallRequest) (*pulumirpc.CallResponse, error) {
 
 	panic("not implemented")
 }

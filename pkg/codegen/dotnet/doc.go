@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 // DocLanguageHelper is the DotNet-specific implementation of the DocLanguageHelper.
@@ -72,7 +72,7 @@ func (d DocLanguageHelper) GetDocLinkForFunctionInputOrOutputType(pkg *schema.Pa
 }
 
 // GetLanguageTypeString returns the DotNet-specific type given a Pulumi schema type.
-func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName string, t schema.Type, input, optional bool) string {
+func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName string, t schema.Type, input bool) string {
 	typeDetails := map[*schema.ObjectType]*typeDetails{}
 	mod := &modContext{
 		pkg:         pkg,
@@ -84,7 +84,7 @@ func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName
 	if !input {
 		qualifier = "Outputs"
 	}
-	return mod.typeString(t, qualifier, input, false /*state*/, false /*wrapInput*/, true /*requireInitializers*/, optional)
+	return mod.typeString(t, qualifier, input, false /*state*/, true /*requireInitializers*/)
 }
 
 func (d DocLanguageHelper) GetFunctionName(modName string, f *schema.Function) string {
@@ -121,12 +121,12 @@ func (d DocLanguageHelper) GetPropertyName(p *schema.Property) (string, error) {
 }
 
 // GetEnumName returns the enum name specific to C#.
-func (d DocLanguageHelper) GetEnumName(e *schema.Enum) (string, error) {
+func (d DocLanguageHelper) GetEnumName(e *schema.Enum, typeName string) (string, error) {
 	name := fmt.Sprintf("%v", e.Value)
 	if e.Name != "" {
 		name = e.Name
 	}
-	return makeSafeEnumName(name)
+	return makeSafeEnumName(name, typeName)
 }
 
 // GetModuleDocLink returns the display name and the link for a module.

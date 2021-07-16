@@ -36,15 +36,15 @@ import (
 	"github.com/djherbis/times"
 	"github.com/pkg/errors"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag/colors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/archive"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/fsutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/httputil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/version"
-	"github.com/pulumi/pulumi/sdk/v2/nodejs/npm"
-	"github.com/pulumi/pulumi/sdk/v2/python"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/archive"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/fsutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/httputil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/version"
+	"github.com/pulumi/pulumi/sdk/v3/nodejs/npm"
+	"github.com/pulumi/pulumi/sdk/v3/python"
 )
 
 const (
@@ -219,7 +219,7 @@ func (info PluginInfo) Download() (io.ReadCloser, int64, error) {
 	}
 	var arch string
 	switch runtime.GOARCH {
-	case "amd64":
+	case "amd64", "arm64":
 		arch = runtime.GOARCH
 	default:
 		return nil, -1, errors.Errorf("unsupported plugin architecture: %s", runtime.GOARCH)
@@ -298,8 +298,8 @@ func (info PluginInfo) installLock() (unlock func(), err error) {
 // If a failure occurs during installation, the `.partial` file will remain, indicating the plugin wasn't fully
 // installed. The next time the plugin is installed, the old installation directory will be removed and replaced with
 // a fresh install.
-func (info PluginInfo) Install(tarball io.ReadCloser) error {
-	defer contract.IgnoreClose(tarball)
+func (info PluginInfo) Install(tgz io.ReadCloser) error {
+	defer contract.IgnoreClose(tgz)
 
 	// Fetch the directory into which we will expand this tarball.
 	finalDir, err := info.DirPath()
@@ -360,18 +360,14 @@ func (info PluginInfo) Install(tarball io.ReadCloser) error {
 	}
 
 	// Uncompress the plugin.
-	tarballBytes, err := ioutil.ReadAll(tarball)
-	if err != nil {
-		return err
-	}
-	if err := archive.UnTGZ(tarballBytes, finalDir); err != nil {
+	if err := archive.ExtractTGZ(tgz, finalDir); err != nil {
 		return err
 	}
 
 	// Even though we deferred closing the tarball at the beginning of this function, go ahead and explicitly close
 	// it now since we're finished extracting it, to prevent subsequent output from being displayed oddly with
 	// the progress bar.
-	contract.IgnoreClose(tarball)
+	contract.IgnoreClose(tgz)
 
 	// Install dependencies, if needed.
 	proj, err := LoadPluginProject(filepath.Join(finalDir, "PulumiPlugin.yaml"))
@@ -387,7 +383,7 @@ func (info PluginInfo) Install(tarball io.ReadCloser) error {
 		switch runtime {
 		case "nodejs":
 			var b bytes.Buffer
-			if _, err := npm.Install(finalDir, &b, &b); err != nil {
+			if _, err := npm.Install(finalDir, true /* production */, &b, &b); err != nil {
 				os.Stderr.Write(b.Bytes())
 				return errors.Wrap(err, "installing plugin dependencies")
 			}
@@ -537,17 +533,33 @@ func GetPluginDir() (string, error) {
 	return GetPulumiPath(PluginDir)
 }
 
-// GetPlugins returns a list of installed plugins.
+// GetPlugins returns a list of installed plugins without size info and last accessed metadata.
+// Plugin size requires recursively traversing the plugin directory, which can be extremely
+// expensive with the introduction of nodejs multilang components that have
+// deeply nested node_modules folders.
 func GetPlugins() ([]PluginInfo, error) {
 	// To get the list of plugins, simply scan the directory in the usual place.
 	dir, err := GetPluginDir()
 	if err != nil {
 		return nil, err
 	}
-	return getPlugins(dir)
+	return getPlugins(dir, true /* skipMetadata */)
 }
 
-func getPlugins(dir string) ([]PluginInfo, error) {
+// GetPluginsWithMetadata returns a list of installed plugins with metadata about size,
+// and last access (POOR RUNTIME PERF). Plugin size requires recursively traversing the
+// plugin directory, which can be extremely expensive with the introduction of
+// nodejs multilang components that have deeply nested node_modules folders.
+func GetPluginsWithMetadata() ([]PluginInfo, error) {
+	// To get the list of plugins, simply scan the directory in the usual place.
+	dir, err := GetPluginDir()
+	if err != nil {
+		return nil, err
+	}
+	return getPlugins(dir, false /* skipMetadata */)
+}
+
+func getPlugins(dir string, skipMetadata bool) ([]PluginInfo, error) {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -573,8 +585,11 @@ func getPlugins(dir string) ([]PluginInfo, error) {
 			} else if !os.IsNotExist(err) {
 				return nil, err
 			}
-			if err = plugin.SetFileMetadata(path); err != nil {
-				return nil, err
+			// computing plugin sizes can be very expensive (nested node_modules)
+			if !skipMetadata {
+				if err = plugin.SetFileMetadata(path); err != nil {
+					return nil, err
+				}
 			}
 			plugins = append(plugins, plugin)
 		}
@@ -584,13 +599,19 @@ func getPlugins(dir string) ([]PluginInfo, error) {
 
 // GetPluginPath finds a plugin's path by its kind, name, and optional version.  It will match the latest version that
 // is >= the version specified.  If no version is supplied, the latest plugin for that given kind/name pair is loaded,
-// using standard semver sorting rules.  A plugin may be overridden entirely by placing it on your $PATH.
+// using standard semver sorting rules.  A plugin may be overridden entirely by placing it on your $PATH, though it is
+// possible to opt out of this behavior by setting PULUMI_IGNORE_AMBIENT_PLUGINS to any non-empty value.
 func GetPluginPath(kind PluginKind, name string, version *semver.Version) (string, string, error) {
-	// If we have a version of the plugin on its $PATH, use it.  This supports development scenarios.
-	filename := (&PluginInfo{Kind: kind, Name: name, Version: version}).FilePrefix()
-	if path, err := exec.LookPath(filename); err == nil {
-		logging.V(6).Infof("GetPluginPath(%s, %s, %v): found on $PATH %s", kind, name, version, path)
-		return "", path, nil
+	var filename string
+
+	// If we have a version of the plugin on its $PATH, use it, unless we have opted out of this behavior explicitly.
+	// This supports development scenarios.
+	if _, isFound := os.LookupEnv("PULUMI_IGNORE_AMBIENT_PLUGINS"); !isFound {
+		filename = (&PluginInfo{Kind: kind, Name: name, Version: version}).FilePrefix()
+		if path, err := exec.LookPath(filename); err == nil {
+			logging.V(6).Infof("GetPluginPath(%s, %s, %v): found on $PATH %s", kind, name, version, path)
+			return "", path, nil
+		}
 	}
 
 	// At some point in the future, language plugins will be located in the plugin cache, just like regular plugins
@@ -765,6 +786,7 @@ func ReadCloserProgressBar(
 
 	// If we know the length of the download, show a progress bar.
 	bar := pb.New(int(size))
+	bar.Output = os.Stderr
 	bar.Prefix(colorization.Colorize(colors.SpecUnimportant + message + ":"))
 	bar.Postfix(colorization.Colorize(colors.Reset))
 	bar.SetMaxWidth(80)

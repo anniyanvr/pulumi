@@ -19,12 +19,12 @@
 package docs
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen/python"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/internal/test"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/python"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -57,8 +57,8 @@ var (
 func initTestPackageSpec(t *testing.T) {
 	t.Helper()
 
-	pythonMapCase := map[string]json.RawMessage{
-		"python": json.RawMessage(`{"mapCase":false}`),
+	pythonMapCase := map[string]schema.RawMessage{
+		"python": schema.RawMessage(`{"mapCase":false}`),
 	}
 	testPackageSpec = schema.PackageSpec{
 		Name:        providerPackage,
@@ -272,7 +272,7 @@ func TestResourceNestedPropertyPythonCasing(t *testing.T) {
 	schemaPkg, err := schema.ImportSpec(testPackageSpec, nil)
 	assert.NoError(t, err, "importing spec")
 
-	modules := generateModulesFromSchemaPackage(unitTestTool, schemaPkg, true)
+	modules := generateModulesFromSchemaPackage(unitTestTool, schemaPkg)
 	mod := modules["module"]
 	for _, r := range mod.resources {
 		nestedTypes := mod.genNestedTypes(r, true)
@@ -282,7 +282,7 @@ func TestResourceNestedPropertyPythonCasing(t *testing.T) {
 		}
 
 		t.Run("InputPropertiesAreSnakeCased", func(t *testing.T) {
-			props := mod.getProperties(r.InputProperties, "python", true, false)
+			props := mod.getProperties(r.InputProperties, "python", true, false, false)
 			for _, p := range props {
 				assert.True(t, strings.Contains(p.Name, "_"), "input property name in python must use snake_case")
 			}
@@ -354,6 +354,62 @@ func getResourceFromModule(resource string, mod *modContext) *schema.Resource {
 	return nil
 }
 
+func getFunctionFromModule(function string, mod *modContext) *schema.Function {
+	for _, f := range mod.functions {
+		if tokenToName(f.Token) != function {
+			continue
+		}
+		return f
+	}
+	return nil
+}
+
+func TestFunctionHeaders(t *testing.T) {
+	initTestPackageSpec(t)
+
+	schemaPkg, err := schema.ImportSpec(testPackageSpec, nil)
+	assert.NoError(t, err, "importing spec")
+
+	tests := []struct {
+		ExpectedTitleTag string
+		FunctionName     string
+		ModuleName       string
+		ExpectedMetaDesc string
+	}{
+		{
+			FunctionName: "getPackageResource",
+			// Empty string indicates the package-level root module.
+			ModuleName:       "",
+			ExpectedTitleTag: "prov.getPackageResource",
+			ExpectedMetaDesc: "Documentation for the prov.getPackageResource function with examples, input properties, output properties, and supporting types.",
+		},
+		{
+			FunctionName:     "getModuleResource",
+			ModuleName:       "module",
+			ExpectedTitleTag: "prov.module.getModuleResource",
+			ExpectedMetaDesc: "Documentation for the prov.module.getModuleResource function with examples, input properties, output properties, and supporting types.",
+		},
+	}
+
+	modules := generateModulesFromSchemaPackage(unitTestTool, schemaPkg)
+	for _, test := range tests {
+		t.Run(test.FunctionName, func(t *testing.T) {
+			mod, ok := modules[test.ModuleName]
+			if !ok {
+				t.Fatalf("could not find the module %s in modules map", test.ModuleName)
+			}
+
+			f := getFunctionFromModule(test.FunctionName, mod)
+			if f == nil {
+				t.Fatalf("could not find %s in modules", test.FunctionName)
+			}
+			h := mod.genFunctionHeader(f)
+			assert.Equal(t, test.ExpectedTitleTag, h.TitleTag)
+			assert.Equal(t, test.ExpectedMetaDesc, h.MetaDesc)
+		})
+	}
+}
+
 func TestResourceDocHeader(t *testing.T) {
 	initTestPackageSpec(t)
 
@@ -365,23 +421,26 @@ func TestResourceDocHeader(t *testing.T) {
 		ExpectedTitleTag string
 		ResourceName     string
 		ModuleName       string
+		ExpectedMetaDesc string
 	}{
 		{
 			Name:         "PackageLevelResourceHeader",
 			ResourceName: "PackageLevelResource",
 			// Empty string indicates the package-level root module.
 			ModuleName:       "",
-			ExpectedTitleTag: "Resource PackageLevelResource | Package prov",
+			ExpectedTitleTag: "prov.PackageLevelResource",
+			ExpectedMetaDesc: "Documentation for the prov.PackageLevelResource resource with examples, input properties, output properties, lookup functions, and supporting types.",
 		},
 		{
 			Name:             "ModuleLevelResourceHeader",
 			ResourceName:     "Resource",
 			ModuleName:       "module",
 			ExpectedTitleTag: "prov.module.Resource",
+			ExpectedMetaDesc: "Documentation for the prov.module.Resource resource with examples, input properties, output properties, lookup functions, and supporting types.",
 		},
 	}
 
-	modules := generateModulesFromSchemaPackage(unitTestTool, schemaPkg, true)
+	modules := generateModulesFromSchemaPackage(unitTestTool, schemaPkg)
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
 			mod, ok := modules[test.ModuleName]
@@ -395,6 +454,7 @@ func TestResourceDocHeader(t *testing.T) {
 			}
 			h := mod.genResourceHeader(r)
 			assert.Equal(t, test.ExpectedTitleTag, h.TitleTag)
+			assert.Equal(t, test.ExpectedMetaDesc, h.MetaDesc)
 		})
 	}
 }
@@ -426,4 +486,12 @@ func TestExamplesProcessing(t *testing.T) {
 			assert.Contains(t, "Coming soon!", snippet)
 		}
 	}
+}
+
+func generatePackage(tool string, pkg *schema.Package, extraFiles map[string][]byte) (map[string][]byte, error) {
+	return GeneratePackage(tool, pkg)
+}
+
+func TestGeneratePackage(t *testing.T) {
+	test.TestSDKCodegen(t, "docs", generatePackage)
 }

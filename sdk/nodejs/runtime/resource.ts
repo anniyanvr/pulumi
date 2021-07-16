@@ -19,8 +19,10 @@ import * as utils from "../utils";
 
 import { getAllResources, Input, Inputs, Output, output } from "../output";
 import { ResolvedResource } from "../queryable";
+import { expandProviders } from "../resource";
 import {
     ComponentResource,
+    ComponentResourceOptions,
     createUrn,
     CustomResource,
     CustomResourceOptions,
@@ -72,6 +74,8 @@ interface ResourceResolverOperation {
     parentURN: URN | undefined;
     // A provider reference, fully resolved, if any.
     providerRef: string | undefined;
+    // A map of provider references, fully resolved, if any.
+    providerRefs: Map<string, string>;
     // All serialized properties, fully awaited, serialized, and ready to go.
     serializedProps: Record<string, any>;
     // A set of URNs that this resource is directly dependent upon.  These will all be URNs of
@@ -101,7 +105,7 @@ export function getResource(res: Resource, props: Inputs, custom: boolean, urn: 
     log.debug(`Getting resource: urn=${urn}`);
 
     const monitor: any = getMonitor();
-    const resopAsync = prepareResource(label, res, custom, props, {});
+    const resopAsync = prepareResource(label, res, custom, false, props, {});
 
     const preallocError = new Error();
     debuggablePromise(resopAsync.then(async (resop) => {
@@ -116,7 +120,7 @@ export function getResource(res: Resource, props: Inputs, custom: boolean, urn: 
         // Now run the operation, serializing the invocation if necessary.
         const opLabel = `monitor.getResource(${label})`;
         runAsyncResourceOp(opLabel, async () => {
-            let resp: any;
+            let resp: any = {};
             let err: Error | undefined;
             try {
                 if (monitor) {
@@ -197,7 +201,7 @@ export function readResource(res: Resource, t: string, name: string, props: Inpu
     log.debug(`Reading resource: id=${Output.isInstance(id) ? "Output<T>" : id}, t=${t}, name=${name}`);
 
     const monitor = getMonitor();
-    const resopAsync = prepareResource(label, res, true, props, opts);
+    const resopAsync = prepareResource(label, res, true, false, props, opts);
 
     const preallocError = new Error();
     debuggablePromise(resopAsync.then(async (resop) => {
@@ -222,7 +226,7 @@ export function readResource(res: Resource, t: string, name: string, props: Inpu
         // Now run the operation, serializing the invocation if necessary.
         const opLabel = `monitor.readResource(${label})`;
         runAsyncResourceOp(opLabel, async () => {
-            let resp: any;
+            let resp: any = {};
             let err: Error | undefined;
             try {
                 if (monitor) {
@@ -281,7 +285,7 @@ export function registerResource(res: Resource, t: string, name: string, custom:
     log.debug(`Registering resource: t=${t}, name=${name}, custom=${custom}, remote=${remote}`);
 
     const monitor = getMonitor();
-    const resopAsync = prepareResource(label, res, custom, props, opts);
+    const resopAsync = prepareResource(label, res, custom, remote, props, opts);
 
     // In order to present a useful stack trace if an error does occur, we preallocate potential
     // errors here. V8 captures a stack trace at the moment an Error is created and this stack
@@ -312,6 +316,7 @@ export function registerResource(res: Resource, t: string, name: string, custom:
         req.setImportid(resop.import || "");
         req.setSupportspartialvalues(true);
         req.setRemote(remote);
+        req.setReplaceonchangesList(opts.replaceOnChanges || []);
 
         const customTimeouts = new resproto.RegisterResourceRequest.CustomTimeouts();
         if (opts.customTimeouts != null) {
@@ -328,10 +333,15 @@ export function registerResource(res: Resource, t: string, name: string, custom:
             propertyDependencies.set(key, deps);
         }
 
+        const providerRefs = req.getProvidersMap();
+        for (const [key, ref] of resop.providerRefs) {
+            providerRefs.set(key, ref);
+        }
+
         // Now run the operation, serializing the invocation if necessary.
         const opLabel = `monitor.registerResource(${label})`;
         runAsyncResourceOp(opLabel, async () => {
-            let resp: any;
+            let resp: any = {};
             let err: Error | undefined;
             try {
                 if (monitor) {
@@ -407,7 +417,7 @@ export function registerResource(res: Resource, t: string, name: string, custom:
  * Prepares for an RPC that will manufacture a resource, and hence deals with input and output
  * properties.
  */
-async function prepareResource(label: string, res: Resource, custom: boolean,
+async function prepareResource(label: string, res: Resource, custom: boolean, remote: boolean,
                                props: Inputs, opts: ResourceOptions): Promise<ResourceResolverOperation> {
 
     // Simply initialize the URN property and get prepared to resolve it later on.
@@ -416,21 +426,34 @@ async function prepareResource(label: string, res: Resource, custom: boolean,
     let resolveURN: (urn: URN, err?: Error) => void;
     {
         let resolveValue: (urn: URN) => void;
+        let rejectValue: (err: Error) => void;
         let resolveIsKnown: (isKnown: boolean) => void;
+        let rejectIsKnown: (err: Error) => void;
         (res as any).urn = new Output(
             res,
             debuggablePromise(
-                new Promise<URN>(resolve => resolveValue = resolve),
+                new Promise<URN>((resolve, reject) => {
+                    resolveValue = resolve;
+                    rejectValue = reject;
+                }),
                 `resolveURN(${label})`),
             debuggablePromise(
-                new Promise<boolean>(resolve => resolveIsKnown = resolve),
+                new Promise<boolean>((resolve, reject) => {
+                    resolveIsKnown = resolve;
+                    rejectIsKnown = reject;
+                }),
                 `resolveURNIsKnown(${label})`),
             /*isSecret:*/ Promise.resolve(false),
             Promise.resolve(res));
 
         resolveURN = (v, err) => {
-            resolveValue(v);
-            resolveIsKnown(err === undefined);
+            if (!!err) {
+                rejectValue(err);
+                rejectIsKnown(err);
+            } else {
+                resolveValue(v);
+                resolveIsKnown(true);
+            }
         };
     }
 
@@ -438,19 +461,32 @@ async function prepareResource(label: string, res: Resource, custom: boolean,
     let resolveID: ((v: any, performApply: boolean, err?: Error) => void) | undefined;
     if (custom) {
         let resolveValue: (v: ID) => void;
+        let rejectValue: (err: Error) => void;
         let resolveIsKnown: (v: boolean) => void;
+        let rejectIsKnown: (err: Error) => void;
+
         (res as any).id = new Output(
             res,
-            debuggablePromise(new Promise<ID>(resolve => resolveValue = resolve),
+            debuggablePromise(new Promise<ID>((resolve, reject) => {
+                resolveValue = resolve;
+                rejectValue = reject;
+            }),
                 `resolveID(${label})`),
-            debuggablePromise(new Promise<boolean>(
-                resolve => resolveIsKnown = resolve), `resolveIDIsKnown(${label})`),
+            debuggablePromise(new Promise<boolean>((resolve, reject) => {
+                resolveIsKnown = resolve;
+                rejectIsKnown = reject;
+            }), `resolveIDIsKnown(${label})`),
             Promise.resolve(false),
             Promise.resolve(res));
 
         resolveID = (v, isKnown, err) => {
-            resolveValue(v);
-            resolveIsKnown(err ? false : isKnown);
+            if (!!err) {
+                rejectValue(err);
+                rejectIsKnown(err);
+            } else {
+                resolveValue(v);
+                resolveIsKnown(isKnown);
+            }
         };
     }
 
@@ -483,19 +519,33 @@ async function prepareResource(label: string, res: Resource, custom: boolean,
         providerRef = await ProviderResource.register(opts.provider);
     }
 
+    const providerRefs: Map<string, string> = new Map<string, string>();
+    if (remote) {
+        const componentOpts = <ComponentResourceOptions>opts;
+        expandProviders(componentOpts);
+        if (componentOpts.providers) {
+            for (const provider of componentOpts.providers as ProviderResource[]) {
+                const pref = await ProviderResource.register(provider);
+                if (pref) {
+                    providerRefs.set(provider.getPackage(), pref);
+                }
+            }
+        }
+    }
+
     // Collect the URNs for explicit/implicit dependencies for the engine so that it can understand
     // the dependency graph and optimize operations accordingly.
 
     // The list of all dependencies (implicit or explicit).
     const allDirectDependencies = new Set<Resource>(explicitDirectDependencies);
 
-    const allDirectDependencyURNs = await getAllTransitivelyReferencedCustomResourceURNs(explicitDirectDependencies);
+    const allDirectDependencyURNs = await getAllTransitivelyReferencedResourceURNs(explicitDirectDependencies);
     const propertyToDirectDependencyURNs = new Map<string, Set<URN>>();
 
     for (const [propertyName, directDependencies] of propertyToDirectDependencies) {
         addAll(allDirectDependencies, directDependencies);
 
-        const urns = await getAllTransitivelyReferencedCustomResourceURNs(directDependencies);
+        const urns = await getAllTransitivelyReferencedResourceURNs(directDependencies);
         addAll(allDirectDependencyURNs, urns);
         propertyToDirectDependencyURNs.set(propertyName, urns);
     }
@@ -520,6 +570,7 @@ async function prepareResource(label: string, res: Resource, custom: boolean,
         serializedProps: serializedProps,
         parentURN: parentURN,
         providerRef: providerRef,
+        providerRefs: providerRefs,
         allDirectDependencyURNs: allDirectDependencyURNs,
         propertyToDirectDependencyURNs: propertyToDirectDependencyURNs,
         aliases: aliases,
@@ -533,30 +584,41 @@ function addAll<T>(to: Set<T>, from: Set<T>) {
     }
 }
 
-async function getAllTransitivelyReferencedCustomResourceURNs(resources: Set<Resource>) {
+async function getAllTransitivelyReferencedResourceURNs(resources: Set<Resource>): Promise<Set<string>> {
     // Go through 'resources', but transitively walk through **Component** resources, collecting any
     // of their child resources.  This way, a Component acts as an aggregation really of all the
-    // reachable custom resources it parents.  This walking will transitively walk through other
-    // child ComponentResources, but will stop when it hits custom resources.  in other words, if we
-    // had:
+    // reachable resources it parents.  This walking will stop when it hits custom resources.
     //
-    //              Comp1
-    //              /   \
-    //          Cust1   Comp2
-    //                  /   \
-    //              Cust2   Cust3
-    //              /
-    //          Cust4
+    // This function also terminates at remote components, whose children are not known to the Node SDK directly.
+    // Remote components will always wait on all of their children, so ensuring we return the remote component
+    // itself here and waiting on it will accomplish waiting on all of it's children regardless of whether they
+    // are returned explicitly here.
     //
-    // Then the transitively reachable custom resources of Comp1 will be [Cust1, Cust2, Cust3]. It
-    // will *not* include `Cust4`.
+    // In other words, if we had:
+    //
+    //                  Comp1
+    //              /     |     \
+    //          Cust1   Comp2  Remote1
+    //                  /   \       \
+    //              Cust2   Cust3  Comp3
+    //              /                 \
+    //          Cust4                Cust5
+    //
+    // Then the transitively reachable resources of Comp1 will be [Cust1, Cust2, Cust3, Remote1].
+    // It will *not* include:
+    // * Cust4 because it is a child of a custom resource
+    // * Comp2 because it is a non-remote component resoruce
+    // * Comp3 and Cust5 because Comp3 is a child of a remote component resource
 
     // To do this, first we just get the transitively reachable set of resources (not diving
     // into custom resources).  In the above picture, if we start with 'Comp1', this will be
     // [Comp1, Cust1, Comp2, Cust2, Cust3]
     const transitivelyReachableResources = await getTransitivelyReferencedChildResourcesOfComponentResources(resources);
 
-    const transitivelyReachableCustomResources = [...transitivelyReachableResources].filter(r => CustomResource.isInstance(r));
+    // Then we filter to only include Custom and Remote resources.
+    const transitivelyReachableCustomResources =
+        [...transitivelyReachableResources]
+        .filter(r => CustomResource.isInstance(r) || (r as ComponentResource).__remote);
     const promises = transitivelyReachableCustomResources.map(r => r.urn.promise());
     const urns = await Promise.all(promises);
     return new Set<string>(urns);

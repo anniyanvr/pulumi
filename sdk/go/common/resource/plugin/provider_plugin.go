@@ -15,6 +15,7 @@
 package plugin
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -24,17 +25,19 @@ import (
 	"github.com/blang/semver"
 	pbempty "github.com/golang/protobuf/ptypes/empty"
 	_struct "github.com/golang/protobuf/ptypes/struct"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	multierror "github.com/hashicorp/go-multierror"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/rpcutil/rpcerror"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
-	pulumirpc "github.com/pulumi/pulumi/sdk/v2/proto/go"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/rpcutil/rpcerror"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
+	pulumirpc "github.com/pulumi/pulumi/sdk/v3/proto/go"
 )
 
 // The `Type()` for the NodeJS dynamic provider.  Logically, this is the same as calling
@@ -90,7 +93,7 @@ func NewProvider(host Host, ctx *Context, pkg tokens.Package, version *semver.Ve
 	}
 
 	plug, err := newPlugin(ctx, ctx.Pwd, path, fmt.Sprintf("%v (resource)", pkg),
-		[]string{host.ServerAddr()}, env)
+		[]string{host.ServerAddr()}, env, otgrpc.SpanDecorator(decorateProviderSpans))
 	if err != nil {
 		return nil, err
 	}
@@ -106,11 +109,30 @@ func NewProvider(host Host, ctx *Context, pkg tokens.Package, version *semver.Ve
 	}, nil
 }
 
+func NewProviderWithClient(ctx *Context, pkg tokens.Package, client pulumirpc.ResourceProviderClient,
+	disableProviderPreview bool) Provider {
+
+	return &provider{
+		ctx:                    ctx,
+		pkg:                    pkg,
+		clientRaw:              client,
+		cfgdone:                make(chan bool),
+		disableProviderPreview: disableProviderPreview,
+	}
+}
+
 func (p *provider) Pkg() tokens.Package { return p.pkg }
 
 // label returns a base label for tracing functions.
 func (p *provider) label() string {
 	return fmt.Sprintf("Provider[%s, %p]", p.pkg, p)
+}
+
+func (p *provider) requestContext() context.Context {
+	if p.ctx == nil {
+		return context.Background()
+	}
+	return p.ctx.Request()
 }
 
 // isDiffCheckConfigLogicallyUnimplemented returns true when an rpcerror.Error should be treated as if it was an error
@@ -140,7 +162,7 @@ func isDiffCheckConfigLogicallyUnimplemented(err *rpcerror.Error, providerType t
 
 // GetSchema fetches the schema for this resource provider, if any.
 func (p *provider) GetSchema(version int) ([]byte, error) {
-	resp, err := p.clientRaw.GetSchema(p.ctx.Request(), &pulumirpc.GetSchemaRequest{
+	resp, err := p.clientRaw.GetSchema(p.requestContext(), &pulumirpc.GetSchemaRequest{
 		Version: int32(version),
 	})
 	if err != nil {
@@ -175,7 +197,7 @@ func (p *provider) CheckConfig(urn resource.URN, olds,
 		return nil, nil, err
 	}
 
-	resp, err := p.clientRaw.CheckConfig(p.ctx.Request(), &pulumirpc.CheckRequest{
+	resp, err := p.clientRaw.CheckConfig(p.requestContext(), &pulumirpc.CheckRequest{
 		Urn:  string(urn),
 		Olds: molds,
 		News: mnews,
@@ -279,7 +301,7 @@ func (p *provider) DiffConfig(urn resource.URN, olds, news resource.PropertyMap,
 		return DiffResult{}, err
 	}
 
-	resp, err := p.clientRaw.DiffConfig(p.ctx.Request(), &pulumirpc.DiffRequest{
+	resp, err := p.clientRaw.DiffConfig(p.requestContext(), &pulumirpc.DiffRequest{
 		Urn:           string(urn),
 		Olds:          molds,
 		News:          mnews,
@@ -472,7 +494,7 @@ func (p *provider) Configure(inputs resource.PropertyMap) error {
 	// Spawn the configure to happen in parallel.  This ensures that we remain responsive elsewhere that might
 	// want to make forward progress, even as the configure call is happening.
 	go func() {
-		resp, err := p.clientRaw.Configure(p.ctx.Request(), &pulumirpc.ConfigureRequest{
+		resp, err := p.clientRaw.Configure(p.requestContext(), &pulumirpc.ConfigureRequest{
 			AcceptSecrets:   true,
 			AcceptResources: true,
 			Variables:       config,
@@ -532,7 +554,7 @@ func (p *provider) Check(urn resource.URN,
 		return nil, nil, err
 	}
 
-	resp, err := client.Check(p.ctx.Request(), &pulumirpc.CheckRequest{
+	resp, err := client.Check(p.requestContext(), &pulumirpc.CheckRequest{
 		Urn:  string(urn),
 		Olds: molds,
 		News: mnews,
@@ -624,7 +646,7 @@ func (p *provider) Diff(urn resource.URN, id resource.ID,
 		return DiffResult{}, err
 	}
 
-	resp, err := client.Diff(p.ctx.Request(), &pulumirpc.DiffRequest{
+	resp, err := client.Diff(p.requestContext(), &pulumirpc.DiffRequest{
 		Id:            string(id),
 		Urn:           string(urn),
 		Olds:          molds,
@@ -706,7 +728,7 @@ func (p *provider) Create(urn resource.URN, props resource.PropertyMap, timeout 
 	var liveObject *_struct.Struct
 	var resourceError error
 	var resourceStatus = resource.StatusOK
-	resp, err := client.Create(p.ctx.Request(), &pulumirpc.CreateRequest{
+	resp, err := client.Create(p.requestContext(), &pulumirpc.CreateRequest{
 		Urn:        string(urn),
 		Properties: mprops,
 		Timeout:    timeout,
@@ -731,10 +753,11 @@ func (p *provider) Create(urn resource.URN, props resource.PropertyMap, timeout 
 	}
 
 	outs, err := UnmarshalProperties(liveObject, MarshalOptions{
-		Label:         fmt.Sprintf("%s.outputs", label),
-		KeepUnknowns:  preview,
-		KeepSecrets:   true,
-		KeepResources: true,
+		Label:          fmt.Sprintf("%s.outputs", label),
+		RejectUnknowns: !preview,
+		KeepUnknowns:   preview,
+		KeepSecrets:    true,
+		KeepResources:  true,
 	})
 	if err != nil {
 		return "", nil, resourceStatus, err
@@ -809,7 +832,7 @@ func (p *provider) Read(urn resource.URN, id resource.ID,
 	var liveInputs *_struct.Struct
 	var resourceError error
 	var resourceStatus = resource.StatusOK
-	resp, err := client.Read(p.ctx.Request(), &pulumirpc.ReadRequest{
+	resp, err := client.Read(p.requestContext(), &pulumirpc.ReadRequest{
 		Id:         string(id),
 		Urn:        string(urn),
 		Properties: mstate,
@@ -927,7 +950,7 @@ func (p *provider) Update(urn resource.URN, id resource.ID,
 	var liveObject *_struct.Struct
 	var resourceError error
 	var resourceStatus = resource.StatusOK
-	resp, err := client.Update(p.ctx.Request(), &pulumirpc.UpdateRequest{
+	resp, err := client.Update(p.requestContext(), &pulumirpc.UpdateRequest{
 		Id:            string(id),
 		Urn:           string(urn),
 		Olds:          molds,
@@ -950,7 +973,8 @@ func (p *provider) Update(urn resource.URN, id resource.ID,
 
 	outs, err := UnmarshalProperties(liveObject, MarshalOptions{
 		Label:          fmt.Sprintf("%s.outputs", label),
-		RejectUnknowns: true,
+		RejectUnknowns: !preview,
+		KeepUnknowns:   preview,
 		KeepSecrets:    true,
 		KeepResources:  true,
 	})
@@ -1000,7 +1024,7 @@ func (p *provider) Delete(urn resource.URN, id resource.ID, props resource.Prope
 	// We should only be calling {Create,Update,Delete} if the provider is fully configured.
 	contract.Assert(p.cfgknown)
 
-	if _, err := client.Delete(p.ctx.Request(), &pulumirpc.DeleteRequest{
+	if _, err := client.Delete(p.requestContext(), &pulumirpc.DeleteRequest{
 		Id:         string(id),
 		Urn:        string(urn),
 		Properties: mprops,
@@ -1078,11 +1102,16 @@ func (p *provider) Construct(info ConstructInfo, typ tokens.Type, name tokens.QN
 	for k, v := range info.Config {
 		config[k.String()] = v
 	}
+	configSecretKeys := []string{}
+	for _, k := range info.ConfigSecretKeys {
+		configSecretKeys = append(configSecretKeys, k.String())
+	}
 
-	resp, err := client.Construct(p.ctx.Request(), &pulumirpc.ConstructRequest{
+	resp, err := client.Construct(p.requestContext(), &pulumirpc.ConstructRequest{
 		Project:           info.Project,
 		Stack:             info.Stack,
 		Config:            config,
+		ConfigSecretKeys:  configSecretKeys,
 		DryRun:            info.DryRun,
 		Parallel:          int32(info.Parallel),
 		MonitorEndpoint:   info.MonitorAddress,
@@ -1155,7 +1184,7 @@ func (p *provider) Invoke(tok tokens.ModuleMember, args resource.PropertyMap) (r
 		return nil, nil, err
 	}
 
-	resp, err := client.Invoke(p.ctx.Request(), &pulumirpc.InvokeRequest{
+	resp, err := client.Invoke(p.requestContext(), &pulumirpc.InvokeRequest{
 		Tok:             string(tok),
 		Args:            margs,
 		AcceptResources: p.acceptResources,
@@ -1220,7 +1249,7 @@ func (p *provider) StreamInvoke(
 	}
 
 	streamClient, err := client.StreamInvoke(
-		p.ctx.Request(), &pulumirpc.InvokeRequest{
+		p.requestContext(), &pulumirpc.InvokeRequest{
 			Tok:             string(tok),
 			Args:            margs,
 			AcceptResources: p.acceptResources,
@@ -1268,6 +1297,98 @@ func (p *provider) StreamInvoke(
 	}
 }
 
+// Call dynamically executes a method in the provider associated with a component resource.
+func (p *provider) Call(tok tokens.ModuleMember, args resource.PropertyMap, info CallInfo,
+	options CallOptions) (CallResult, error) {
+	contract.Assert(tok != "")
+
+	label := fmt.Sprintf("%s.Call(%s)", p.label(), tok)
+	logging.V(7).Infof("%s executing (#args=%d)", label, len(args))
+
+	// Get the RPC client and ensure it's configured.
+	client, err := p.getClient()
+	if err != nil {
+		return CallResult{}, err
+	}
+
+	// If the provider is not fully configured, return an empty property map.
+	if !p.cfgknown {
+		return CallResult{}, nil
+	}
+
+	margs, err := MarshalProperties(args, MarshalOptions{
+		Label:         fmt.Sprintf("%s.args", label),
+		KeepUnknowns:  true,
+		KeepSecrets:   true,
+		KeepResources: true,
+	})
+	if err != nil {
+		return CallResult{}, err
+	}
+
+	// Marshal the arg dependencies.
+	argDependencies := map[string]*pulumirpc.CallRequest_ArgumentDependencies{}
+	for name, dependencies := range options.ArgDependencies {
+		urns := make([]string, len(dependencies))
+		for i, urn := range dependencies {
+			urns[i] = string(urn)
+		}
+		argDependencies[string(name)] = &pulumirpc.CallRequest_ArgumentDependencies{Urns: urns}
+	}
+
+	// Marshal the config.
+	config := map[string]string{}
+	for k, v := range info.Config {
+		config[k.String()] = v
+	}
+
+	resp, err := client.Call(p.requestContext(), &pulumirpc.CallRequest{
+		Tok:             string(tok),
+		Args:            margs,
+		ArgDependencies: argDependencies,
+		Project:         info.Project,
+		Stack:           info.Stack,
+		Config:          config,
+		DryRun:          info.DryRun,
+		Parallel:        int32(info.Parallel),
+		MonitorEndpoint: info.MonitorAddress,
+	})
+	if err != nil {
+		rpcError := rpcerror.Convert(err)
+		logging.V(7).Infof("%s failed: %v", label, rpcError.Message())
+		return CallResult{}, rpcError
+	}
+
+	// Unmarshal any return values.
+	ret, err := UnmarshalProperties(resp.GetReturn(), MarshalOptions{
+		Label:         fmt.Sprintf("%s.returns", label),
+		KeepUnknowns:  info.DryRun,
+		KeepSecrets:   true,
+		KeepResources: true,
+	})
+	if err != nil {
+		return CallResult{}, err
+	}
+
+	returnDependencies := map[resource.PropertyKey][]resource.URN{}
+	for k, rpcDeps := range resp.GetReturnDependencies() {
+		urns := make([]resource.URN, len(rpcDeps.Urns))
+		for i, d := range rpcDeps.Urns {
+			urns[i] = resource.URN(d)
+		}
+		returnDependencies[resource.PropertyKey(k)] = urns
+	}
+
+	// And now any properties that failed verification.
+	var failures []CheckFailure
+	for _, failure := range resp.GetFailures() {
+		failures = append(failures, CheckFailure{resource.PropertyKey(failure.Property), failure.Reason})
+	}
+
+	logging.V(7).Infof("%s success (#ret=%d,#failures=%d) success", label, len(ret), len(failures))
+	return CallResult{Return: ret, ReturnDependencies: returnDependencies, Failures: failures}, nil
+}
+
 // GetPluginInfo returns this plugin's information.
 func (p *provider) GetPluginInfo() (workspace.PluginInfo, error) {
 	label := fmt.Sprintf("%s.GetPluginInfo()", p.label())
@@ -1275,7 +1396,7 @@ func (p *provider) GetPluginInfo() (workspace.PluginInfo, error) {
 
 	// Calling GetPluginInfo happens immediately after loading, and does not require configuration to proceed.
 	// Thus, we access the clientRaw property, rather than calling getClient.
-	resp, err := p.clientRaw.GetPluginInfo(p.ctx.Request(), &pbempty.Empty{})
+	resp, err := p.clientRaw.GetPluginInfo(p.requestContext(), &pbempty.Empty{})
 	if err != nil {
 		rpcError := rpcerror.Convert(err)
 		logging.V(7).Infof("%s failed: err=%v", label, rpcError.Message())
@@ -1291,16 +1412,21 @@ func (p *provider) GetPluginInfo() (workspace.PluginInfo, error) {
 		version = &sv
 	}
 
+	path := ""
+	if p.plug != nil {
+		path = p.plug.Bin
+	}
+
 	return workspace.PluginInfo{
 		Name:    string(p.pkg),
-		Path:    p.plug.Bin,
+		Path:    path,
 		Kind:    workspace.ResourcePlugin,
 		Version: version,
 	}, nil
 }
 
 func (p *provider) SignalCancellation() error {
-	_, err := p.clientRaw.Cancel(p.ctx.Request(), &pbempty.Empty{})
+	_, err := p.clientRaw.Cancel(p.requestContext(), &pbempty.Empty{})
 	if err != nil {
 		rpcError := rpcerror.Convert(err)
 		logging.V(8).Infof("provider received rpc error `%s`: `%s`", rpcError.Code(),
@@ -1317,6 +1443,9 @@ func (p *provider) SignalCancellation() error {
 
 // Close tears down the underlying plugin RPC connection and process.
 func (p *provider) Close() error {
+	if p.plug == nil {
+		return nil
+	}
 	return p.plug.Close()
 }
 
@@ -1415,4 +1544,31 @@ func (ie *InitError) Error() string {
 		err = multierror.Append(err, errors.New(reason))
 	}
 	return err.Error()
+}
+
+func decorateSpanWithType(span opentracing.Span, urn string) {
+	if urn := resource.URN(urn); urn.IsValid() {
+		span.SetTag("pulumi-decorator", urn.Type())
+	}
+}
+
+func decorateProviderSpans(span opentracing.Span, method string, req, resp interface{}, grpcError error) {
+	if req == nil {
+		return
+	}
+
+	switch method {
+	case "/pulumirpc.ResourceProvider/Check", "/pulumirpc.ResourceProvider/CheckConfig":
+		decorateSpanWithType(span, req.(*pulumirpc.CheckRequest).Urn)
+	case "/pulumirpc.ResourceProvider/Diff", "/pulumirpc.ResourceProvider/DiffConfig":
+		decorateSpanWithType(span, req.(*pulumirpc.DiffRequest).Urn)
+	case "/pulumirpc.ResourceProvider/Create":
+		decorateSpanWithType(span, req.(*pulumirpc.CreateRequest).Urn)
+	case "/pulumirpc.ResourceProvider/Update":
+		decorateSpanWithType(span, req.(*pulumirpc.UpdateRequest).Urn)
+	case "/pulumirpc.ResourceProvider/Delete":
+		decorateSpanWithType(span, req.(*pulumirpc.DeleteRequest).Urn)
+	case "/pulumirpc.ResourceProvider/Invoke":
+		span.SetTag("pulumi-decorator", req.(*pulumirpc.InvokeRequest).Tok)
+	}
 }

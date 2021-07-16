@@ -35,24 +35,24 @@ import (
 	surveycore "gopkg.in/AlecAivazis/survey.v1/core"
 	git "gopkg.in/src-d/go-git.v4"
 
-	"github.com/pulumi/pulumi/pkg/v2/backend"
-	"github.com/pulumi/pulumi/pkg/v2/backend/display"
-	"github.com/pulumi/pulumi/pkg/v2/backend/filestate"
-	"github.com/pulumi/pulumi/pkg/v2/backend/httpstate"
-	"github.com/pulumi/pulumi/pkg/v2/backend/state"
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/pkg/v2/resource/stack"
-	"github.com/pulumi/pulumi/pkg/v2/secrets/passphrase"
-	"github.com/pulumi/pulumi/pkg/v2/util/cancel"
-	"github.com/pulumi/pulumi/pkg/v2/util/tracing"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/constant"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag/colors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/ciutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/gitutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	"github.com/pulumi/pulumi/pkg/v3/backend/display"
+	"github.com/pulumi/pulumi/pkg/v3/backend/filestate"
+	"github.com/pulumi/pulumi/pkg/v3/backend/httpstate"
+	"github.com/pulumi/pulumi/pkg/v3/backend/state"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/pkg/v3/resource/stack"
+	"github.com/pulumi/pulumi/pkg/v3/secrets/passphrase"
+	"github.com/pulumi/pulumi/pkg/v3/util/cancel"
+	"github.com/pulumi/pulumi/pkg/v3/util/tracing"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/constant"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/ciutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/gitutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 )
 
 func hasDebugCommands() bool {
@@ -71,6 +71,10 @@ func disableProviderPreview() bool {
 	return cmdutil.IsTruthy(os.Getenv("PULUMI_DISABLE_PROVIDER_PREVIEW"))
 }
 
+func disableResourceReferences() bool {
+	return cmdutil.IsTruthy(os.Getenv("PULUMI_DISABLE_RESOURCE_REFERENCES"))
+}
+
 // skipConfirmations returns whether or not confirmation prompts should
 // be skipped. This should be used by pass any requirement that a --yes
 // parameter has been set for non-interactive scenarios.
@@ -83,6 +87,19 @@ func skipConfirmations() bool {
 
 // backendInstance is used to inject a backend mock from tests.
 var backendInstance backend.Backend
+
+func isFilestateBackend(opts display.Options) (bool, error) {
+	if backendInstance != nil {
+		return false, nil
+	}
+
+	url, err := workspace.GetCurrentCloudURL()
+	if err != nil {
+		return false, errors.Wrapf(err, "could not get cloud url")
+	}
+
+	return filestate.IsFileStateBackendURL(url), nil
+}
 
 func currentBackend(opts display.Options) (backend.Backend, error) {
 	if backendInstance != nil {
@@ -513,7 +530,7 @@ func isGitWorkTreeDirty(repoRoot string) (bool, error) {
 
 // getUpdateMetadata returns an UpdateMetadata object, with optional data about the environment
 // performing the update.
-func getUpdateMetadata(msg, root, execKind string) (*backend.UpdateMetadata, error) {
+func getUpdateMetadata(msg, root, execKind, execAgent string) (*backend.UpdateMetadata, error) {
 	m := &backend.UpdateMetadata{
 		Message:     msg,
 		Environment: make(map[string]string),
@@ -525,7 +542,7 @@ func getUpdateMetadata(msg, root, execKind string) (*backend.UpdateMetadata, err
 
 	addCIMetadataToEnvironment(m.Environment)
 
-	addExecutionMetadataToEnvironment(m.Environment, execKind)
+	addExecutionMetadataToEnvironment(m.Environment, execKind, execAgent)
 
 	return m, nil
 }
@@ -678,7 +695,7 @@ func addCIMetadataToEnvironment(env map[string]string) {
 }
 
 // addExecutionMetadataToEnvironment populates the environment metadata bag with execution-related values.
-func addExecutionMetadataToEnvironment(env map[string]string, execKind string) {
+func addExecutionMetadataToEnvironment(env map[string]string, execKind, execAgent string) {
 	// this comes from a hidden flag, so we restrict the set of allowed values
 	switch execKind {
 	case constant.ExecKindAutoInline:
@@ -691,6 +708,9 @@ func addExecutionMetadataToEnvironment(env map[string]string, execKind string) {
 		execKind = constant.ExecKindCLI
 	}
 	env[backend.ExecutionKind] = execKind
+	if execAgent != "" {
+		env[backend.ExecutionAgent] = execAgent
+	}
 }
 
 type cancellationScope struct {

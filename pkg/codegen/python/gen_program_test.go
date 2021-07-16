@@ -3,16 +3,18 @@ package python
 import (
 	"bytes"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/internal/test"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/internal/test"
 )
 
 var testdataPath = filepath.Join("..", "internal", "test", "testdata")
@@ -75,6 +77,12 @@ func TestGenProgram(t *testing.T) {
 			if diags.HasErrors() {
 				t.Fatalf("failed to generate program: %v", diags)
 			}
+
+			if os.Getenv("PULUMI_ACCEPT") != "" {
+				err := ioutil.WriteFile(path+".py", files["__main__.py"], 0600)
+				require.NoError(t, err)
+			}
+
 			assert.Equal(t, string(expected), string(files["__main__.py"]))
 		})
 	}

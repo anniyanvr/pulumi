@@ -11,9 +11,9 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -342,7 +342,12 @@ func (g *generator) genStringLiteral(w io.Writer, quotes, v string) {
 }
 
 func (g *generator) GenLiteralValueExpression(w io.Writer, expr *model.LiteralValueExpression) {
-	switch expr.Type() {
+	typ := expr.Type()
+	if cns, ok := typ.(*model.ConstType); ok {
+		typ = cns.Type
+	}
+
+	switch typ {
 	case model.BoolType:
 		if expr.Value.True() {
 			g.Fgen(w, "True")
@@ -461,7 +466,7 @@ func (g *generator) GenTemplateExpression(w io.Writer, expr *model.TemplateExpre
 
 	prefix, escapeBraces := "", false
 	for _, part := range expr.Parts {
-		if lit, ok := part.(*model.LiteralValueExpression); !ok || lit.Type() != model.StringType {
+		if lit, ok := part.(*model.LiteralValueExpression); !ok || !model.StringType.AssignableFrom(lit.Type()) {
 			prefix, escapeBraces = "f", true
 			break
 		}
@@ -472,7 +477,7 @@ func (g *generator) GenTemplateExpression(w io.Writer, expr *model.TemplateExpre
 
 	g.Fprintf(b, "%s%s", prefix, quotes)
 	for _, expr := range expr.Parts {
-		if lit, ok := expr.(*model.LiteralValueExpression); ok && lit.Type() == model.StringType {
+		if lit, ok := expr.(*model.LiteralValueExpression); ok && model.StringType.AssignableFrom(lit.Type()) {
 			g.genEscapedString(b, lit.Value.AsString(), escapeNewlines, escapeBraces)
 		} else {
 			g.Fgenf(b, "{%.v}", expr)

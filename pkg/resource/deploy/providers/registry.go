@@ -22,12 +22,12 @@ import (
 	uuid "github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 )
 
 // GetProviderVersion fetches and parses a provider version from the given property map. If the version property is not
@@ -397,6 +397,15 @@ func (r *Registry) StreamInvoke(
 	onNext func(resource.PropertyMap) error) ([]plugin.CheckFailure, error) {
 
 	return nil, fmt.Errorf("the provider registry does not implement streaming invokes")
+}
+
+func (r *Registry) Call(tok tokens.ModuleMember, args resource.PropertyMap, info plugin.CallInfo,
+	options plugin.CallOptions) (plugin.CallResult, error) {
+
+	// It is the responsibility of the eval source to ensure that we never attempt an call using the provider
+	// registry.
+	contract.Fail()
+	return plugin.CallResult{}, errors.New("the provider registry is not callable")
 }
 
 func (r *Registry) GetPluginInfo() (workspace.PluginInfo, error) {

@@ -6,16 +6,17 @@ import (
 	gofmt "go/format"
 	"io"
 	"strings"
+	"sync"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model/format"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model/format"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 type generator struct {
@@ -25,6 +26,7 @@ type generator struct {
 	packages            map[string]*schema.Package
 	contexts            map[string]map[string]*pkgContext
 	diagnostics         hcl.Diagnostics
+	spills              *spills
 	jsonTempSpiller     *jsonSpiller
 	ternaryTempSpiller  *tempSpiller
 	readDirTempSpiller  *readDirSpiller
@@ -49,6 +51,7 @@ func GenerateProgram(program *hcl2.Program) (map[string][]byte, hcl.Diagnostics,
 		program:             program,
 		packages:            packages,
 		contexts:            contexts,
+		spills:              &spills{counts: map[string]int{}},
 		jsonTempSpiller:     &jsonSpiller{},
 		ternaryTempSpiller:  &tempSpiller{},
 		readDirTempSpiller:  &readDirSpiller{},
@@ -98,7 +101,13 @@ func GenerateProgram(program *hcl2.Program) (map[string][]byte, hcl.Diagnostics,
 	return files, g.diagnostics, nil
 }
 
+var packageContexts sync.Map
+
 func getPackages(tool string, pkg *schema.Package) map[string]*pkgContext {
+	if v, ok := packageContexts.Load(pkg); ok {
+		return v.(map[string]*pkgContext)
+	}
+
 	if err := pkg.ImportLanguages(map[string]schema.Language{"go": Importer}); err != nil {
 		return nil
 	}
@@ -107,7 +116,9 @@ func getPackages(tool string, pkg *schema.Package) map[string]*pkgContext {
 	if goInfo, ok := pkg.Language["go"].(GoPackageInfo); ok {
 		goPkgInfo = goInfo
 	}
-	return generatePackageContextMap(tool, pkg, goPkgInfo)
+	v := generatePackageContextMap(tool, pkg, goPkgInfo)
+	packageContexts.Store(pkg, v)
+	return v
 }
 
 func (g *generator) collectScopeRoots(n hcl2.Node) {
@@ -131,7 +142,7 @@ func (g *generator) genPreamble(w io.Writer, program *hcl2.Program, stdImports, 
 	}
 
 	g.Fprintf(w, "\n")
-	g.Fprintf(w, "\"github.com/pulumi/pulumi/sdk/v2/go/pulumi\"\n")
+	g.Fprintf(w, "\"github.com/pulumi/pulumi/sdk/v3/go/pulumi\"\n")
 
 	for _, imp := range pulumiImports.SortedValues() {
 		g.Fprintf(w, "%s\n", imp)
@@ -140,6 +151,48 @@ func (g *generator) genPreamble(w io.Writer, program *hcl2.Program, stdImports, 
 	g.Fprintf(w, ")\n")
 	g.Fprintf(w, "func main() {\n")
 	g.Fprintf(w, "pulumi.Run(func(ctx *pulumi.Context) error {\n")
+}
+
+func (g *generator) collectTypeImports(program *hcl2.Program, t schema.Type, imports codegen.StringSet) {
+	var token string
+	switch t := t.(type) {
+	case *schema.InputType:
+		g.collectTypeImports(program, t.ElementType, imports)
+		return
+	case *schema.OptionalType:
+		g.collectTypeImports(program, t.ElementType, imports)
+		return
+	case *schema.ArrayType:
+		g.collectTypeImports(program, t.ElementType, imports)
+		return
+	case *schema.MapType:
+		g.collectTypeImports(program, t.ElementType, imports)
+		return
+	case *schema.UnionType:
+		for _, t := range t.ElementTypes {
+			g.collectTypeImports(program, t, imports)
+		}
+		return
+	case *schema.ObjectType:
+		token = t.Token
+	case *schema.EnumType:
+		token = t.Token
+	case *schema.TokenType:
+		token = t.Token
+	case *schema.ResourceType:
+		token = t.Token
+	}
+	if token == "" {
+		return
+	}
+
+	var tokenRange hcl.Range
+	pkg, mod, _, _ := hcl2.DecomposeToken(token, tokenRange)
+	vPath, err := g.getVersionPath(program, pkg)
+	if err != nil {
+		panic(err)
+	}
+	imports.Add(g.getPulumiImport(pkg, vPath, mod))
 }
 
 // collect Imports returns two sets of packages imported by the program, std lib packages and pulumi packages
@@ -163,7 +216,7 @@ func (g *generator) collectImports(
 			pulumiImports.Add(g.getPulumiImport(pkg, vPath, mod))
 		}
 		if _, isConfigVar := n.(*hcl2.ConfigVariable); isConfigVar {
-			pulumiImports.Add("\"github.com/pulumi/pulumi/sdk/v2/go/pulumi/config\"")
+			pulumiImports.Add("\"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config\"")
 		}
 
 		diags := n.VisitExpressions(nil, func(n model.Expression) (model.Expression, hcl.Diagnostics) {
@@ -183,27 +236,7 @@ func (g *generator) collectImports(
 					pulumiImports.Add(g.getPulumiImport(pkg, vPath, mod))
 				} else if call.Name == hcl2.IntrinsicConvert {
 					if schemaType, ok := hcl2.GetSchemaForType(call.Type()); ok {
-						switch schemaType := schemaType.(type) {
-						case *schema.ObjectType:
-							token := schemaType.Token
-							var tokenRange hcl.Range
-							pkg, mod, _, _ := hcl2.DecomposeToken(token, tokenRange)
-							vPath, err := g.getVersionPath(program, pkg)
-							if err != nil {
-								panic(err)
-							}
-							pulumiImports.Add(g.getPulumiImport(pkg, vPath, mod))
-						case *schema.ArrayType:
-							token := schemaType.ElementType.(*schema.ObjectType).Token
-							var tokenRange hcl.Range
-							pkg, mod, _, _ := hcl2.DecomposeToken(token, tokenRange)
-							vPath, err := g.getVersionPath(program, pkg)
-							if err != nil {
-								panic(err)
-							}
-							pulumiImports.Add(g.getPulumiImport(pkg, vPath, mod))
-						}
-
+						g.collectTypeImports(program, schemaType, pulumiImports)
 					}
 				}
 			}
@@ -231,24 +264,17 @@ func (g *generator) collectImports(
 }
 
 func (g *generator) getVersionPath(program *hcl2.Program, pkg string) (string, error) {
-	version := -1
 	for _, p := range program.Packages() {
 		if p.Name == pkg {
-			version = int(p.Version.Major)
-			break
+			if p.Version != nil && p.Version.Major > 1 {
+				return fmt.Sprintf("/v%d", p.Version.Major), nil
+			}
+			return "", nil
 		}
 	}
 
-	if version == -1 {
-		return "", errors.Errorf("could not find package version information for pkg: %s", pkg)
-	}
+	return "", errors.Errorf("could not find package version information for pkg: %s", pkg)
 
-	var vPath string
-	if version > 1 {
-		vPath = fmt.Sprintf("/v%d", version)
-	}
-
-	return vPath, nil
 }
 
 func (g *generator) getPkgContext(pkg, mod string) (*pkgContext, bool) {
@@ -283,7 +309,7 @@ func (g *generator) getPulumiImport(pkg, vPath, mod string) string {
 
 	// All providers don't follow the sdk/go/<package> scheme. Allow ImportBasePath as
 	// a means to override this assumption.
-	if info.ImportBasePath != "" {
+	if info.ImportBasePath != "" && mod != "" {
 		imp = fmt.Sprintf("%s/%s", info.ImportBasePath, mod)
 	}
 
@@ -349,7 +375,7 @@ func (g *generator) lowerResourceOptions(opts *hcl2.ResourceOptions) (*model.Blo
 			}
 		}
 
-		value, valueTemps := g.lowerExpression(value, destType, false)
+		value, valueTemps := g.lowerExpression(value, destType)
 		temps = append(temps, valueTemps...)
 
 		block.Body.Items = append(block.Body.Items, &model.Attribute{
@@ -405,8 +431,7 @@ func (g *generator) genResource(w io.Writer, r *hcl2.Resource) {
 	for _, input := range r.Inputs {
 		destType, diagnostics := r.InputType.Traverse(hcl.TraverseAttr{Name: input.Name})
 		g.diagnostics = append(g.diagnostics, diagnostics...)
-		isInput := true
-		expr, temps := g.lowerExpression(input.Value, destType.(model.Type), isInput)
+		expr, temps := g.lowerExpression(input.Value, destType.(model.Type))
 		input.Value = expr
 		g.genTemps(w, temps)
 	}
@@ -445,7 +470,7 @@ func (g *generator) genResource(w io.Writer, r *hcl2.Resource) {
 
 	if r.Options != nil && r.Options.Range != nil {
 		rangeType := model.ResolveOutputs(r.Options.Range.Type())
-		rangeExpr, temps := g.lowerExpression(r.Options.Range, rangeType, false)
+		rangeExpr, temps := g.lowerExpression(r.Options.Range, rangeType)
 		g.genTemps(w, temps)
 
 		g.Fgenf(w, "var %s []*%s.%s\n", resName, modOrAlias, typ)
@@ -473,8 +498,7 @@ func (g *generator) genResource(w io.Writer, r *hcl2.Resource) {
 }
 
 func (g *generator) genOutputAssignment(w io.Writer, v *hcl2.OutputVariable) {
-	isInput := false
-	expr, temps := g.lowerExpression(v.Value, v.Type(), isInput)
+	expr, temps := g.lowerExpression(v.Value, v.Type())
 	g.genTemps(w, temps)
 	g.Fgenf(w, "ctx.Export(\"%s\", %.3v)\n", v.Name(), expr)
 }
@@ -489,7 +513,7 @@ func (g *generator) genTempsMultiReturn(w io.Writer, temps []interface{}, zeroVa
 	if zeroValueType != "" {
 		for _, t := range temps {
 			switch t.(type) {
-			case *jsonTemp, *readDirTemp:
+			case *spillTemp, *jsonTemp, *readDirTemp:
 				genZeroValueDecl = true
 			default:
 			}
@@ -513,10 +537,10 @@ func (g *generator) genTempsMultiReturn(w io.Writer, temps []interface{}, zeroVa
 			g.Fgenf(w, "} else {\n")
 			g.Fgenf(w, "%s = %.v\n", t.Name, t.Value.FalseResult)
 			g.Fgenf(w, "}\n")
-		case *jsonTemp:
-			bytesVar := fmt.Sprintf("tmp%s", strings.ToUpper(t.Name))
+		case *spillTemp:
+			bytesVar := fmt.Sprintf("tmp%s", strings.ToUpper(t.Variable.Name))
 			g.Fgenf(w, "%s, err := json.Marshal(", bytesVar)
-			args := stripInputs(t.Value.Args[0])
+			args := t.Value.(*model.FunctionCallExpression).Args[0]
 			g.Fgenf(w, "%.v)\n", args)
 			g.Fgenf(w, "if err != nil {\n")
 			if genZeroValueDecl {
@@ -525,7 +549,7 @@ func (g *generator) genTempsMultiReturn(w io.Writer, temps []interface{}, zeroVa
 				g.Fgenf(w, "return err\n")
 			}
 			g.Fgenf(w, "}\n")
-			g.Fgenf(w, "%s := string(%s)\n", t.Name, bytesVar)
+			g.Fgenf(w, "%s := string(%s)\n", t.Variable.Name, bytesVar)
 		case *readDirTemp:
 			tmpSuffix := strings.Split(t.Name, "files")[1]
 			g.Fgenf(w, "%s, err := ioutil.ReadDir(%.v)\n", t.Name, t.Value.Args[0])
@@ -562,8 +586,7 @@ func (g *generator) genTempsMultiReturn(w io.Writer, temps []interface{}, zeroVa
 }
 
 func (g *generator) genLocalVariable(w io.Writer, v *hcl2.LocalVariable) {
-	isInput := false
-	expr, temps := g.lowerExpression(v.Definition.Value, v.Type(), isInput)
+	expr, temps := g.lowerExpression(v.Definition.Value, v.Type())
 	g.genTemps(w, temps)
 	name := makeValidIdentifier(v.Name())
 	assignment := ":="
@@ -616,7 +639,7 @@ func (g *generator) genConfigVariable(w io.Writer, v *hcl2.ConfigVariable) {
 	if v.DefaultValue == nil {
 		g.Fgenf(w, "%[1]s := cfg.%[2]s%[3]s(\"%[1]s\")\n", v.Name(), getOrRequire, getType)
 	} else {
-		expr, temps := g.lowerExpression(v.DefaultValue, v.DefaultValue.Type(), false)
+		expr, temps := g.lowerExpression(v.DefaultValue, v.DefaultValue.Type())
 		g.genTemps(w, temps)
 		switch expr := expr.(type) {
 		case *model.FunctionCallExpression:
@@ -672,7 +695,7 @@ func (g *generator) useLookupInvokeForm(token string) bool {
 	}
 	fnLookup := "Lookup" + fn[3:]
 	pkgContext, has := g.contexts[pkg][mod]
-	if has && pkgContext.names.has(fnLookup) {
+	if has && pkgContext.names.Has(fnLookup) {
 		return true
 	}
 	return false

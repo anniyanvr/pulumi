@@ -21,19 +21,19 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/pkg/v2/operations"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/config"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/gitutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/pkg/v3/operations"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/gitutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/result"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 )
 
-// Stack is a stack associated with a particular backend implementation.
+// Stack is used to manage stacks of resources against a pluggable backend.
 type Stack interface {
 	Ref() StackReference                                    // this stack's identity.
 	Snapshot(ctx context.Context) (*deploy.Snapshot, error) // the latest deployment snapshot.
@@ -50,7 +50,7 @@ type Stack interface {
 	// Destroy this stack's resources.
 	Destroy(ctx context.Context, op UpdateOperation) (engine.ResourceChanges, result.Result)
 	// Watch this stack.
-	Watch(ctx context.Context, op UpdateOperation) result.Result
+	Watch(ctx context.Context, op UpdateOperation, paths []string) result.Result
 
 	// remove this stack.
 	Remove(ctx context.Context, force bool) (bool, error)
@@ -103,8 +103,8 @@ func DestroyStack(ctx context.Context, s Stack, op UpdateOperation) (engine.Reso
 
 // WatchStack watches the projects working directory for changes and automatically updates the
 // active stack.
-func WatchStack(ctx context.Context, s Stack, op UpdateOperation) result.Result {
-	return s.Backend().Watch(ctx, s, op)
+func WatchStack(ctx context.Context, s Stack, op UpdateOperation, paths []string) result.Result {
+	return s.Backend().Watch(ctx, s, op, paths)
 }
 
 // GetLatestConfiguration returns the configuration for the most recent deployment of the stack.

@@ -7,7 +7,7 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 type Provider struct {
@@ -22,7 +22,7 @@ func NewProvider(ctx *pulumi.Context,
 	}
 
 	var resource Provider
-	err := ctx.RegisterResource("pulumi:providers:plant-provider", name, args, &resource, opts...)
+	err := ctx.RegisterResource("pulumi:providers:plant", name, args, &resource, opts...)
 	if err != nil {
 		return nil, err
 	}

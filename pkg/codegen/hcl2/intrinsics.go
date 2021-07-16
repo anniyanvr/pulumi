@@ -15,8 +15,8 @@
 package hcl2
 
 import (
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 const (
@@ -24,8 +24,6 @@ const (
 	IntrinsicApply = "__apply"
 	// IntrinsicConvert is the name of the conversion intrinsic.
 	IntrinsicConvert = "__convert"
-	// IntrinsicInput is the name of the input intrinsic.
-	IntrinsicInput = "__input"
 )
 
 func isOutput(t model.Type) bool {
