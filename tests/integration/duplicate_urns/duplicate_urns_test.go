@@ -1,5 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
-// +build nodejs all
+// Copyright 2018, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,10 +17,12 @@ package ints
 import (
 	"testing"
 
-	"github.com/pulumi/pulumi/pkg/v2/testing/integration"
+	"github.com/pulumi/pulumi/pkg/v3/testing/integration"
 )
 
 // Test that the engine does not tolerate duplicate URNs in the same plan.
+//
+//nolint:paralleltest // ProgramTest calls t.Parallel()
 func TestDuplicateURNs(t *testing.T) {
 	integration.ProgramTest(t, &integration.ProgramTestOptions{
 		Dir:           "step1",

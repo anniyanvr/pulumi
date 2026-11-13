@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package model
 import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
 )
 
 // FunctionSignature represents a possibly-type-polymorphic function signature.
@@ -41,6 +41,8 @@ type StaticFunctionSignature struct {
 	VarargsParameter *Parameter
 	// The return type of the function.
 	ReturnType Type
+	// Determines whether the input bag should be treated as a single argument or as multiple arguments.
+	MultiArgumentInputs bool
 }
 
 // GetSignature returns the static signature itself.

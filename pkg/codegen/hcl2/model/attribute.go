@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
 )
 
 // Attribute represents an HCL2 attribute.
@@ -66,6 +66,10 @@ func (a *Attribute) print(w io.Writer, p *printer) {
 }
 
 func (a *Attribute) Type() Type {
+	if a == nil || a.Value == nil {
+		return DynamicType
+	}
+
 	return a.Value.Type()
 }
 
@@ -73,8 +77,8 @@ func (*Attribute) isBodyItem() {}
 
 // BindAttribute binds an HCL2 attribute using the given scope and token map.
 func BindAttribute(attribute *hclsyntax.Attribute, scope *Scope, tokens syntax.TokenMap,
-	opts ...BindOption) (*Attribute, hcl.Diagnostics) {
-
+	opts ...BindOption,
+) (*Attribute, hcl.Diagnostics) {
 	value, diagnostics := BindExpression(attribute.Expr, scope, tokens, opts...)
 	attributeTokens, _ := tokens.ForNode(attribute).(*syntax.AttributeTokens)
 	return &Attribute{

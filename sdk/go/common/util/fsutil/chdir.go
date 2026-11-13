@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,10 +15,10 @@
 package fsutil
 
 import (
+	"fmt"
 	"os"
 
-	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // Chdir changes the directory so that all operations from now on are relative to the project we are working with.
@@ -32,7 +32,7 @@ func Chdir(pwd string) (func(), error) {
 		return nil, err
 	}
 	if err = os.Chdir(pwd); err != nil {
-		return nil, errors.Wrapf(err, "could not change to the project working directory")
+		return nil, fmt.Errorf("could not change to the project working directory: %w", err)
 	}
 	return func() {
 		// Restore the working directory after planning completes.

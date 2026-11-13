@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,12 +15,14 @@
 package engine
 
 import (
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
+	"fmt"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/rpcutil"
-	pulumirpc "github.com/pulumi/pulumi/sdk/v2/proto/go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/pulumi/pulumi/pkg/v3/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/rpcutil"
+	pulumirpc "github.com/pulumi/pulumi/sdk/v3/proto/go"
 )
 
 type clientLanguageRuntimeHost struct {
@@ -31,19 +33,47 @@ type clientLanguageRuntimeHost struct {
 
 func connectToLanguageRuntime(ctx *plugin.Context, address string) (plugin.Host, error) {
 	// Dial the language runtime.
-	conn, err := grpc.Dial(address, grpc.WithInsecure(),
-		grpc.WithUnaryInterceptor(rpcutil.OpenTracingClientInterceptor()), rpcutil.GrpcChannelOptions())
+	conn, err := grpc.NewClient(address, langRuntimePluginDialOptions(ctx, address)...)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not connect to language host")
+		return nil, fmt.Errorf("could not connect to language host: %w", err)
 	}
 
 	client := pulumirpc.NewLanguageRuntimeClient(conn)
 	return &clientLanguageRuntimeHost{
 		Host:            ctx.Host,
-		languageRuntime: plugin.NewLanguageRuntimeClient(ctx, clientRuntimeName, client),
+		languageRuntime: plugin.NewLanguageRuntimeClient(clientRuntimeName, client),
 	}, nil
 }
 
-func (host *clientLanguageRuntimeHost) LanguageRuntime(runtime string) (plugin.LanguageRuntime, error) {
-	return host.languageRuntime, nil
+func (host *clientLanguageRuntimeHost) LanguageRuntime(
+	ctx *plugin.Context, runtime string,
+) (plugin.LanguageRuntime, error) {
+	// If the system has asked for the special "client" runtime, return the connection we have to the language runtime
+	// plugin. Else, delegate to the host's LanguageRuntime method for loading other actual runtimes like
+	// nodejs/python/etc.
+	if runtime == clientRuntimeName {
+		return host.languageRuntime, nil
+	}
+	return host.Host.LanguageRuntime(ctx, runtime)
+}
+
+func langRuntimePluginDialOptions(ctx *plugin.Context, address string) []grpc.DialOption {
+	dialOpts := append(
+		rpcutil.TracingInterceptorDialOptions(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		rpcutil.GrpcChannelOptions(),
+	)
+
+	if ctx.DialOptions != nil {
+		metadata := map[string]any{
+			"mode": "client",
+			"kind": "language",
+		}
+		if address != "" {
+			metadata["address"] = address
+		}
+		dialOpts = append(dialOpts, ctx.DialOptions(metadata)...)
+	}
+
+	return dialOpts
 }

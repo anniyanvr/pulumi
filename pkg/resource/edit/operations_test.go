@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,21 +15,27 @@
 package edit
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/pulumi/pulumi/pkg/v2/secrets/b64"
+	pkgresource "github.com/pulumi/pulumi/pkg/v3/resource"
 
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy/providers"
-	"github.com/pulumi/pulumi/pkg/v2/version"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
+	"github.com/pulumi/pulumi/pkg/v3/secrets/b64"
+
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/providers"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/version"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func NewResource(name string, provider *resource.State, deps ...resource.URN) *resource.State {
+func NewResource(name string, provider *pkgresource.State, deps ...resource.URN) *pkgresource.State {
 	prov := ""
 	if provider != nil {
 		p, err := providers.NewReference(provider.URN, provider.ID)
@@ -40,9 +46,9 @@ func NewResource(name string, provider *resource.State, deps ...resource.URN) *r
 	}
 
 	t := tokens.Type("a:b:c")
-	return &resource.State{
+	return &pkgresource.State{
 		Type:         t,
-		URN:          resource.NewURN("test", "test", "", t, tokens.QName(name)),
+		URN:          resource.NewURN("test", "test", "", t, name),
 		Inputs:       resource.PropertyMap{},
 		Outputs:      resource.PropertyMap{},
 		Dependencies: deps,
@@ -50,11 +56,11 @@ func NewResource(name string, provider *resource.State, deps ...resource.URN) *r
 	}
 }
 
-func NewProviderResource(pkg, name, id string, deps ...resource.URN) *resource.State {
+func NewProviderResource(pkg, name, id string, deps ...resource.URN) *pkgresource.State {
 	t := providers.MakeProviderType(tokens.Package(pkg))
-	return &resource.State{
+	return &pkgresource.State{
 		Type:         t,
-		URN:          resource.NewURN("test", "test", "", t, tokens.QName(name)),
+		URN:          resource.NewURN("test", "test", "", t, name),
 		ID:           resource.ID(id),
 		Inputs:       resource.PropertyMap{},
 		Outputs:      resource.PropertyMap{},
@@ -62,46 +68,238 @@ func NewProviderResource(pkg, name, id string, deps ...resource.URN) *resource.S
 	}
 }
 
-func NewSnapshot(resources []*resource.State) *deploy.Snapshot {
+func NewSnapshot(resources []*pkgresource.State) *deploy.Snapshot {
 	return deploy.NewSnapshot(deploy.Manifest{
 		Time:    time.Now(),
 		Version: version.Version,
 		Plugins: nil,
-	}, b64.NewBase64SecretsManager(), resources, nil)
+	}, b64.NewBase64SecretsManager(), resources, nil, deploy.SnapshotMetadata{}, nil, nil)
 }
 
 func TestDeletion(t *testing.T) {
+	t.Parallel()
+
 	pA := NewProviderResource("a", "p1", "0")
 	a := NewResource("a", pA)
 	b := NewResource("b", pA)
 	c := NewResource("c", pA)
-	snap := NewSnapshot([]*resource.State{
+	snap := NewSnapshot([]*pkgresource.State{
 		pA,
 		a,
 		b,
 		c,
 	})
 
-	err := DeleteResource(snap, b)
-	assert.NoError(t, err)
-	assert.Len(t, snap.Resources, 3)
-	assert.Equal(t, []*resource.State{pA, a, c}, snap.Resources)
+	err := DeleteResource(snap, b, nil, false)
+	require.NoError(t, err)
+	require.Len(t, snap.Resources, 3)
+	assert.Equal(t, []*pkgresource.State{pA, a, c}, snap.Resources)
+}
+
+func TestDeletingDuplicateURNs(t *testing.T) {
+	t.Parallel()
+
+	pA := NewProviderResource("a", "p1", "0")
+	a := NewResource("a", pA)
+
+	// Create duplicate resources.
+	b1 := NewResource("b", pA)
+	b2 := NewResource("b", pA)
+	b3 := NewResource("b", pA)
+
+	// ensure b1, b2, and b3 must have the same URN.
+	bURN := b1.URN
+	assert.Equal(t, bURN, b1.URN)
+	assert.Equal(t, bURN, b2.URN)
+	assert.Equal(t, bURN, b3.URN)
+
+	// c exists to check behavior on b's dependents.
+	c := NewResource("c", pA, bURN)
+
+	// This test ensures that when targeting dependent resources, deleting a
+	// resource with a redundant URN will not delete dependent resources in
+	// state as it's ambiguous since another URN can satisfy the dependency.
+	t.Run("do-target-dependents", func(t *testing.T) {
+		t.Parallel()
+		snap := NewSnapshot([]*pkgresource.State{
+			pA, a, b1, b2, b3, c,
+		})
+
+		err := DeleteResource(snap, b1, nil, true /* targetDependents */)
+		require.NoError(t, err)
+
+		assert.Equal(t, []*pkgresource.State{
+			pA, a, b2, b3, c,
+		}, snap.Resources)
+
+		// Ensure that a pointer to b1 is not in the list.
+		for _, s := range snap.Resources {
+			assert.False(t, s == b1)
+		}
+	})
+
+	// This test ensures that when targeting a resource with a redundant URN,
+	// dependency checks should not block the resource from being deleted from state.
+	t.Run("do-not-target-dependents", func(t *testing.T) {
+		t.Parallel()
+		snap := NewSnapshot([]*pkgresource.State{
+			pA, a, b1, b2, b3, c,
+		})
+
+		err := DeleteResource(snap, b1, nil, false /* targetDependents */)
+		require.NoError(t, err)
+
+		assert.Equal(t, []*pkgresource.State{
+			pA, a, b2, b3, c,
+		}, snap.Resources)
+
+		// Ensure that a pointer to b1 is not in the list.
+		for _, s := range snap.Resources {
+			assert.False(t, s == b1)
+		}
+	})
+}
+
+func TestDeletingDuplicateProviderURN(t *testing.T) {
+	t.Parallel()
+
+	// Create duplicate provider resources
+	pA0 := NewProviderResource("a", "p1", "0")
+	pA1 := NewProviderResource("a", "p1", "1")
+
+	// Create a resource that depends on the duplicate Provider.
+	b0 := NewResource("b", pA0)
+	b1 := NewResource("b", pA1)
+	assert.Equal(t, b0.URN, b1.URN)
+
+	c := NewResource("c", pA1, b0.URN)
+
+	t.Run("do-target-dependents", func(t *testing.T) {
+		t.Parallel()
+		snap := NewSnapshot([]*pkgresource.State{
+			pA0, pA1, b0, b1, c,
+		})
+
+		err := DeleteResource(snap, pA0, nil, true /* targetDependents */)
+		require.NoError(t, err)
+
+		assert.Equal(t, []*pkgresource.State{
+			pA1, b1, c,
+		}, snap.Resources)
+	})
+
+	t.Run("do-not-target-dependents", func(t *testing.T) {
+		t.Parallel()
+		snap := NewSnapshot([]*pkgresource.State{
+			pA0, pA1, b0, b1, c,
+		})
+
+		err := DeleteResource(snap, pA0, nil, false /* targetDependents */)
+		require.ErrorContains(t, err,
+			"Can't delete resource \"urn:pulumi:test::test::pulumi:providers:a::p1\" due to dependent resources")
+	})
+
+	t.Run("do-target-dependents-one-intermediate", func(t *testing.T) {
+		t.Parallel()
+		snap := NewSnapshot([]*pkgresource.State{
+			pA0, pA1, b0, c,
+		})
+
+		err := DeleteResource(snap, pA0, nil, true /* targetDependents */)
+		require.NoError(t, err)
+		assert.Equal(t, []*pkgresource.State{
+			pA1,
+		}, snap.Resources)
+	})
+
+	t.Run("do-target-dependents-one-intermediate", func(t *testing.T) {
+		t.Parallel()
+		snap := NewSnapshot([]*pkgresource.State{
+			pA0, pA1, b0, c,
+		})
+
+		err := DeleteResource(snap, pA0, nil, false /* targetDependents */)
+		require.ErrorContains(t, err,
+			"Can't delete resource \"urn:pulumi:test::test::pulumi:providers:a::p1\" due to dependent resources")
+	})
+}
+
+func TestDeletingDuplicateProviderURNWithDependents(t *testing.T) {
+	t.Parallel()
+
+	// Create duplicate provider resources
+	pA0 := NewProviderResource("a", "p1", "0")
+	pA1 := NewProviderResource("a", "p1", "1")
+
+	// Create a resource that depends on the duplicate Provider.
+	b0 := NewResource("b", pA0)
+
+	c0 := NewProviderResource("c", "p1", "0", b0.URN)
+	c1 := NewProviderResource("c", "p1", "1")
+
+	d0 := NewResource("d", c0)
+	d1 := NewResource("d", c1)
+
+	t.Run("do-target-dependents", func(t *testing.T) {
+		t.Parallel()
+		snap := NewSnapshot([]*pkgresource.State{
+			pA0, pA1, b0, c0, c1, d0, d1,
+		})
+
+		err := DeleteResource(snap, pA0, nil, true /* targetDependents */)
+		require.NoError(t, err)
+
+		assert.Equal(t, []*pkgresource.State{
+			pA1, c1, d1,
+		}, snap.Resources)
+	})
+
+	t.Run("do-not-target-dependents", func(t *testing.T) {
+		t.Parallel()
+		snap := NewSnapshot([]*pkgresource.State{
+			pA0, pA1, b0, c0, c1, d0, d1,
+		})
+
+		err := DeleteResource(snap, pA0, nil, false /* targetDependents */)
+		require.ErrorContains(t, err,
+			"Can't delete resource \"urn:pulumi:test::test::pulumi:providers:a::p1\" due to dependent resources")
+	})
+}
+
+func TestDeletingDependencies(t *testing.T) {
+	t.Parallel()
+
+	pA := NewProviderResource("a", "p1", "0")
+	a := NewResource("a", pA)
+	b := NewResource("b", pA)
+	c := NewResource("c", pA, a.URN)
+	d := NewResource("d", pA, c.URN)
+	snap := NewSnapshot([]*pkgresource.State{
+		pA, a, b, c, d,
+	})
+
+	err := DeleteResource(snap, a, nil, true)
+	require.NoError(t, err)
+
+	assert.Equal(t, snap.Resources, []*pkgresource.State{pA, b})
 }
 
 func TestFailedDeletionProviderDependency(t *testing.T) {
+	t.Parallel()
+
 	pA := NewProviderResource("a", "p1", "0")
 	a := NewResource("a", pA)
 	b := NewResource("b", pA)
 	c := NewResource("c", pA)
-	snap := NewSnapshot([]*resource.State{
+	snap := NewSnapshot([]*pkgresource.State{
 		pA,
 		a,
 		b,
 		c,
 	})
 
-	err := DeleteResource(snap, pA)
-	assert.Error(t, err)
+	err := DeleteResource(snap, pA, nil, false)
+	assert.Error(t, err) //nolint:forbidigo // pre-existing
 	depErr, ok := err.(ResourceHasDependenciesError)
 	if !assert.True(t, ok) {
 		t.FailNow()
@@ -110,24 +308,26 @@ func TestFailedDeletionProviderDependency(t *testing.T) {
 	assert.Contains(t, depErr.Dependencies, a)
 	assert.Contains(t, depErr.Dependencies, b)
 	assert.Contains(t, depErr.Dependencies, c)
-	assert.Len(t, snap.Resources, 4)
-	assert.Equal(t, []*resource.State{pA, a, b, c}, snap.Resources)
+	require.Len(t, snap.Resources, 4)
+	assert.Equal(t, []*pkgresource.State{pA, a, b, c}, snap.Resources)
 }
 
 func TestFailedDeletionRegularDependency(t *testing.T) {
+	t.Parallel()
+
 	pA := NewProviderResource("a", "p1", "0")
 	a := NewResource("a", pA)
 	b := NewResource("b", pA, a.URN)
 	c := NewResource("c", pA)
-	snap := NewSnapshot([]*resource.State{
+	snap := NewSnapshot([]*pkgresource.State{
 		pA,
 		a,
 		b,
 		c,
 	})
 
-	err := DeleteResource(snap, a)
-	assert.Error(t, err)
+	err := DeleteResource(snap, a, nil, false)
+	assert.Error(t, err) //nolint:forbidigo // pre-existing
 	depErr, ok := err.(ResourceHasDependenciesError)
 	if !assert.True(t, ok) {
 		t.FailNow()
@@ -137,41 +337,142 @@ func TestFailedDeletionRegularDependency(t *testing.T) {
 	assert.NotContains(t, depErr.Dependencies, a)
 	assert.Contains(t, depErr.Dependencies, b)
 	assert.NotContains(t, depErr.Dependencies, c)
-	assert.Len(t, snap.Resources, 4)
-	assert.Equal(t, []*resource.State{pA, a, b, c}, snap.Resources)
+	require.Len(t, snap.Resources, 4)
+	assert.Equal(t, []*pkgresource.State{pA, a, b, c}, snap.Resources)
 }
 
 func TestFailedDeletionProtected(t *testing.T) {
+	t.Parallel()
+
 	pA := NewProviderResource("a", "p1", "0")
 	a := NewResource("a", pA)
 	a.Protect = true
-	snap := NewSnapshot([]*resource.State{
+	snap := NewSnapshot([]*pkgresource.State{
 		pA,
 		a,
 	})
 
-	err := DeleteResource(snap, a)
-	assert.Error(t, err)
+	err := DeleteResource(snap, a, nil, false)
+	assert.Error(t, err) //nolint:forbidigo // pre-existing
 	_, ok := err.(ResourceProtectedError)
 	assert.True(t, ok)
 }
 
+func TestDeleteProtected(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		test func(t *testing.T, pA, a, b, c *pkgresource.State, snap *deploy.Snapshot)
+	}{
+		{
+			"root-protected",
+			func(t *testing.T, pA, a, b, c *pkgresource.State, snap *deploy.Snapshot) {
+				a.Protect = true
+				protectedCount := 0
+				err := DeleteResource(snap, a, func(s *pkgresource.State) error {
+					s.Protect = false
+					protectedCount++
+					return nil
+				}, false)
+				require.NoError(t, err)
+				assert.Equal(t, protectedCount, 1)
+				assert.Equal(t, snap.Resources, []*pkgresource.State{pA, b, c})
+			},
+		},
+		{
+			"root-and-branch",
+			func(t *testing.T, pA, a, b, c *pkgresource.State, snap *deploy.Snapshot) {
+				a.Protect = true
+				b.Protect = true
+				c.Protect = true
+				protectedCount := 0
+				err := DeleteResource(snap, b, func(s *pkgresource.State) error {
+					s.Protect = false
+					protectedCount++
+					return nil
+				}, true)
+				require.NoError(t, err)
+				// 2 because we only plan to delete b and c. a is protected but not
+				// scheduled for deletion, so we don't call the onProtect handler.
+				assert.Equal(t, protectedCount, 2)
+				assert.Equal(t, snap.Resources, []*pkgresource.State{pA, a})
+			},
+		},
+		{
+			"branch",
+			func(t *testing.T, pA, a, b, c *pkgresource.State, snap *deploy.Snapshot) {
+				b.Protect = true
+				c.Protect = true
+				protectedCount := 0
+				err := DeleteResource(snap, c, func(s *pkgresource.State) error {
+					s.Protect = false
+					protectedCount++
+					return nil
+				}, false)
+				require.NoError(t, err)
+				assert.Equal(t, protectedCount, 1)
+				assert.Equal(t, snap.Resources, []*pkgresource.State{pA, a, b})
+			},
+		},
+		{
+			"no-permission-root",
+			func(t *testing.T, pA, a, b, c *pkgresource.State, snap *deploy.Snapshot) {
+				c.Protect = true
+				err := DeleteResource(snap, c, nil, false).(ResourceProtectedError)
+				assert.Equal(t, ResourceProtectedError{
+					Condemned: c,
+				}, err)
+			},
+		},
+		{
+			"no-permission-branch",
+			func(t *testing.T, pA, a, b, c *pkgresource.State, snap *deploy.Snapshot) {
+				c.Protect = true
+				err := DeleteResource(snap, b, nil, true).(ResourceProtectedError)
+				assert.Equal(t, ResourceProtectedError{
+					Condemned: c,
+				}, err)
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			pA := NewProviderResource("a", "p1", "0")
+			a := NewResource("a", pA)
+			b := NewResource("b", pA)
+			c := NewResource("c", pA, b.URN)
+			snap := NewSnapshot([]*pkgresource.State{
+				pA,
+				a,
+				b,
+				c,
+			})
+
+			tt.test(t, pA, a, b, c, snap)
+		})
+	}
+}
+
 func TestFailedDeletionParentDependency(t *testing.T) {
+	t.Parallel()
+
 	pA := NewProviderResource("a", "p1", "0")
 	a := NewResource("a", pA)
 	b := NewResource("b", pA)
 	b.Parent = a.URN
 	c := NewResource("c", pA)
 	c.Parent = a.URN
-	snap := NewSnapshot([]*resource.State{
+	snap := NewSnapshot([]*pkgresource.State{
 		pA,
 		a,
 		b,
 		c,
 	})
 
-	err := DeleteResource(snap, a)
-	assert.Error(t, err)
+	err := DeleteResource(snap, a, nil, false)
+	assert.Error(t, err) //nolint:forbidigo // pre-existing
 	depErr, ok := err.(ResourceHasDependenciesError)
 	if !assert.True(t, ok) {
 		t.FailNow()
@@ -181,36 +482,18 @@ func TestFailedDeletionParentDependency(t *testing.T) {
 	assert.NotContains(t, depErr.Dependencies, a)
 	assert.Contains(t, depErr.Dependencies, b)
 	assert.Contains(t, depErr.Dependencies, c)
-	assert.Len(t, snap.Resources, 4)
-	assert.Equal(t, []*resource.State{pA, a, b, c}, snap.Resources)
-}
-
-func TestUnprotectResource(t *testing.T) {
-	pA := NewProviderResource("a", "p1", "0")
-	a := NewResource("a", pA)
-	a.Protect = true
-	b := NewResource("b", pA)
-	c := NewResource("c", pA)
-	snap := NewSnapshot([]*resource.State{
-		pA,
-		a,
-		b,
-		c,
-	})
-
-	err := UnprotectResource(snap, a)
-	assert.NoError(t, err)
-	assert.Len(t, snap.Resources, 4)
-	assert.Equal(t, []*resource.State{pA, a, b, c}, snap.Resources)
-	assert.False(t, a.Protect)
+	require.Len(t, snap.Resources, 4)
+	assert.Equal(t, []*pkgresource.State{pA, a, b, c}, snap.Resources)
 }
 
 func TestLocateResourceNotFound(t *testing.T) {
+	t.Parallel()
+
 	pA := NewProviderResource("a", "p1", "0")
 	a := NewResource("a", pA)
 	b := NewResource("b", pA)
 	c := NewResource("c", pA)
-	snap := NewSnapshot([]*resource.State{
+	snap := NewSnapshot([]*pkgresource.State{
 		pA,
 		a,
 		b,
@@ -224,12 +507,14 @@ func TestLocateResourceNotFound(t *testing.T) {
 }
 
 func TestLocateResourceAmbiguous(t *testing.T) {
+	t.Parallel()
+
 	pA := NewProviderResource("a", "p1", "0")
 	a := NewResource("a", pA)
 	b := NewResource("b", pA)
 	aPending := NewResource("a", pA)
 	aPending.Delete = true
-	snap := NewSnapshot([]*resource.State{
+	snap := NewSnapshot([]*pkgresource.State{
 		pA,
 		a,
 		b,
@@ -237,7 +522,7 @@ func TestLocateResourceAmbiguous(t *testing.T) {
 	})
 
 	resList := LocateResource(snap, a.URN)
-	assert.Len(t, resList, 2)
+	require.Len(t, resList, 2)
 	assert.Contains(t, resList, a)
 	assert.Contains(t, resList, aPending)
 	assert.NotContains(t, resList, pA)
@@ -245,11 +530,13 @@ func TestLocateResourceAmbiguous(t *testing.T) {
 }
 
 func TestLocateResourceExact(t *testing.T) {
+	t.Parallel()
+
 	pA := NewProviderResource("a", "p1", "0")
 	a := NewResource("a", pA)
 	b := NewResource("b", pA)
 	c := NewResource("c", pA)
-	snap := NewSnapshot([]*resource.State{
+	snap := NewSnapshot([]*pkgresource.State{
 		pA,
 		a,
 		b,
@@ -257,16 +544,77 @@ func TestLocateResourceExact(t *testing.T) {
 	})
 
 	resList := LocateResource(snap, a.URN)
-	assert.Len(t, resList, 1)
+	require.Len(t, resList, 1)
 	assert.Contains(t, resList, a)
 }
 
 func TestRenameStack(t *testing.T) {
-	pA := NewProviderResource("a", "p1", "0")
-	a := NewResource("a", pA)
-	b := NewResource("b", pA)
-	c := NewResource("c", pA)
-	snap := NewSnapshot([]*resource.State{
+	t.Parallel()
+
+	locateResource := func(deployment *apitype.DeploymentV3, urn resource.URN) []apitype.ResourceV3 {
+		if deployment == nil {
+			return nil
+		}
+
+		var resources []apitype.ResourceV3
+		for _, res := range deployment.Resources {
+			if res.URN == urn {
+				resources = append(resources, res)
+			}
+		}
+
+		return resources
+	}
+
+	newResource := func(name string, provider *apitype.ResourceV3, deps ...resource.URN) apitype.ResourceV3 {
+		prov := ""
+		if provider != nil {
+			p, err := providers.NewReference(provider.URN, provider.ID)
+			if err != nil {
+				panic(err)
+			}
+			prov = p.String()
+		}
+
+		t := tokens.Type("a:b:c")
+		return apitype.ResourceV3{
+			Type:         t,
+			URN:          resource.NewURN("test", "test", "", t, name),
+			Inputs:       map[string]any{},
+			Outputs:      map[string]any{},
+			Dependencies: deps,
+			Provider:     prov,
+		}
+	}
+
+	newProviderResource := func(pkg, name, id string, deps ...resource.URN) apitype.ResourceV3 {
+		t := providers.MakeProviderType(tokens.Package(pkg))
+		return apitype.ResourceV3{
+			Type:         t,
+			URN:          resource.NewURN("test", "test", "", t, name),
+			ID:           resource.ID(id),
+			Inputs:       map[string]any{},
+			Outputs:      map[string]any{},
+			Dependencies: deps,
+		}
+	}
+
+	newDeployment := func(resources []apitype.ResourceV3) *apitype.DeploymentV3 {
+		return &apitype.DeploymentV3{
+			Manifest: apitype.ManifestV1{
+				Time:    time.Now(),
+				Version: version.Version,
+				Plugins: nil,
+			},
+			Resources: resources,
+		}
+	}
+
+	pA := newProviderResource("a", "p1", "0")
+	a := newResource("a", &pA)
+	b := newResource("b", &pA)
+	c := newResource("c", &pA)
+	deployment := newDeployment([]apitype.ResourceV3{
 		pA,
 		a,
 		b,
@@ -274,11 +622,11 @@ func TestRenameStack(t *testing.T) {
 	})
 
 	// Baseline. Can locate resource A.
-	resList := LocateResource(snap, a.URN)
-	assert.Len(t, resList, 1)
+	resList := locateResource(deployment, a.URN)
+	require.Len(t, resList, 1)
 	assert.Contains(t, resList, a)
 	if t.Failed() {
-		t.Fatal("Unable to find expected resource in initial snapshot.")
+		t.Fatal("Unable to find expected resource in initial checkpoint.")
 	}
 	baselineResourceURN := resList[0].URN
 
@@ -287,14 +635,16 @@ func TestRenameStack(t *testing.T) {
 	assert.EqualValues(t, "test", baselineResourceURN.Project())
 
 	// Rename just the stack.
+	//nolint:paralleltest // uses shared stack
 	t.Run("JustTheStack", func(t *testing.T) {
-		err := RenameStack(snap, tokens.QName("new-stack"), tokens.PackageName(""))
+		err := RenameStack(deployment, tokens.MustParseStackName("new-stack"), tokens.PackageName(""),
+			RenameStackOptions{OldName: tokens.MustParseStackName("test"), OldProject: "test"})
 		if err != nil {
 			t.Fatalf("Error renaming stack: %v", err)
 		}
 
 		// Confirm the previous resource by URN isn't found.
-		assert.Len(t, LocateResource(snap, baselineResourceURN), 0)
+		require.Len(t, locateResource(deployment, baselineResourceURN), 0)
 
 		// Confirm the resource has been renamed.
 		updatedResourceURN := resource.NewURN(
@@ -302,12 +652,14 @@ func TestRenameStack(t *testing.T) {
 			"test", // project name stayed the same
 			"" /*parent type*/, baselineResourceURN.Type(),
 			baselineResourceURN.Name())
-		assert.Len(t, LocateResource(snap, updatedResourceURN), 1)
+		require.Len(t, locateResource(deployment, updatedResourceURN), 1)
 	})
 
 	// Rename the stack and project.
+	//nolint:paralleltest // uses shared stack
 	t.Run("StackAndProject", func(t *testing.T) {
-		err := RenameStack(snap, tokens.QName("new-stack2"), tokens.PackageName("new-project"))
+		err := RenameStack(deployment, tokens.MustParseStackName("new-stack2"), tokens.PackageName("new-project"),
+			RenameStackOptions{OldName: tokens.MustParseStackName("new-stack"), OldProject: "test"})
 		if err != nil {
 			t.Fatalf("Error renaming stack: %v", err)
 		}
@@ -318,6 +670,250 @@ func TestRenameStack(t *testing.T) {
 			"new-project",
 			"" /*parent type*/, baselineResourceURN.Type(),
 			baselineResourceURN.Name())
-		assert.Len(t, LocateResource(snap, updatedResourceURN), 1)
+		require.Len(t, locateResource(deployment, updatedResourceURN), 1)
 	})
+}
+
+func TestRenameStack_RewritesProviderReferenceAndAuxiliaryFields(t *testing.T) {
+	t.Parallel()
+
+	providerType := providers.MakeProviderType(tokens.Package("pkg"))
+	providerURN := resource.NewURN("test", "test", "", providerType, "default")
+	providerRef, err := providers.NewReference(providerURN, "provider-id")
+	require.NoError(t, err)
+
+	resType := tokens.Type("pkg:index:Mine")
+	depURN := resource.NewURN("test", "test", "", tokens.Type("pkg:index:Dep"), "dep")
+	propDepURN := resource.NewURN("test", "test", "", tokens.Type("pkg:index:PropDep"), "prop-dep")
+	deletedWithURN := resource.NewURN("test", "test", "", tokens.Type("pkg:index:DeletedWith"), "deleted-with")
+	replaceURN := resource.NewURN("test", "test", "", tokens.Type("pkg:index:Replacement"), "replacement")
+	aliasURN := resource.NewURN("test", "test", "", resType, "old-name")
+	viewURN := resource.NewURN("test", "test", "", tokens.Type("pkg:index:View"), "view")
+	refURN := resource.NewURN("test", "test", "", tokens.Type("pkg:index:Ref"), "ref")
+	foreignURN := resource.NewURN("test", "foreign", "", tokens.Type("pkg:index:Foreign"), "foreign")
+
+	serializedRef := func(urn resource.URN) map[string]any {
+		return map[string]any{
+			resource.SigKey: resource.ResourceReferenceSig,
+			"urn":           string(urn),
+		}
+	}
+	secretPlaintext, err := json.Marshal(serializedRef(refURN))
+	require.NoError(t, err)
+
+	deployment := &apitype.DeploymentV3{
+		Resources: []apitype.ResourceV3{
+			{URN: providerURN, Type: providerType, ID: "provider-id"},
+			{
+				URN:                  resource.NewURN("test", "test", "", resType, "mine"),
+				Type:                 resType,
+				Provider:             providerRef.String(),
+				Dependencies:         []resource.URN{depURN, foreignURN},
+				PropertyDependencies: map[resource.PropertyKey][]resource.URN{"prop": {propDepURN, foreignURN}},
+				DeletedWith:          deletedWithURN,
+				ReplaceWith:          []resource.URN{replaceURN},
+				Aliases:              []resource.URN{aliasURN, foreignURN},
+				ViewOf:               viewURN,
+				Inputs: map[string]any{
+					"ref": serializedRef(refURN),
+					"secretRef": map[string]any{
+						resource.SigKey: resource.SecretSig,
+						"plaintext":     string(secretPlaintext),
+					},
+					"structSecretRef": &apitype.SecretV1{
+						Sig:       resource.SecretSig,
+						Plaintext: string(secretPlaintext),
+					},
+				},
+				Outputs: map[string]any{
+					"outputRef": map[string]any{
+						resource.SigKey: resource.OutputValueSig,
+						"value":         serializedRef(refURN),
+						"dependencies":  []any{string(refURN), string(foreignURN)},
+					},
+				},
+				ReplacementTrigger: serializedRef(refURN),
+			},
+		},
+	}
+
+	err = RenameStack(deployment, tokens.MustParseStackName("renamed"), "renamed-proj", RenameStackOptions{
+		OldName:    tokens.MustParseStackName("test"),
+		OldProject: "test",
+	})
+	require.NoError(t, err)
+
+	renamedProviderURN := resource.NewURN("renamed", "renamed-proj", "", providerType, "default")
+	gotProvider, err := providers.ParseReference(deployment.Resources[1].Provider)
+	require.NoError(t, err)
+	assert.Equal(t, renamedProviderURN, gotProvider.URN())
+	assert.Equal(t, resource.ID("provider-id"), gotProvider.ID())
+
+	renamedRefURN := resource.NewURN("renamed", "renamed-proj", "", tokens.Type("pkg:index:Ref"), "ref")
+	res := deployment.Resources[1]
+	assert.Equal(t, resource.NewURN("renamed", "renamed-proj", "", resType, "mine"), res.URN)
+	assert.Equal(t, []resource.URN{
+		resource.NewURN("renamed", "renamed-proj", "", tokens.Type("pkg:index:Dep"), "dep"),
+		foreignURN,
+	}, res.Dependencies)
+	assert.Equal(t, []resource.URN{
+		resource.NewURN("renamed", "renamed-proj", "", tokens.Type("pkg:index:PropDep"), "prop-dep"),
+		foreignURN,
+	}, res.PropertyDependencies["prop"])
+	assert.Equal(t,
+		resource.NewURN("renamed", "renamed-proj", "", tokens.Type("pkg:index:DeletedWith"), "deleted-with"),
+		res.DeletedWith)
+	assert.Equal(t, []resource.URN{
+		resource.NewURN("renamed", "renamed-proj", "", tokens.Type("pkg:index:Replacement"), "replacement"),
+	}, res.ReplaceWith)
+	assert.Equal(t, []resource.URN{
+		resource.NewURN("renamed", "renamed-proj", "", resType, "old-name"), foreignURN,
+	}, res.Aliases)
+	assert.Equal(t, resource.NewURN("renamed", "renamed-proj", "", tokens.Type("pkg:index:View"), "view"), res.ViewOf)
+	assert.Equal(t, string(renamedRefURN), res.Inputs["ref"].(map[string]any)["urn"])
+	var secretRef map[string]any
+	require.NoError(t, json.Unmarshal([]byte(res.Inputs["secretRef"].(map[string]any)["plaintext"].(string)), &secretRef))
+	assert.Equal(t, string(renamedRefURN), secretRef["urn"])
+	var structSecretRef map[string]any
+	structSecret := res.Inputs["structSecretRef"].(*apitype.SecretV1)
+	require.NoError(t, json.Unmarshal([]byte(structSecret.Plaintext), &structSecretRef))
+	assert.Equal(t, string(renamedRefURN), structSecretRef["urn"])
+	outputRef := res.Outputs["outputRef"].(map[string]any)
+	assert.Equal(t, string(renamedRefURN), outputRef["value"].(map[string]any)["urn"])
+	assert.Equal(t, []any{string(renamedRefURN), string(foreignURN)}, outputRef["dependencies"])
+	assert.Equal(t, string(renamedRefURN), res.ReplacementTrigger.(map[string]any)["urn"])
+}
+
+func TestRenameStack_RewritesRootPendingParentAndNestedValues(t *testing.T) {
+	t.Parallel()
+
+	rootURN := resource.NewURN("test", "test", "", resource.RootStackType, "test-test")
+	parentURN := resource.NewURN("test", "test", "", tokens.Type("pkg:index:Parent"), "parent")
+	childURN := resource.NewURN("test", "test", tokens.Type("pkg:index:Parent"), tokens.Type("pkg:index:Child"), "child")
+	refURN := resource.NewURN("test", "test", "", tokens.Type("pkg:index:Ref"), "ref")
+	otherStackURN := resource.NewURN("other", "test", "", tokens.Type("pkg:index:Other"), "other")
+	serializedRef := func(urn resource.URN) map[string]any {
+		return map[string]any{resource.SigKey: resource.ResourceReferenceSig, "urn": string(urn)}
+	}
+
+	deployment := &apitype.DeploymentV3{
+		Resources: []apitype.ResourceV3{
+			{URN: rootURN, Type: resource.RootStackType},
+			{
+				URN:    childURN,
+				Type:   tokens.Type("pkg:index:Child"),
+				Parent: parentURN,
+				Inputs: map[string]any{
+					"array":  []any{serializedRef(refURN), string(otherStackURN)},
+					"nested": map[string]any{"ref": serializedRef(refURN)},
+					"badSecret": map[string]any{
+						resource.SigKey: resource.SecretSig,
+						"plaintext":     "not-json",
+					},
+				},
+			},
+		},
+		PendingOperations: []apitype.OperationV2{
+			{
+				Type: apitype.OperationTypeCreating,
+				Resource: apitype.ResourceV3{
+					URN:  refURN,
+					Type: tokens.Type("pkg:index:Ref"),
+				},
+			},
+		},
+	}
+
+	require.NoError(t, RenameStack(deployment, tokens.MustParseStackName("renamed"), "renamed-proj", RenameStackOptions{
+		OldName:    tokens.MustParseStackName("test"),
+		OldProject: "test",
+	}))
+
+	renamedRootURN := resource.NewURN("renamed", "renamed-proj", "", resource.RootStackType, "renamed-proj-renamed")
+	renamedParentURN := resource.NewURN("renamed", "renamed-proj", "", tokens.Type("pkg:index:Parent"), "parent")
+	renamedRefURN := resource.NewURN("renamed", "renamed-proj", "", tokens.Type("pkg:index:Ref"), "ref")
+	assert.Equal(t, renamedRootURN, deployment.Resources[0].URN)
+	assert.Equal(t, renamedParentURN, deployment.Resources[1].Parent)
+	array := deployment.Resources[1].Inputs["array"].([]any)
+	assert.Equal(t, string(renamedRefURN), array[0].(map[string]any)["urn"])
+	assert.Equal(t, string(otherStackURN), array[1])
+	nested := deployment.Resources[1].Inputs["nested"].(map[string]any)
+	assert.Equal(t, string(renamedRefURN), nested["ref"].(map[string]any)["urn"])
+	badSecret := deployment.Resources[1].Inputs["badSecret"].(map[string]any)
+	assert.Equal(t, "not-json", badSecret["plaintext"])
+	assert.Equal(t, renamedRefURN, deployment.PendingOperations[0].Resource.URN)
+}
+
+func TestRenameStack_ForcePreservesInvalidProviderReference(t *testing.T) {
+	t.Parallel()
+
+	urn := resource.NewURN("test", "test", "", tokens.Type("pkg:index:Mine"), "mine")
+	deployment := &apitype.DeploymentV3{
+		Resources: []apitype.ResourceV3{{
+			URN:      urn,
+			Type:     tokens.Type("pkg:index:Mine"),
+			Provider: "not-a-provider-reference",
+		}},
+	}
+
+	require.NoError(t, RenameStack(deployment, tokens.MustParseStackName("renamed"), "", RenameStackOptions{
+		OldName: tokens.MustParseStackName("test"),
+		Force:   true,
+	}))
+	assert.Equal(t, "not-a-provider-reference", deployment.Resources[0].Provider)
+}
+
+func TestRenameStack_PreservesUnchangedProviderReferenceBytes(t *testing.T) {
+	t.Parallel()
+
+	foreignProviderURN := resource.NewURN("dev", "foreign", "", "pulumi:providers:pkg", "default")
+	deployment := &apitype.DeploymentV3{
+		Resources: []apitype.ResourceV3{
+			{
+				URN:      resource.NewURN("dev", "proj", "", tokens.Type("pkg:index:Mine"), "mine"),
+				Type:     tokens.Type("pkg:index:Mine"),
+				Provider: string(foreignProviderURN) + "::",
+			},
+		},
+	}
+
+	err := RenameStack(deployment, tokens.MustParseStackName("dev-renamed"), "", RenameStackOptions{
+		OldName:    tokens.MustParseStackName("dev"),
+		OldProject: "proj",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, string(foreignProviderURN)+"::", deployment.Resources[0].Provider)
+}
+
+func TestRenameStack_InvalidProviderReference(t *testing.T) {
+	t.Parallel()
+
+	newDeployment := func() *apitype.DeploymentV3 {
+		return &apitype.DeploymentV3{
+			Resources: []apitype.ResourceV3{
+				{
+					URN:      resource.NewURN("test", "test", "", tokens.Type("pkg:index:Mine"), "mine"),
+					Type:     tokens.Type("pkg:index:Mine"),
+					Provider: "not-a-provider-reference",
+				},
+			},
+		}
+	}
+
+	err := RenameStack(newDeployment(), tokens.MustParseStackName("renamed"), "",
+		RenameStackOptions{OldName: tokens.MustParseStackName("test"), OldProject: "test"})
+	require.Error(t, err) //nolint:forbidigo // pre-existing
+	assert.Contains(t, err.Error(), "parsing provider reference")
+
+	var warnings strings.Builder
+	deployment := newDeployment()
+	err = RenameStack(deployment, tokens.MustParseStackName("renamed"), "", RenameStackOptions{
+		OldName:       tokens.MustParseStackName("test"),
+		OldProject:    "test",
+		Force:         true,
+		WarningWriter: &warnings,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "not-a-provider-reference", deployment.Resources[0].Provider)
+	assert.Contains(t, warnings.String(), "Warning: parsing provider reference")
 }

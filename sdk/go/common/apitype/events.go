@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,6 +13,39 @@
 // limitations under the License.
 
 package apitype
+
+import (
+	"context"
+	"errors"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+)
+
+// OperationResult is the high-level outcome of an operation.
+type OperationResult string
+
+const (
+	// OperationResultSucceeded indicates the operation completed without error.
+	OperationResultSucceeded OperationResult = "succeeded"
+	// OperationResultFailed indicates the operation returned an error.
+	OperationResultFailed OperationResult = "failed"
+	// OperationResultCanceled indicates the operation was canceled by the user.
+	OperationResultCanceled OperationResult = "canceled"
+)
+
+// OperationResultFromError maps an operation's terminal error to the high-level
+// OperationResult reported on the summary event. context.Canceled (including
+// wrapped) is treated as user cancellation; any other error is a failure.
+func OperationResultFromError(err error) OperationResult {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return OperationResultCanceled
+	case err != nil:
+		return OperationResultFailed
+	default:
+		return OperationResultSucceeded
+	}
+}
 
 // The "engine events" defined here are a fork of the types and enums defined in the engine
 // package. The duplication is intentional to insulate the Pulumi service from various kinds of
@@ -45,6 +78,11 @@ type DiagnosticEvent struct {
 	Ephemeral bool   `json:"ephemeral,omitempty"`
 }
 
+// StartDebuggingEvent is emitted to start a debugging session.
+type StartDebuggingEvent struct {
+	Config map[string]any `json:"config,omitempty"`
+}
+
 // PolicyEvent is emitted whenever there is Policy violation.
 type PolicyEvent struct {
 	ResourceURN          string `json:"resourceUrn,omitempty"`
@@ -55,8 +93,80 @@ type PolicyEvent struct {
 	PolicyPackVersion    string `json:"policyPackVersion"`
 	PolicyPackVersionTag string `json:"policyPackVersionTag"`
 
-	// EnforcementLevel is one of "warning" or "mandatory".
+	// EnforcementLevel is one of "warning", "mandatory", "remediate", or "none".
 	EnforcementLevel string `json:"enforcementLevel"`
+	// Severity is one of "low", "medium", "high", or "critical".
+	// An empty string is omitted and represents an unspecified severity.
+	Severity string `json:"severity,omitempty"`
+	// Exceptions lists the policy exceptions that matched this violation, lowest ID first. An excepted violation
+	// doesn't fail the operation, whatever its EnforcementLevel.
+	Exceptions []PolicyEventException `json:"exceptions,omitempty"`
+}
+
+// PolicyEventException identifies the policy exception that matched a policy violation.
+type PolicyEventException struct {
+	// ID is the exception's key in the policy pack's exceptions map (for example, "EXC-42").
+	ID string `json:"id"`
+	// Reason is the exception's justification.
+	Reason string `json:"reason"`
+}
+
+// PolicyRemediationEvent is emitted whenever there is Policy transformation.
+type PolicyRemediationEvent struct {
+	ResourceURN          string         `json:"resourceUrn,omitempty"`
+	Color                string         `json:"color"`
+	PolicyName           string         `json:"policyName"`
+	PolicyPackName       string         `json:"policyPackName"`
+	PolicyPackVersion    string         `json:"policyPackVersion"`
+	PolicyPackVersionTag string         `json:"policyPackVersionTag"`
+	Before               map[string]any `json:"before,omitempty"`
+	After                map[string]any `json:"after,omitempty"`
+}
+
+// PolicyAnalyzeSummaryEvent is emitted after a call to Analyze on an analyzer, summarizing the results.
+type PolicyAnalyzeSummaryEvent struct {
+	// The URN of the resource being analyzed.
+	ResourceURN string `json:"resourceUrn"`
+	// The name of the policy pack.
+	PolicyPackName string `json:"policyPackName"`
+	// The version of the policy pack.
+	PolicyPackVersion string `json:"policyPackVersion"`
+	// The version tag of the policy pack.
+	PolicyPackVersionTag string `json:"policyPackVersionTag"`
+	// The names of resource policies that passed (i.e. did not produce any violations).
+	Passed []string `json:"passed,omitempty"`
+	// The names of resource policies that failed (i.e. produced violations).
+	Failed []string `json:"failed,omitempty"`
+}
+
+// PolicyRemediateSummaryEvent is emitted after a call to Remediate on an analyzer, summarizing the results.
+type PolicyRemediateSummaryEvent struct {
+	// The URN of the resource being remediated.
+	ResourceURN string `json:"resourceUrn"`
+	// The name of the policy pack.
+	PolicyPackName string `json:"policyPackName"`
+	// The version of the policy pack.
+	PolicyPackVersion string `json:"policyPackVersion"`
+	// The version tag of the policy pack.
+	PolicyPackVersionTag string `json:"policyPackVersionTag"`
+	// The names of resource policies that passed (i.e. did not produce any violations).
+	Passed []string `json:"passed,omitempty"`
+	// The names of resource policies that failed (i.e. produced violations).
+	Failed []string `json:"failed,omitempty"`
+}
+
+// PolicyAnalyzeStackSummaryEvent is emitted after a call to AnalyzeStack on an analyzer, summarizing the results.
+type PolicyAnalyzeStackSummaryEvent struct {
+	// The name of the policy pack.
+	PolicyPackName string `json:"policyPackName"`
+	// The version of the policy pack.
+	PolicyPackVersion string `json:"policyPackVersion"`
+	// The version tag of the policy pack.
+	PolicyPackVersionTag string `json:"policyPackVersionTag"`
+	// The names of stack policies that passed (i.e. did not produce any violations).
+	Passed []string `json:"passed,omitempty"`
+	// The names of stack policies that failed (i.e. produced violations).
+	Failed []string `json:"failed,omitempty"`
 }
 
 // PreludeEvent is emitted at the start of an update.
@@ -72,15 +182,26 @@ type SummaryEvent struct {
 	MaybeCorrupt bool `json:"maybeCorrupt"`
 	// Duration is the number of seconds the update was executing.
 	DurationSeconds int `json:"durationSeconds"`
-	// ResourceChanges contains the count for resource change by type. The keys are deploy.StepOp,
-	// which is not exported in this package.
-	ResourceChanges map[string]int `json:"resourceChanges"`
+	// ResourceChanges contains the count for resource change by type.
+	ResourceChanges map[OpType]int `json:"resourceChanges"`
 	// PolicyPacks run during update. Maps PolicyPackName -> version.
 	// Note: When this field was initially added, we forgot to add the JSON tag
 	// and are now locked into to using PascalCase for this field to maintain backwards
 	// compatibility. For older clients this will map to the version, while for newer ones
 	// it will be the version tag prepended with "v".
 	PolicyPacks map[string]string `json:"PolicyPacks"`
+	// IsPreview indicates whether this is a preview or an update.
+	IsPreview bool `json:"isPreview"`
+	// Result is the high-level outcome of the operation.
+	Result OperationResult `json:"result"`
+}
+
+// ErrorEvent is emitted when an internal error occurs in the engine. This is not meant
+// to be used for user facing errors, but rather for internal errors, where an event
+// can help with debugging.
+type ErrorEvent struct {
+	// Error is the error message.
+	Error string `json:"error"`
 }
 
 // DiffKind describes the kind of a particular property diff.
@@ -112,8 +233,8 @@ type PropertyDiff struct {
 // StepEventMetadata describes a "step" within the Pulumi engine, which is any concrete action
 // to migrate a set of cloud resources from one state to another.
 type StepEventMetadata struct {
-	// Op is the operation being performed, a deploy.StepOp.
-	Op   string `json:"op"`
+	// Op is the operation being performed.
+	Op   OpType `json:"op"`
 	URN  string `json:"urn"`
 	Type string `json:"type"`
 
@@ -128,7 +249,9 @@ type StepEventMetadata struct {
 	// Keys that changed with this step.
 	Diffs []string `json:"diffs,omitempty"`
 	// The diff for this step as a list of property paths and difference types.
-	DetailedDiff map[string]PropertyDiff `json:"detailedDiff,omitempty"`
+	// NOTE: We don't want to omitempty this field because we want to distinguish between
+	// a nil value and an empty map. See https://github.com/pulumi/pulumi/pull/15213 for details.
+	DetailedDiff map[string]PropertyDiff `json:"detailedDiff"`
 	// Logical is set if the step is a logical operation in the program.
 	Logical bool `json:"logical,omitempty"`
 	// Provider actually performing the step.
@@ -151,15 +274,23 @@ type StepEventStateMetadata struct {
 	Parent string `json:"parent"`
 	// Protect is true to "protect" this resource (protected resources cannot be deleted).
 	Protect bool `json:"protect,omitempty"`
+	// Taint is set to true when we wish to force it to be replaced upon the next update.
+	Taint bool `json:"taint,omitempty"`
+	// External is true if this resource is "external" to Pulumi and we don't control the lifecycle.
+	External bool `json:"external,omitempty"`
+	// RetainOnDelete is true if the resource is not physically deleted when it is logically deleted.
+	RetainOnDelete bool `json:"retainOnDelete,omitempty"`
 	// Inputs contains the resource's input properties (as specified by the program). Secrets have
 	// filtered out, and large assets have been replaced by hashes as applicable.
-	Inputs map[string]interface{} `json:"inputs"`
+	Inputs map[string]any `json:"inputs"`
 	// Outputs contains the resource's complete output state (as returned by the resource provider).
-	Outputs map[string]interface{} `json:"outputs"`
+	Outputs map[string]any `json:"outputs"`
 	// Provider is the resource's provider reference
 	Provider string `json:"provider"`
 	// InitErrors is the set of errors encountered in the process of initializing resource.
 	InitErrors []string `json:"initErrors,omitempty"`
+	// HideDiffs is the set of property paths where diffs are not displayed.
+	HideDiffs []resource.PropertyPath `json:"hideDiffs,omitempty"`
 }
 
 // ResourcePreEvent is emitted before a resource is modified.
@@ -175,12 +306,47 @@ type ResOutputsEvent struct {
 }
 
 // ResOpFailedEvent is emitted when a resource operation fails. Typically a DiagnosticEvent is
-// emitted before this event, indiciating what the root cause of the error.
+// emitted before this event, indicating the root cause of the error.
 type ResOpFailedEvent struct {
 	Metadata StepEventMetadata `json:"metadata"`
 	Status   int               `json:"status"`
 	Steps    int               `json:"steps"`
+	// Awaited is true if the failure was caused by the provider returning AwaitError — i.e. the
+	// operation could not be awaited to completion. Consumers can use this to distinguish an
+	// await failure from a genuine resource failure.
+	Awaited bool `json:"awaited,omitempty"`
 }
+
+// PolicyLoadEvent is emitted when a policy starts loading
+type PolicyLoadEvent struct{}
+
+// ProgressEvent is emitted when a potentially long-running engine process is in
+// progress.
+type ProgressEvent struct {
+	// The type of process (e.g. plugin download, plugin install).
+	Type ProgressType `json:"type"`
+	// A unique identifier for the process.
+	ID string `json:"id"`
+	// A message accompanying the process.
+	Message string `json:"message"`
+	// The number of items completed so far (e.g. bytes received, items installed,
+	// etc.)
+	Completed int64 `json:"received"`
+	// The total number of items that must be completed.
+	Total int64 `json:"total"`
+	// True if and only if the process has completed.
+	Done bool `json:"done"`
+}
+
+// ProgressType is the type of process occurring.
+type ProgressType string
+
+const (
+	// PluginDownload represents a download of a plugin.
+	PluginDownload ProgressType = "plugin-download"
+	// PluginInstall represents the installation of a plugin.
+	PluginInstall ProgressType = "plugin-install"
+)
 
 // EngineEvent describes a Pulumi engine event, such as a change to a resource or diagnostic
 // message. EngineEvent is a discriminated union of all possible event types, and exactly one
@@ -198,18 +364,39 @@ type EngineEvent struct {
 	// Timestamp is a Unix timestamp (seconds) of when the event was emitted.
 	Timestamp int `json:"timestamp"`
 
-	CancelEvent      *CancelEvent       `json:"cancelEvent,omitempty"`
-	StdoutEvent      *StdoutEngineEvent `json:"stdoutEvent,omitempty"`
-	DiagnosticEvent  *DiagnosticEvent   `json:"diagnosticEvent,omitempty"`
-	PreludeEvent     *PreludeEvent      `json:"preludeEvent,omitempty"`
-	SummaryEvent     *SummaryEvent      `json:"summaryEvent,omitempty"`
-	ResourcePreEvent *ResourcePreEvent  `json:"resourcePreEvent,omitempty"`
-	ResOutputsEvent  *ResOutputsEvent   `json:"resOutputsEvent,omitempty"`
-	ResOpFailedEvent *ResOpFailedEvent  `json:"resOpFailedEvent,omitempty"`
-	PolicyEvent      *PolicyEvent       `json:"policyEvent,omitempty"`
+	CancelEvent                    *CancelEvent                    `json:"cancelEvent,omitempty"`
+	StdoutEvent                    *StdoutEngineEvent              `json:"stdoutEvent,omitempty"`
+	DiagnosticEvent                *DiagnosticEvent                `json:"diagnosticEvent,omitempty"`
+	PreludeEvent                   *PreludeEvent                   `json:"preludeEvent,omitempty"`
+	SummaryEvent                   *SummaryEvent                   `json:"summaryEvent,omitempty"`
+	ResourcePreEvent               *ResourcePreEvent               `json:"resourcePreEvent,omitempty"`
+	ResOutputsEvent                *ResOutputsEvent                `json:"resOutputsEvent,omitempty"`
+	ResOpFailedEvent               *ResOpFailedEvent               `json:"resOpFailedEvent,omitempty"`
+	PolicyEvent                    *PolicyEvent                    `json:"policyEvent,omitempty"`
+	PolicyRemediationEvent         *PolicyRemediationEvent         `json:"policyRemediationEvent,omitempty"`
+	PolicyLoadEvent                *PolicyLoadEvent                `json:"policyLoadEvent,omitempty"`
+	PolicyAnalyzeSummaryEvent      *PolicyAnalyzeSummaryEvent      `json:"policyAnalyzeSummaryEvent,omitempty"`
+	PolicyRemediateSummaryEvent    *PolicyRemediateSummaryEvent    `json:"policyRemediateSummaryEvent,omitempty"`
+	PolicyAnalyzeStackSummaryEvent *PolicyAnalyzeStackSummaryEvent `json:"policyAnalyzeStackSummaryEvent,omitempty"`
+	StartDebuggingEvent            *StartDebuggingEvent            `json:"startDebuggingEvent,omitempty"`
+	ProgressEvent                  *ProgressEvent                  `json:"progressEvent,omitempty"`
+	ErrorEvent                     *ErrorEvent                     `json:"errorEvent,omitempty"`
 }
 
 // EngineEventBatch is a group of engine events.
 type EngineEventBatch struct {
 	Events []EngineEvent `json:"events"`
+}
+
+// GetUpdateEventsResponse contains the engine events for an update.
+type GetUpdateEventsResponse struct {
+	// Events are returned sorted by their internal sequence number (not exposed to the API).
+	// So the last Event in the slice is the most recent event which was stored in the database.
+	// (Should sort identical to timestamp, but may not if we support parallel writes.)
+	Events []EngineEvent `json:"events"`
+
+	// ContinuationToken is an opaque value the client can send to fetch more recent
+	// events if the update is still in progress. Will be nil once all events have
+	// been returned and the update is complete.
+	ContinuationToken *string `json:"continuationToken"`
 }

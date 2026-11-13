@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,82 +17,537 @@ package deploytest
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
 
-	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/rpcutil"
-	pulumirpc "github.com/pulumi/pulumi/sdk/v2/proto/go"
+	fxs "github.com/pgavlin/fx/v2/slices"
+	pkgresource "github.com/pulumi/pulumi/pkg/v3/resource"
+	"github.com/pulumi/pulumi/pkg/v3/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/slice"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/rpcutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/property"
+	"github.com/pulumi/pulumi/sdk/v3/go/propertyrpc"
+	pulumirpc "github.com/pulumi/pulumi/sdk/v3/proto/go"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type ResourceMonitor struct {
 	conn   *grpc.ClientConn
 	resmon pulumirpc.ResourceMonitorClient
+
+	supportsSecrets            bool
+	supportsResourceReferences bool
 }
 
-func dialMonitor(endpoint string) (*ResourceMonitor, error) {
+func dialMonitor(ctx context.Context, endpoint string) (*ResourceMonitor, error) {
 	// Connect to the resource monitor and create an appropriate client.
-	conn, err := grpc.Dial(
+	conn, err := grpc.NewClient(
 		endpoint,
-		grpc.WithInsecure(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		rpcutil.GrpcChannelOptions(),
 	)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not connect to resource monitor")
+		return nil, fmt.Errorf("could not connect to resource monitor: %w", err)
+	}
+	resmon := pulumirpc.NewResourceMonitorClient(conn)
+
+	// Check feature support.
+	supportsSecrets, err := supportsFeature(ctx, resmon, "secrets")
+	if err != nil {
+		contract.IgnoreClose(conn)
+		return nil, fmt.Errorf("could not determine whether secrets are supported: %w", err)
+	}
+	supportsResourceReferences, err := supportsFeature(ctx, resmon, "resourceReferences")
+	if err != nil {
+		contract.IgnoreClose(conn)
+		return nil, fmt.Errorf("could not determine whether resource references are supported: %w", err)
 	}
 
 	// Fire up a resource monitor client and return.
 	return &ResourceMonitor{
-		conn:   conn,
-		resmon: pulumirpc.NewResourceMonitorClient(conn),
+		conn:                       conn,
+		resmon:                     resmon,
+		supportsSecrets:            supportsSecrets,
+		supportsResourceReferences: supportsResourceReferences,
 	}, nil
+}
+
+func supportsFeature(ctx context.Context, resmon pulumirpc.ResourceMonitorClient, id string) (bool, error) {
+	resp, err := resmon.SupportsFeature(ctx, &pulumirpc.SupportsFeatureRequest{Id: id})
+	if err != nil {
+		return false, err
+	}
+	return resp.GetHasSupport(), nil
+}
+
+func parseSourcePosition(raw string) (*pulumirpc.SourcePosition, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	pos := pulumirpc.SourcePosition{
+		Uri: fmt.Sprintf("%v://%v", u.Scheme, u.Path),
+	}
+
+	line, col, _ := strings.Cut(u.Fragment, ",")
+	if line != "" {
+		l, err := strconv.ParseInt(line, 10, 32)
+		if err != nil {
+			return nil, err
+		}
+		pos.Line = int32(l)
+	}
+	if col != "" {
+		c, err := strconv.ParseInt(col, 10, 32)
+		if err != nil {
+			return nil, err
+		}
+		pos.Column = int32(c)
+	}
+
+	return &pos, nil
+}
+
+func marshalSourceInfo(
+	sourcePosition string,
+	stackTrace []pkgresource.StackFrame,
+) (_ *pulumirpc.SourcePosition, _ *pulumirpc.StackTrace, err error) {
+	var pos *pulumirpc.SourcePosition
+	if sourcePosition != "" {
+		pos, err = parseSourcePosition(sourcePosition)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	var trace *pulumirpc.StackTrace
+	if len(stackTrace) != 0 {
+		frames, err := fxs.TryCollect(fxs.MapUnpack(stackTrace, func(
+			f pkgresource.StackFrame,
+		) (*pulumirpc.StackFrame, error) {
+			position, err := parseSourcePosition(f.SourcePosition)
+			if err != nil {
+				return nil, err
+			}
+			return &pulumirpc.StackFrame{Pc: position}, nil
+		}))
+		if err != nil {
+			return nil, nil, err
+		}
+		trace = &pulumirpc.StackTrace{Frames: frames}
+	}
+	return pos, trace, nil
 }
 
 func (rm *ResourceMonitor) Close() error {
 	return rm.conn.Close()
 }
 
+func (rm *ResourceMonitor) Client() pulumirpc.ResourceMonitorClient {
+	return rm.resmon
+}
+
 func NewResourceMonitor(resmon pulumirpc.ResourceMonitorClient) *ResourceMonitor {
 	return &ResourceMonitor{resmon: resmon}
 }
 
+type ResourceHook struct {
+	Name     string
+	callback *pulumirpc.Callback
+}
+
+type ResourceHookBindings struct {
+	BeforeCreate []*ResourceHook
+	AfterCreate  []*ResourceHook
+	BeforeUpdate []*ResourceHook
+	AfterUpdate  []*ResourceHook
+	BeforeDelete []*ResourceHook
+	AfterDelete  []*ResourceHook
+	OnError      []*ResourceHook
+}
+
+type ResourceHookFunc func(
+	ctx context.Context,
+	urn resource.URN,
+	id resource.ID,
+	name string,
+	typ tokens.Type,
+	oldOptions *pulumirpc.ResourceOptions,
+	newOptions *pulumirpc.ResourceOptions,
+	newInputs, oldInputs, newOutputs, oldOutputs *property.Map,
+) error
+
+type ErrorHookFunc func(
+	ctx context.Context,
+	urn resource.URN,
+	id resource.ID,
+	name string,
+	typ tokens.Type,
+	oldOptions *pulumirpc.ResourceOptions,
+	newOptions *pulumirpc.ResourceOptions,
+	newInputs, oldInputs, oldOutputs *property.Map,
+	failedOperation string,
+	errors []string,
+) (retry bool, err error)
+
+func (binding ResourceHookBindings) marshal() *pulumirpc.RegisterResourceRequest_ResourceHooksBinding {
+	m := &pulumirpc.RegisterResourceRequest_ResourceHooksBinding{}
+	for _, hook := range binding.BeforeCreate {
+		m.BeforeCreate = append(m.BeforeCreate, hook.Name)
+	}
+	for _, hook := range binding.AfterCreate {
+		m.AfterCreate = append(m.AfterCreate, hook.Name)
+	}
+	for _, hook := range binding.BeforeUpdate {
+		m.BeforeUpdate = append(m.BeforeUpdate, hook.Name)
+	}
+	for _, hook := range binding.AfterUpdate {
+		m.AfterUpdate = append(m.AfterUpdate, hook.Name)
+	}
+	for _, hook := range binding.BeforeDelete {
+		m.BeforeDelete = append(m.BeforeDelete, hook.Name)
+	}
+	for _, hook := range binding.AfterDelete {
+		m.AfterDelete = append(m.AfterDelete, hook.Name)
+	}
+	for _, hook := range binding.OnError {
+		m.OnError = append(m.OnError, hook.Name)
+	}
+	return m
+}
+
+func NewHook(monitor *ResourceMonitor, callbacks *CallbackServer, name string, f ResourceHookFunc,
+	onDryRun bool, ignoreErrors bool,
+) (*ResourceHook, error) {
+	req, err := prepareHook(callbacks, name, f, onDryRun, ignoreErrors)
+	if err != nil {
+		return nil, err
+	}
+	err = monitor.RegisterResourceHook(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+	return &ResourceHook{
+		Name:     name,
+		callback: req.Callback,
+	}, nil
+}
+
+func prepareHook(callbacks *CallbackServer, name string, f ResourceHookFunc, onDryRun bool, ignoreErrors bool) (
+	*pulumirpc.RegisterResourceHookRequest, error,
+) {
+	wrapped := func(request []byte) (proto.Message, error) {
+		var req pulumirpc.ResourceHookRequest
+		err := proto.Unmarshal(request, &req)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshaling request: %w", err)
+		}
+		var newInputs, oldInputs, newOutputs, oldOutputs *property.Map
+		filterOpts := plugin.FilterOptions{
+			KeepUnknowns:     true,
+			KeepSecrets:      true,
+			KeepResources:    true,
+			KeepDependencies: true,
+		}
+		unmarshal := func(s *structpb.Struct) (*property.Map, error) {
+			raw, err := propertyrpc.Unmarshal(s)
+			if err != nil {
+				return nil, err
+			}
+			filtered, err := plugin.FilterProperties(raw, filterOpts)
+			if err != nil {
+				return nil, err
+			}
+			return &filtered, nil
+		}
+		if req.NewInputs != nil {
+			newInputs, err = unmarshal(req.NewInputs)
+			if err != nil {
+				return nil, fmt.Errorf("unmarshaling new inputs: %w", err)
+			}
+		}
+		if req.OldInputs != nil {
+			oldInputs, err = unmarshal(req.OldInputs)
+			if err != nil {
+				return nil, fmt.Errorf("unmarshaling old inputs: %w", err)
+			}
+		}
+		if req.NewOutputs != nil {
+			newOutputs, err = unmarshal(req.NewOutputs)
+			if err != nil {
+				return nil, fmt.Errorf("unmarshaling new outputs: %w", err)
+			}
+		}
+		if req.OldOutputs != nil {
+			oldOutputs, err = unmarshal(req.OldOutputs)
+			if err != nil {
+				return nil, fmt.Errorf("unmarshaling old outputs: %w", err)
+			}
+		}
+		oldOptions := req.OldOptions
+		newOptions := req.NewOptions
+		err = f(
+			context.Background(),
+			resource.URN(req.Urn),
+			resource.ID(req.Id),
+			req.Name,
+			tokens.Type(req.Type),
+			oldOptions,
+			newOptions,
+			newInputs,
+			oldInputs,
+			newOutputs,
+			oldOutputs,
+		)
+		if err != nil {
+			return &pulumirpc.ResourceHookResponse{
+				Error: err.Error(),
+			}, nil
+		}
+		return &pulumirpc.ResourceHookResponse{}, nil
+	}
+	callback, err := callbacks.Allocate(wrapped)
+	if err != nil {
+		return nil, err
+	}
+	req := &pulumirpc.RegisterResourceHookRequest{
+		Name:         name,
+		Callback:     callback,
+		OnDryRun:     onDryRun,
+		IgnoreErrors: ignoreErrors,
+	}
+	return req, nil
+}
+
+func NewErrorHook(
+	monitor *ResourceMonitor, callbacks *CallbackServer, name string, f ErrorHookFunc,
+) (*ResourceHook, error) {
+	req, err := prepareErrorHook(callbacks, name, f)
+	if err != nil {
+		return nil, err
+	}
+	err = monitor.RegisterErrorHook(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+	return &ResourceHook{
+		Name:     name,
+		callback: req.Callback,
+	}, nil
+}
+
+func prepareErrorHook(callbacks *CallbackServer, name string, f ErrorHookFunc) (
+	*pulumirpc.RegisterErrorHookRequest, error,
+) {
+	wrapped := func(request []byte) (proto.Message, error) {
+		var req pulumirpc.ErrorHookRequest
+		err := proto.Unmarshal(request, &req)
+		if err != nil {
+			return nil, fmt.Errorf("unmarshaling request: %w", err)
+		}
+		var newInputs, oldInputs, oldOutputs *property.Map
+		var failedOperation string
+		filterOpts := plugin.FilterOptions{
+			KeepUnknowns:     true,
+			KeepSecrets:      true,
+			KeepResources:    true,
+			KeepDependencies: true,
+		}
+		unmarshal := func(s *structpb.Struct) (*property.Map, error) {
+			raw, err := propertyrpc.Unmarshal(s)
+			if err != nil {
+				return nil, err
+			}
+			filtered, err := plugin.FilterProperties(raw, filterOpts)
+			if err != nil {
+				return nil, err
+			}
+			return &filtered, nil
+		}
+		if req.NewInputs != nil {
+			newInputs, err = unmarshal(req.NewInputs)
+			if err != nil {
+				return nil, fmt.Errorf("unmarshaling new inputs: %w", err)
+			}
+		}
+		if req.OldInputs != nil {
+			oldInputs, err = unmarshal(req.OldInputs)
+			if err != nil {
+				return nil, fmt.Errorf("unmarshaling old inputs: %w", err)
+			}
+		}
+		if req.OldOutputs != nil {
+			oldOutputs, err = unmarshal(req.OldOutputs)
+			if err != nil {
+				return nil, fmt.Errorf("unmarshaling old outputs: %w", err)
+			}
+		}
+		oldOptions := req.OldOptions
+		newOptions := req.NewOptions
+		if req.FailedOperation != "" {
+			switch req.FailedOperation {
+			case "create", "update", "delete":
+				failedOperation = req.FailedOperation
+			default:
+				return nil, fmt.Errorf("invalid failed operation: %q", req.FailedOperation)
+			}
+		}
+		retry, err := f(
+			context.Background(),
+			resource.URN(req.Urn),
+			resource.ID(req.Id),
+			req.Name,
+			tokens.Type(req.Type),
+			oldOptions,
+			newOptions,
+			newInputs,
+			oldInputs,
+			oldOutputs,
+			failedOperation,
+			req.Errors,
+		)
+		if err != nil {
+			return &pulumirpc.ErrorHookResponse{
+				Error: err.Error(),
+			}, nil
+		}
+		return &pulumirpc.ErrorHookResponse{
+			Retry: retry,
+		}, nil
+	}
+	callback, err := callbacks.Allocate(wrapped)
+	if err != nil {
+		return nil, err
+	}
+	req := &pulumirpc.RegisterErrorHookRequest{
+		Name:     name,
+		Callback: callback,
+	}
+	return req, nil
+}
+
 type ResourceOptions struct {
-	Parent                resource.URN
-	Protect               bool
-	Dependencies          []resource.URN
-	Provider              string
-	Inputs                resource.PropertyMap
-	PropertyDeps          map[resource.PropertyKey][]resource.URN
-	DeleteBeforeReplace   *bool
-	Version               string
-	IgnoreChanges         []string
-	Aliases               []resource.URN
-	ImportID              resource.ID
-	CustomTimeouts        *resource.CustomTimeouts
-	SupportsPartialValues *bool
-	Remote                bool
+	Parent                  resource.URN
+	Protect                 *bool
+	Dependencies            []resource.URN
+	Provider                string
+	Inputs                  property.Map
+	PropertyDeps            map[resource.PropertyKey][]resource.URN
+	DeleteBeforeReplace     *bool
+	Version                 string
+	HideDiffs               []resource.PropertyPath
+	PluginDownloadURL       string
+	PluginChecksums         map[string][]byte
+	IgnoreChanges           []string
+	ReplaceOnChanges        []string
+	ReplacementTrigger      property.Value
+	AliasURNs               []resource.URN
+	Aliases                 []*pulumirpc.Alias
+	ImportID                resource.ID
+	CustomTimeouts          *resource.CustomTimeouts
+	RetainOnDelete          *bool
+	DeletedWith             resource.URN
+	ReplaceWith             []resource.URN
+	SupportsPartialValues   *bool
+	Remote                  bool
+	Providers               map[string]string
+	AdditionalSecretOutputs []resource.PropertyKey
+	AliasSpecs              bool
+
+	SourcePosition         string
+	StackTrace             []pkgresource.StackFrame
+	ParentStackTraceHandle string
+
+	DisableSecrets            bool
+	DisableResourceReferences bool
+	GrpcRequestHeaders        map[string]string
+
+	// KeepOutputValues, if set, preserves Output property values on the marshalled inputs sent to the resource
+	// monitor. Real SDKs only do this for remote (component) resources today, but the test harness allows it for
+	// custom resources too so we can exercise engine paths that handle unusual SDK behaviour.
+	KeepOutputValues bool
+
+	// UsesOutputValues sets the uses_output_values flag on the RegisterResourceRequest, telling the engine
+	// that the inputs carry per-leaf dependency information as OutputValues and PropertyDeps must not be
+	// consulted (and must be nil/empty).
+	UsesOutputValues bool
+
+	Transforms           []*pulumirpc.Callback
+	StateMigrations      []*pulumirpc.Callback
+	ResourceHookBindings ResourceHookBindings
+
+	SupportsResultReporting bool
+	PackageRef              string
+	EnvVarMappings          map[string]string
+}
+
+func (rm *ResourceMonitor) unmarshalProperties(props *structpb.Struct) (property.Map, error) {
+	// Note that `Keep*` flags are set to `true` so the caller can detect secrets, resource refs, etc that are
+	// erroneously returned (e.g. secrets/resource refs that are returned even though the caller has not set
+	// the relevant `Accept*` to `true` above).
+	raw, err := propertyrpc.Unmarshal(props)
+	if err != nil {
+		return property.Map{}, err
+	}
+	return plugin.FilterProperties(raw, plugin.FilterOptions{
+		KeepUnknowns:     true,
+		KeepSecrets:      true,
+		KeepResources:    true,
+		KeepDependencies: true,
+	})
+}
+
+type RegisterResourceResponse struct {
+	URN          resource.URN
+	ID           resource.ID
+	Outputs      property.Map
+	Dependencies map[resource.PropertyKey][]resource.URN
+	Result       pulumirpc.Result
+	Unknown      bool
 }
 
 func (rm *ResourceMonitor) RegisterResource(t tokens.Type, name string, custom bool,
-	options ...ResourceOptions) (resource.URN, resource.ID, resource.PropertyMap, error) {
-
+	options ...ResourceOptions,
+) (*RegisterResourceResponse, error) {
 	var opts ResourceOptions
 	if len(options) > 0 {
 		opts = options[0]
 	}
-	if opts.Inputs == nil {
-		opts.Inputs = resource.PropertyMap{}
-	}
-
 	// marshal inputs
-	ins, err := plugin.MarshalProperties(opts.Inputs, plugin.MarshalOptions{
-		KeepUnknowns:  true,
-		KeepResources: true,
+	filteredInputs, err := plugin.FilterProperties(opts.Inputs, plugin.FilterOptions{
+		KeepUnknowns:     true,
+		KeepSecrets:      rm.supportsSecrets,
+		KeepResources:    rm.supportsResourceReferences,
+		KeepDependencies: opts.Remote || opts.KeepOutputValues || opts.UsesOutputValues,
 	})
 	if err != nil {
-		return "", "", nil, err
+		return nil, err
+	}
+	ins := propertyrpc.Marshal(filteredInputs)
+
+	var trigger *structpb.Value
+	if !opts.ReplacementTrigger.IsNull() {
+		filteredTrigger, _, err := plugin.FilterPropertyValue(opts.ReplacementTrigger, plugin.FilterOptions{
+			KeepUnknowns:     true,
+			KeepSecrets:      rm.supportsSecrets,
+			KeepResources:    rm.supportsResourceReferences,
+			KeepDependencies: true,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("marshaling replacement trigger: %w", err)
+		}
+		trigger = propertyrpc.MarshalValue(filteredTrigger)
 	}
 
 	// marshal dependencies
@@ -103,7 +558,7 @@ func (rm *ResourceMonitor) RegisterResource(t tokens.Type, name string, custom b
 
 	// marshal aliases
 	aliasStrings := []string{}
-	for _, a := range opts.Aliases {
+	for _, a := range opts.AliasURNs {
 		aliasStrings = append(aliasStrings, string(a))
 	}
 
@@ -118,11 +573,14 @@ func (rm *ResourceMonitor) RegisterResource(t tokens.Type, name string, custom b
 		}
 	}
 
-	var timeouts pulumirpc.RegisterResourceRequest_CustomTimeouts
+	var timeouts *pulumirpc.RegisterResourceRequest_CustomTimeouts
 	if opts.CustomTimeouts != nil {
-		timeouts.Create = prepareTestTimeout(opts.CustomTimeouts.Create)
-		timeouts.Update = prepareTestTimeout(opts.CustomTimeouts.Update)
-		timeouts.Delete = prepareTestTimeout(opts.CustomTimeouts.Delete)
+		timeouts = &pulumirpc.RegisterResourceRequest_CustomTimeouts{
+			Create: prepareTestTimeout(opts.CustomTimeouts.Create),
+			Update: prepareTestTimeout(opts.CustomTimeouts.Update),
+			Delete: prepareTestTimeout(opts.CustomTimeouts.Delete),
+			Read:   prepareTestTimeout(opts.CustomTimeouts.Read),
+		}
 	}
 
 	deleteBeforeReplace := false
@@ -133,6 +591,28 @@ func (rm *ResourceMonitor) RegisterResource(t tokens.Type, name string, custom b
 	if opts.SupportsPartialValues != nil {
 		supportsPartialValues = *opts.SupportsPartialValues
 	}
+	additionalSecretOutputs := make([]string, len(opts.AdditionalSecretOutputs))
+	for i, v := range opts.AdditionalSecretOutputs {
+		additionalSecretOutputs[i] = string(v)
+	}
+
+	replaceWith := make([]string, len(opts.ReplaceWith))
+	for i, v := range opts.ReplaceWith {
+		replaceWith[i] = string(v)
+	}
+
+	sourcePosition, stackTrace, err := marshalSourceInfo(opts.SourcePosition, opts.StackTrace)
+	if err != nil {
+		return nil, err
+	}
+
+	resourceHooks := opts.ResourceHookBindings.marshal()
+
+	hideDiffs := slice.Prealloc[string](len(opts.HideDiffs))
+	for _, v := range opts.HideDiffs {
+		hideDiffs = append(hideDiffs, v.String())
+	}
+
 	requestInput := &pulumirpc.RegisterResourceRequest{
 		Type:                       string(t),
 		Name:                       name,
@@ -146,37 +626,80 @@ func (rm *ResourceMonitor) RegisterResource(t tokens.Type, name string, custom b
 		DeleteBeforeReplace:        deleteBeforeReplace,
 		DeleteBeforeReplaceDefined: opts.DeleteBeforeReplace != nil,
 		IgnoreChanges:              opts.IgnoreChanges,
-		AcceptSecrets:              true,
-		AcceptResources:            true,
+		AcceptSecrets:              !opts.DisableSecrets,
+		AcceptResources:            !opts.DisableResourceReferences,
+		AcceptsByteString:          true,
 		Version:                    opts.Version,
-		Aliases:                    aliasStrings,
+		AliasURNs:                  aliasStrings,
 		ImportId:                   string(opts.ImportID),
-		CustomTimeouts:             &timeouts,
+		CustomTimeouts:             timeouts,
 		SupportsPartialValues:      supportsPartialValues,
 		Remote:                     opts.Remote,
+		ReplaceOnChanges:           opts.ReplaceOnChanges,
+		Providers:                  opts.Providers,
+		PluginDownloadURL:          opts.PluginDownloadURL,
+		PluginChecksums:            opts.PluginChecksums,
+		RetainOnDelete:             opts.RetainOnDelete,
+		AdditionalSecretOutputs:    additionalSecretOutputs,
+		Aliases:                    opts.Aliases,
+		DeletedWith:                string(opts.DeletedWith),
+		ReplaceWith:                replaceWith,
+		ReplacementTrigger:         trigger,
+		AliasSpecs:                 opts.AliasSpecs,
+		SourcePosition:             sourcePosition,
+		StackTrace:                 stackTrace,
+		HideDiffs:                  hideDiffs,
+		ParentStackTraceHandle:     opts.ParentStackTraceHandle,
+		Transforms:                 opts.Transforms,
+		StateMigrations:            opts.StateMigrations,
+		SupportsResultReporting:    opts.SupportsResultReporting,
+		PackageRef:                 opts.PackageRef,
+		Hooks:                      resourceHooks,
+		EnvVarMappings:             opts.EnvVarMappings,
+		UsesOutputValues:           opts.UsesOutputValues,
+	}
+
+	ctx := context.Background()
+	if len(opts.GrpcRequestHeaders) > 0 {
+		ctx = metadata.NewOutgoingContext(ctx, metadata.New(opts.GrpcRequestHeaders))
 	}
 
 	// submit request
-	resp, err := rm.resmon.RegisterResource(context.Background(), requestInput)
+	resp, err := rm.resmon.RegisterResource(ctx, requestInput)
 	if err != nil {
-		return "", "", nil, err
+		return nil, err
 	}
 	// unmarshal outputs
-	outs, err := plugin.UnmarshalProperties(resp.Object, plugin.MarshalOptions{
-		KeepUnknowns:  true,
-		KeepResources: true,
-	})
+	outs, err := rm.unmarshalProperties(resp.Object)
 	if err != nil {
-		return "", "", nil, err
+		return nil, err
 	}
 
-	return resource.URN(resp.Urn), resource.ID(resp.Id), outs, nil
+	// unmarshal dependencies
+	depsMap := make(map[resource.PropertyKey][]resource.URN)
+	for k, p := range resp.PropertyDependencies {
+		var urns []resource.URN
+		for _, urn := range p.Urns {
+			urns = append(urns, resource.URN(urn))
+		}
+		depsMap[resource.PropertyKey(k)] = urns
+	}
+
+	return &RegisterResourceResponse{
+		URN:          resource.URN(resp.Urn),
+		ID:           resource.ID(resp.Id),
+		Outputs:      outs,
+		Dependencies: depsMap,
+		Result:       resp.Result,
+		Unknown:      resp.Unknown,
+	}, nil
 }
 
-func (rm *ResourceMonitor) RegisterResourceOutputs(urn resource.URN, outputs resource.PropertyMap) error {
+func (rm *ResourceMonitor) RegisterResourceOutputs(urn resource.URN, outputs property.Map) error {
 	// marshal outputs
-	outs, err := plugin.MarshalProperties(outputs, plugin.MarshalOptions{
-		KeepUnknowns: true,
+	filtered, err := plugin.FilterProperties(outputs, plugin.FilterOptions{
+		KeepUnknowns:  true,
+		KeepResources: rm.supportsResourceReferences,
 	})
 	if err != nil {
 		return err
@@ -185,91 +708,327 @@ func (rm *ResourceMonitor) RegisterResourceOutputs(urn resource.URN, outputs res
 	// submit request
 	_, err = rm.resmon.RegisterResourceOutputs(context.Background(), &pulumirpc.RegisterResourceOutputsRequest{
 		Urn:     string(urn),
-		Outputs: outs,
+		Outputs: propertyrpc.Marshal(filtered),
 	})
 	return err
 }
 
-func (rm *ResourceMonitor) ReadResource(t tokens.Type, name string, id resource.ID, parent resource.URN,
-	inputs resource.PropertyMap, provider string, version string) (resource.URN, resource.PropertyMap, error) {
-
+func (rm *ResourceMonitor) ReadResource(
+	t tokens.Type,
+	name string,
+	id resource.ID,
+	parent resource.URN,
+	inputs property.Map,
+	provider,
+	version,
+	sourcePosition string,
+	stackTrace []pkgresource.StackFrame,
+	parentStackTraceHandle string,
+	packageRef string,
+) (resource.URN, property.Map, error) {
 	// marshal inputs
-	ins, err := plugin.MarshalProperties(inputs, plugin.MarshalOptions{
+	filteredInputs, err := plugin.FilterProperties(inputs, plugin.FilterOptions{
 		KeepUnknowns:  true,
 		KeepResources: true,
 	})
 	if err != nil {
-		return "", nil, err
+		return "", property.Map{}, err
+	}
+	ins := propertyrpc.Marshal(filteredInputs)
+
+	sourcePos, stack, err := marshalSourceInfo(sourcePosition, stackTrace)
+	if err != nil {
+		return "", property.Map{}, err
 	}
 
 	// submit request
 	resp, err := rm.resmon.ReadResource(context.Background(), &pulumirpc.ReadResourceRequest{
-		Type:       string(t),
-		Name:       name,
-		Id:         string(id),
-		Parent:     string(parent),
-		Provider:   provider,
-		Properties: ins,
-		Version:    version,
+		Type:                   string(t),
+		Name:                   name,
+		Id:                     string(id),
+		Parent:                 string(parent),
+		Provider:               provider,
+		Properties:             ins,
+		Version:                version,
+		SourcePosition:         sourcePos,
+		StackTrace:             stack,
+		ParentStackTraceHandle: parentStackTraceHandle,
+		PackageRef:             packageRef,
 	})
 	if err != nil {
-		return "", nil, err
+		return "", property.Map{}, err
 	}
 
 	// unmarshal outputs
-	outs, err := plugin.UnmarshalProperties(resp.Properties, plugin.MarshalOptions{
-		KeepUnknowns:  true,
-		KeepResources: true,
-	})
+	outs, err := rm.unmarshalProperties(resp.Properties)
 	if err != nil {
-		return "", nil, err
+		return "", property.Map{}, err
 	}
 
 	return resource.URN(resp.Urn), outs, nil
 }
 
-func (rm *ResourceMonitor) Invoke(tok tokens.ModuleMember, inputs resource.PropertyMap,
-	provider string, version string) (resource.PropertyMap, []*pulumirpc.CheckFailure, error) {
+// InvokeOptions is an optional bag of options for the Invoke method.
+type InvokeOptions struct {
+	// Parent is the URN of the resource the invoke is parented to.
+	Parent resource.URN
+	// DependsOn is the set of dependency URNs to declare on the request.
+	DependsOn []resource.URN
+	// KeepArgOutputValues preserves OutputValues in `inputs` when marshalling the request. Simulates an SDK that
+	// sends OutputValues in Invoke args.
+	KeepArgOutputValues bool
+	// AcceptOutputValues sets `accept_output_values` on the request. Simulates an SDK that accepts OutputValues in
+	// the response.
+	AcceptOutputValues bool
+}
 
+// InvokeResult is the full result of an invoke, including the unknown marker that the plain Invoke wrapper discards.
+type InvokeResult struct {
+	Return   property.Map
+	Failures []*pulumirpc.CheckFailure
+	Unknown  bool
+}
+
+func (rm *ResourceMonitor) ExistsResource(
+	t tokens.Type,
+	id resource.ID,
+	parent resource.URN,
+	inputs property.Map,
+	provider,
+	version,
+	packageRef string,
+) (bool, error) {
 	// marshal inputs
-	ins, err := plugin.MarshalProperties(inputs, plugin.MarshalOptions{
+	filteredInputs, err := plugin.FilterProperties(inputs, plugin.FilterOptions{
 		KeepUnknowns:  true,
 		KeepResources: true,
 	})
 	if err != nil {
-		return nil, nil, err
+		return false, err
+	}
+	ins := propertyrpc.Marshal(filteredInputs)
+
+	// submit request
+	resp, err := rm.resmon.ExistsResource(context.Background(), &pulumirpc.ExistsResourceRequest{
+		Type:       string(t),
+		Id:         string(id),
+		Parent:     string(parent),
+		Properties: ins,
+		Provider:   provider,
+		Version:    version,
+		PackageRef: packageRef,
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return resp.Exists, nil
+}
+
+func (rm *ResourceMonitor) Invoke(tok tokens.ModuleMember, inputs property.Map,
+	provider string, version string, packageRef string, options ...InvokeOptions,
+) (property.Map, []*pulumirpc.CheckFailure, error) {
+	result, err := rm.InvokeWithResult(tok, inputs, provider, version, packageRef, options...)
+	if err != nil {
+		return property.Map{}, nil, err
+	}
+	if len(result.Failures) != 0 {
+		return property.Map{}, result.Failures, nil
+	}
+	return result.Return, nil, nil
+}
+
+func (rm *ResourceMonitor) InvokeWithResult(tok tokens.ModuleMember, inputs property.Map,
+	provider string, version string, packageRef string, options ...InvokeOptions,
+) (*InvokeResult, error) {
+	opts := InvokeOptions{}
+	for _, o := range options {
+		if o.Parent != "" {
+			opts.Parent = o.Parent
+		}
+		if o.DependsOn != nil {
+			opts.DependsOn = o.DependsOn
+		}
+		if o.KeepArgOutputValues {
+			opts.KeepArgOutputValues = true
+		}
+		if o.AcceptOutputValues {
+			opts.AcceptOutputValues = true
+		}
+	}
+
+	// marshal inputs
+	filteredInputs, err := plugin.FilterProperties(inputs, plugin.FilterOptions{
+		KeepUnknowns:     true,
+		KeepResources:    true,
+		KeepSecrets:      true,
+		KeepDependencies: opts.KeepArgOutputValues,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ins := propertyrpc.Marshal(filteredInputs)
+
+	dependsOn := make([]string, len(opts.DependsOn))
+	for i, urn := range opts.DependsOn {
+		dependsOn[i] = string(urn)
 	}
 
 	// submit request
-	resp, err := rm.resmon.Invoke(context.Background(), &pulumirpc.InvokeRequest{
-		Tok:      string(tok),
-		Provider: provider,
-		Args:     ins,
-		Version:  version,
+	resp, err := rm.resmon.Invoke(context.Background(), &pulumirpc.ResourceInvokeRequest{
+		Tok:                string(tok),
+		Provider:           provider,
+		Parent:             string(opts.Parent),
+		Args:               ins,
+		Version:            version,
+		PackageRef:         packageRef,
+		DependsOn:          dependsOn,
+		AcceptOutputValues: opts.AcceptOutputValues,
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
+	}
+
+	if len(resp.Failures) != 0 {
+		return &InvokeResult{Failures: resp.Failures}, nil
+	}
+
+	// unmarshal outputs
+	outs, err := rm.unmarshalProperties(resp.Return)
+	if err != nil {
+		return nil, err
+	}
+
+	return &InvokeResult{Return: outs, Unknown: resp.Unknown}, nil
+}
+
+func (rm *ResourceMonitor) Call(
+	tok tokens.ModuleMember,
+	args property.Map,
+	argDependencies map[resource.PropertyKey][]resource.URN,
+	provider string,
+	version string,
+	packageRef string,
+	sourcePosition string,
+	stackTrace []pkgresource.StackFrame,
+	parentStackTraceHandle string,
+) (property.Map, map[resource.PropertyKey][]resource.URN, []*pulumirpc.CheckFailure, error) {
+	sourcePos, stack, err := marshalSourceInfo(sourcePosition, stackTrace)
+	if err != nil {
+		return property.Map{}, nil, nil, err
+	}
+
+	// marshal inputs
+	filteredArgs, err := plugin.FilterProperties(args, plugin.FilterOptions{
+		KeepUnknowns:     true,
+		KeepResources:    true,
+		KeepSecrets:      true,
+		KeepDependencies: true,
+	})
+	if err != nil {
+		return property.Map{}, nil, nil, err
+	}
+	mArgs := propertyrpc.Marshal(filteredArgs)
+
+	mArgDependencies := make(map[string]*pulumirpc.ResourceCallRequest_ArgumentDependencies)
+	for k, p := range argDependencies {
+		urns := make([]string, len(p))
+		for i, urn := range p {
+			urns[i] = string(urn)
+		}
+		mArgDependencies[string(k)] = &pulumirpc.ResourceCallRequest_ArgumentDependencies{
+			Urns: urns,
+		}
+	}
+
+	// submit request
+	resp, err := rm.resmon.Call(context.Background(), &pulumirpc.ResourceCallRequest{
+		Tok:                    string(tok),
+		Provider:               provider,
+		Args:                   mArgs,
+		ArgDependencies:        mArgDependencies,
+		Version:                version,
+		PackageRef:             packageRef,
+		SourcePosition:         sourcePos,
+		StackTrace:             stack,
+		ParentStackTraceHandle: parentStackTraceHandle,
+	})
+	if err != nil {
+		return property.Map{}, nil, nil, err
 	}
 
 	// handle failures
 	if len(resp.Failures) != 0 {
-		return nil, resp.Failures, nil
+		return property.Map{}, nil, resp.Failures, nil
 	}
 
 	// unmarshal outputs
-	outs, err := plugin.UnmarshalProperties(resp.Return, plugin.MarshalOptions{
-		KeepUnknowns:  true,
-		KeepResources: true,
-	})
+	outs, err := rm.unmarshalProperties(resp.Return)
 	if err != nil {
-		return nil, nil, err
+		return property.Map{}, nil, nil, err
 	}
 
-	return outs, nil, nil
+	// unmarshal return deps
+	deps := make(map[resource.PropertyKey][]resource.URN)
+	for k, p := range resp.ReturnDependencies {
+		var urns []resource.URN
+		for _, urn := range p.Urns {
+			urns = append(urns, resource.URN(urn))
+		}
+		deps[resource.PropertyKey(k)] = urns
+	}
+
+	return outs, deps, nil, nil
+}
+
+func (rm *ResourceMonitor) RegisterStackTransform(callback *pulumirpc.Callback) error {
+	_, err := rm.resmon.RegisterStackTransform(context.Background(), callback)
+	return err
+}
+
+func (rm *ResourceMonitor) RegisterStackInvokeTransform(callback *pulumirpc.Callback) error {
+	_, err := rm.resmon.RegisterStackInvokeTransform(context.Background(), callback)
+	return err
+}
+
+func (rm *ResourceMonitor) RegisterPackage(pkg, version, downloadURL string, checksums map[string][]byte,
+	parameterization, extension *pulumirpc.Parameterization,
+) (string, error) {
+	resp, err := rm.resmon.RegisterPackage(context.Background(), &pulumirpc.RegisterPackageRequest{
+		Name:             pkg,
+		Version:          version,
+		DownloadUrl:      downloadURL,
+		Checksums:        checksums,
+		Parameterization: parameterization,
+		Extension:        extension,
+	})
+	if err != nil {
+		return "", err
+	}
+	return resp.Ref, nil
+}
+
+func (rm *ResourceMonitor) SignalAndWaitForShutdown(ctx context.Context) error {
+	_, err := rm.resmon.SignalAndWaitForShutdown(ctx, &emptypb.Empty{})
+	return err
+}
+
+func (rm *ResourceMonitor) RegisterResourceHook(ctx context.Context, req *pulumirpc.RegisterResourceHookRequest,
+) error {
+	_, err := rm.resmon.RegisterResourceHook(ctx, req)
+	return err
+}
+
+func (rm *ResourceMonitor) RegisterErrorHook(
+	ctx context.Context, req *pulumirpc.RegisterErrorHookRequest,
+) error {
+	_, err := rm.resmon.RegisterErrorHook(ctx, req)
+	return err
 }
 
 func prepareTestTimeout(timeout float64) string {
-	mins := int(timeout) / 60
-
-	return fmt.Sprintf("%dm", mins)
+	if timeout == 0 {
+		return ""
+	}
+	return time.Duration(timeout * float64(time.Second)).String()
 }

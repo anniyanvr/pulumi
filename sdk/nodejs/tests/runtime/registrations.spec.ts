@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@ import * as assert from "assert";
 
 import { Resource } from "../../index";
 import { runtime } from "../../index";
+import { isGrpcError } from "../../errors";
+import * as grpc from "@grpc/grpc-js";
 
 const rt = "registrationType";
 
@@ -28,15 +30,14 @@ describe("runtime", () => {
         describe("register", () => {
             const tests = [
                 { name: "wildcard version", version: undefined },
-                { name: "blank version", version: "" },
                 { name: "version", version: "1.2.3" },
                 { name: "alpha version", version: "1.0.0-alpha1" },
             ];
             for (const { name, version } of tests) {
-                it(`throws on same ${name}`, () => {
+                it(`ignores registration on same ${name}`, () => {
                     const source = new Map<string, runtime.ResourceModule[]>();
-                    runtime.register(source, rt, "test", { version, construct });
-                    assert.throws(() => runtime.register(source, rt, "test", { version, construct }));
+                    assert.strictEqual(runtime.register(source, rt, "test", { version, construct }), true);
+                    assert.strictEqual(runtime.register(source, rt, "test", { version, construct }), false);
                 });
             }
         });
@@ -80,6 +81,65 @@ describe("runtime", () => {
                     assert.strictEqual(module!.version, expected);
                 });
             }
+        });
+    });
+    describe("resource", () => {
+        describe("transferProperties", () => {
+            before(() => {
+                process.on("unhandledRejection", (reason, p) => {
+                    assert.fail(`Unhandled Rejection at: ${p}, reason: ${reason}`);
+                });
+            });
+            after(() => {
+                process.removeAllListeners("unhandledRejection");
+            });
+            it("transferProperties does not throw", () => {
+                const resolver = runtime.transferProperties({} as Resource, "wew", {
+                    foo: "a",
+                    baz: "b",
+                });
+                const err: any = new Error();
+                (<any>err).code = grpc.status.CANCELLED;
+                assert.strictEqual(isGrpcError(err), true);
+
+                resolver["foo"]("", true, false, [], err);
+                resolver["baz"]("", true, false, [], err);
+            });
+        });
+
+        describe("prepareResource", () => {
+            before(() => {
+                process.on("unhandledRejection", (reason, p) => {
+                    assert.fail(`Unhandled Rejection at: ${p}, reason: ${reason}`);
+                });
+            });
+            after(() => {
+                process.removeAllListeners("unhandledRejection");
+            });
+            it("prepareResource does not throw", async () => {
+                const resolver = await runtime.prepareResource(
+                    "",
+                    {} as Resource,
+                    undefined,
+                    true,
+                    false,
+                    {},
+                    {},
+                    undefined,
+                    undefined,
+                );
+
+                const err: any = new Error();
+                (<any>err).code = grpc.status.CANCELLED;
+
+                if (resolver.resolveID) {
+                    resolver.resolveID("", true, err);
+                } else {
+                    assert.fail("resolver.resolveID is undefined");
+                }
+
+                resolver.resolveURN("", err);
+            });
         });
     });
 });

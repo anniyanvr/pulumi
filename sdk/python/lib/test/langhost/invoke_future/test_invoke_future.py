@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,7 +19,8 @@ class TestInvokeFuture(LanghostTest):
     def test_invoke_future(self):
         self.run_test(
             program=path.join(self.base_path(), "invoke_future"),
-            expected_resource_count=0)
+            expected_resource_count=0,
+        )
 
     def invoke(self, _ctx, token, args, provider, _version):
         self.assertEqual("test:index:MyFunction", token)

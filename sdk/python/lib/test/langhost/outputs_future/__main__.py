@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,9 +15,11 @@ import asyncio
 import pulumi
 from pulumi.runtime import invoke
 
+
 async def do_invoke():
     await asyncio.sleep(0)
     value = invoke("test:index:MyFunction", props={"value": 41}).value
     return value["value"]
+
 
 pulumi.export("value", do_invoke())

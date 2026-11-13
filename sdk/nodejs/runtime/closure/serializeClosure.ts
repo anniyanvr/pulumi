@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,28 +18,33 @@ import * as closure from "./createClosure";
 import * as utils from "./utils";
 
 /**
- * SerializeFunctionArgs are arguments used to serialize a JavaScript function
+ * {@link SerializeFunctionArgs} are arguments used to serialize a JavaScript
+ * function.
  */
 export interface SerializeFunctionArgs {
     /**
-     * The name to export from the module defined by the generated module text.  Defaults to 'handler'.
+     * The name to export from the module defined by the generated module text.
+     * Defaults to `handler`.
      */
     exportName?: string;
+
     /**
-     * A function to prevent serialization of certain objects captured during the serialization.  Primarily used to
-     * prevent potential cycles.
+     * A function to prevent serialization of certain objects captured during
+     * the serialization. Primarily used to prevent potential cycles.
      */
     serialize?: (o: any) => boolean;
 
     /**
-     * If this is a function which, when invoked, will produce the actual entrypoint function.
-     * Useful for when serializing a function that has high startup cost that only wants to be
-     * run once. The signature of this function should be:  () => (provider_handler_args...) => provider_result
+     * True if this is a function which, when invoked, will produce the actual
+     * entrypoint function. Useful for when serializing a function that has high
+     * startup cost that we'd ideally only run once. The signature of this
+     * function should be `() => (provider_handler_args...) => provider_result`.
      *
-     * This will then be emitted as: `exports.[exportName] = serialized_func_name();`
+     * This will then be emitted as `exports.[exportName] =
+     * serialized_func_name();`
      *
-     * In other words, the function will be invoked (once) and the resulting inner function will
-     * be what is exported.
+     * In other words, the function will be invoked (once) and the resulting
+     * inner function will be what is exported.
      */
     isFactoryFunction?: boolean;
 
@@ -47,77 +52,107 @@ export interface SerializeFunctionArgs {
      * The resource to log any errors we encounter against.
      */
     logResource?: Resource;
+
+    /**
+     * If true, allow secrets to be serialized into the function. This should
+     * only be set to true if the calling code will handle this and propoerly
+     * wrap the resulting text in a secret before passing it into any resources
+     * or serializing it to any other output format. If set, the
+     * `containsSecrets` property on the returned {@link SerializedFunction}
+     * object will indicate whether secrets were serialized into the function
+     * text.
+     */
+    allowSecrets?: boolean;
 }
 
 /**
- * SerializeFunction is a representation of a serialized JavaScript function.
+ * {@link SerializedFunction} is a representation of a serialized JavaScript
+ * function.
  */
 export interface SerializedFunction {
     /**
-     * The text of a JavaScript module which exports a single name bound to an appropriate value.
-     * In the case of a normal function, this value will just be serialized function.  In the case
-     * of a factory function this value will be the result of invoking the factory function.
+     * The text of a JavaScript module which exports a single name bound to an
+     * appropriate value. In the case of a normal function, this value will just
+     * be serialized function. In the case of a factory function this value
+     * will be the result of invoking the factory function.
      */
     text: string;
+
     /**
      * The name of the exported module member.
      */
     exportName: string;
+
+    /**
+     * True if the serialized function text includes serialized secrets.
+     */
+    containsSecrets: boolean;
 }
 
 /**
- * serializeFunction serializes a JavaScript function into a text form that can be loaded in another execution context,
- * for example as part of a function callback associated with an AWS Lambda.  The function serialization captures any
- * variables captured by the function body and serializes those values into the generated text along with the function
- * body.  This process is recursive, so that functions referenced by the body of the serialized function will themselves
- * be serialized as well.  This process also deeply serializes captured object values, including prototype chains and
- * property descriptors, such that the semantics of the function when deserialized should match the original function.
+ * Serializes a JavaScript function into a text form that can be loaded in
+ * another execution context, for example as part of a function callback
+ * associated with an AWS Lambda. The function serialization captures any
+ * variables captured by the function body and serializes those values into the
+ * generated text along with the function body.  This process is recursive, so
+ * that functions referenced by the body of the serialized function will
+ * themselves be serialized as well.  This process also deeply serializes
+ * captured object values, including prototype chains and property descriptors,
+ * such that the semantics of the function when deserialized should match the
+ * original function.
  *
  * There are several known limitations:
- * - If a native function is captured either directly or indirectly, closure serialization will return an error.
- * - Captured values will be serialized based on their values at the time that `serializeFunction` is called.  Mutations
- *   to these values after that (but before the deserialized function is used) will not be observed by the deserialized
- *   function.
  *
- * @param func The JavaScript function to serialize.
- * @param args Arguments to use to control the serialization of the JavaScript function.
+ * - If a native function is captured either directly or indirectly, closure
+ *   serialization will return an error.
+ *
+ * - Captured values will be serialized based on their values at the time that
+ *   `serializeFunction` is called.  Mutations to these values after that (but
+ *   before the deserialized function is used) will not be observed by the
+ *   deserialized function.
+ *
+ * @param func
+ *  The JavaScript function to serialize.
+ * @param args
+ *  Arguments to use to control the serialization of the JavaScript function.
  */
-export async function serializeFunction(
-        func: Function,
-        args: SerializeFunctionArgs = {}): Promise<SerializedFunction> {
-
+export async function serializeFunction(func: Function, args: SerializeFunctionArgs = {}): Promise<SerializedFunction> {
     const exportName = args.exportName || "handler";
-    const serialize = args.serialize || (_ => true);
+    const serialize = args.serialize || ((_) => true);
     const isFactoryFunction = args.isFactoryFunction === undefined ? false : args.isFactoryFunction;
 
-    const functionInfo = await closure.createFunctionInfoAsync(func, serialize, args.logResource);
-    return serializeJavaScriptText(functionInfo, exportName, isFactoryFunction);
+    const closureInfo = await closure.createClosureInfoAsync(func, serialize, args.logResource);
+    if (!args.allowSecrets && closureInfo.containsSecrets) {
+        throw new Error("Secret outputs cannot be captured by a closure.");
+    }
+    return serializeJavaScriptText(closureInfo, exportName, isFactoryFunction);
 }
 
 /**
- * @deprecated Please use 'serializeFunction' instead.
+ * @deprecated
+ *  Please use {@link serializeFunction} instead.
  */
-export async function serializeFunctionAsync(
-        func: Function,
-        serialize?: (o: any) => boolean): Promise<string> {
+export async function serializeFunctionAsync(func: Function, serialize?: (o: any) => boolean): Promise<string> {
     log.warn("'function serializeFunctionAsync' is deprecated.  Please use 'serializeFunction' instead.");
 
-    serialize = serialize || (_ => true);
-    const functionInfo = await closure.createFunctionInfoAsync(func, serialize, /*logResource:*/ undefined);
-    return serializeJavaScriptText(functionInfo, "handler", /*isFactoryFunction*/ false).text;
+    serialize = serialize || ((_) => true);
+    const closureInfo = await closure.createClosureInfoAsync(func, serialize, /*logResource:*/ undefined);
+    if (closureInfo.containsSecrets) {
+        throw new Error("Secret outputs cannot be captured by a closure.");
+    }
+    return serializeJavaScriptText(closureInfo, "handler", /*isFactoryFunction*/ false).text;
 }
 
 /**
- * serializeJavaScriptText converts a FunctionInfo object into a string representation of a Node.js module body which
- * exposes a single function `exports.handler` representing the serialized function.
- *
- * @param c The FunctionInfo to be serialized into a module string.
+ * Converts a {@link FunctionInfo} object into a string representation of a
+ * NodeJS module body which exposes a single function `exports.handler`
+ * representing the serialized function.
  */
 function serializeJavaScriptText(
-        outerFunction: closure.FunctionInfo,
-        exportName: string,
-        isFactoryFunction: boolean): SerializedFunction {
-
+    outerClosure: closure.ClosureInfo,
+    exportName: string,
+    isFactoryFunction: boolean,
+): SerializedFunction {
     // Now produce a textual representation of the closure and its serialized captured environment.
 
     // State used to build up the environment variables for all the funcs we generate.
@@ -136,8 +171,9 @@ function serializeJavaScriptText(
 
     let environmentText = "";
     let functionText = "";
+    const importedIdentifiers = new Map<string, ImportedIdentifier>();
 
-    const outerFunctionName = emitFunctionAndGetName(outerFunction);
+    const outerFunctionName = emitFunctionAndGetName(outerClosure.func);
 
     if (environmentText) {
         environmentText = "\n" + environmentText;
@@ -152,12 +188,11 @@ function serializeJavaScriptText(
         // for a factory function, we need to call the function at the end.  That way all the logic
         // to set up the environment has run.
         text = environmentText + functionText + "\n" + exportText;
-    }
-    else {
+    } else {
         text = exportText + "\n" + environmentText + functionText;
     }
 
-    return { text, exportName };
+    return { text, exportName, containsSecrets: outerClosure.containsSecrets };
 
     function emitFunctionAndGetName(functionInfo: closure.FunctionInfo): string {
         // If this is the first time seeing this function, then actually emit the function code for
@@ -182,18 +217,93 @@ function serializeJavaScriptText(
         const thisCapture = capturedValues.this;
         const argumentsCapture = capturedValues.arguments;
 
-        delete capturedValues.this;
-        delete capturedValues.arguments;
+        capturedValues.this = undefined as unknown as string;
+        capturedValues.arguments = undefined as unknown as string;
 
         const parameters = [...Array(functionInfo.paramCount)].map((_, index) => `__${index}`).join(", ");
 
-        functionText += "\n" +
-            "function " + varName + "(" + parameters + ") {\n" +
+        for (const [keyEntry, { entry: valEntry }] of functionInfo.capturedValues) {
+            if (valEntry.module === undefined) {
+                continue;
+            }
+
+            let imported = importedIdentifiers.get(keyEntry.json);
+
+            // If we haven't imported this identifier yet, we'll do so now. If
+            // the identifier isn't reserved, importIdentifier will instruct us
+            // to import it "as-is". We can thus remove it from the list of
+            // captured values and have it available inside the scope of the
+            // function (and all subsequent functions). If the identifier is
+            // reserved, importIdentifier will generate a suitable alias for it.
+            // We'll declare this now, but we'll not remove the identifier from
+            // the list of captures. This means that we can safely alias it as
+            // the reserved identifier inside relevant function scopes.
+            //
+            // As an example, consider the identifiers "foo" (not reserved) and
+            // "exports" (reserved).
+            //
+            // For "foo", we'll generate code like:
+            //
+            // const foo = require("some/module/foo");
+            //
+            // function x() {
+            //   return (function () {
+            //     with({ ... }) {
+            //       // foo used directly
+            //     }
+            //   }).apply(...)
+            // }
+            //
+            // For "exports", importIdentifier will give us an identifier like
+            // "__pulumi_closure_import_exports" and we'll generate code like:
+            //
+            // const __pulumi_closure_import_exports = require("some/module/foo");
+            //
+            // function x() {
+            //   return (function () {
+            //     with({ exports: __pulumi_closure_import_exports, ... }) {
+            //       // exports now available by virtue of the with()
+            //     }
+            //   }).apply(...)
+            // }
+            //
+            // This hack saves us having to rewrite the function's code while
+            // helping us avoid importing modules over and over again (which
+            // might have unintended side effects).
+            if (!imported) {
+                imported = importIdentifier(keyEntry.json);
+                importedIdentifiers.set(keyEntry.json, imported);
+
+                functionText += `const ${imported.as} = require("${valEntry.module}");\n`;
+            }
+
+            if (imported.reserved) {
+                capturedValues[imported.identifier] = imported.as;
+            } else {
+                delete capturedValues[keyEntry.json];
+            }
+        }
+
+        functionText +=
+            "\n" +
+            "function " +
+            varName +
+            "(" +
+            parameters +
+            ") {\n" +
             "  return (function() {\n" +
-            "    with(" + envObjToString(capturedValues) + ") {\n\n" +
-            "return " + functionInfo.code + ";\n\n" +
+            "    with(" +
+            envObjToString(capturedValues) +
+            ") {\n\n" +
+            "return " +
+            functionInfo.code +
+            ";\n\n" +
             "    }\n" +
-            "  }).apply(" + thisCapture + ", " + argumentsCapture + ").apply(this, arguments);\n" +
+            "  }).apply(" +
+            thisCapture +
+            ", " +
+            argumentsCapture +
+            ").apply(this, arguments);\n" +
             "}\n";
 
         // If this function is complex (i.e. non-default __proto__, or has properties, etc.)
@@ -234,43 +344,33 @@ function serializeJavaScriptText(
         // there is no way to observe that you are getting a different copy.
         if (isObjOrArrayOrRegExp(envEntry)) {
             return complexEnvEntryToString(envEntry, varName);
-        }
-        else {
+        } else {
             // Other values (like strings, bools, etc.) can just be emitted inline.
             return simpleEnvEntryToString(envEntry, varName);
         }
     }
 
-    function simpleEnvEntryToString(
-            envEntry: closure.Entry, varName: string): string {
-
+    function simpleEnvEntryToString(envEntry: closure.Entry, varName: string): string {
         if (envEntry.hasOwnProperty("json")) {
             return JSON.stringify(envEntry.json);
-        }
-        else if (envEntry.function !== undefined) {
+        } else if (envEntry.function !== undefined) {
             return emitFunctionAndGetName(envEntry.function);
-        }
-        else if (envEntry.module !== undefined) {
+        } else if (envEntry.module !== undefined) {
             return `require("${envEntry.module}")`;
-        }
-        else if (envEntry.output !== undefined) {
+        } else if (envEntry.output !== undefined) {
             return envEntryToString(envEntry.output, varName);
-        }
-        else if (envEntry.expr) {
+        } else if (envEntry.expr) {
             // Entry specifies exactly how it should be emitted.  So just use whatever
             // it wanted.
             return envEntry.expr;
-        }
-        else if (envEntry.promise) {
+        } else if (envEntry.promise) {
             return `Promise.resolve(${envEntryToString(envEntry.promise, varName)})`;
-        }
-        else {
+        } else {
             throw new Error("Malformed: " + JSON.stringify(envEntry));
         }
     }
 
-    function complexEnvEntryToString(
-            envEntry: closure.Entry, varName: string): string {
+    function complexEnvEntryToString(envEntry: closure.Entry, varName: string): string {
         // Call all environment variables __e<num> to make them unique.  But suffix
         // them with the original name of the property to help provide context when
         // looking at the source.
@@ -279,11 +379,9 @@ function serializeJavaScriptText(
 
         if (envEntry.object) {
             emitObject(envVar, envEntry.object, varName);
-        }
-        else if (envEntry.array) {
+        } else if (envEntry.array) {
             emitArray(envVar, envEntry.array, varName);
-        }
-        else if (envEntry.regexp) {
+        } else if (envEntry.regexp) {
             const { source, flags } = envEntry.regexp;
             const regexVal = `new RegExp(${JSON.stringify(source)}, ${JSON.stringify(flags)})`;
             const entryString = `var ${envVar} = ${regexVal};\n`;
@@ -299,13 +397,9 @@ function serializeJavaScriptText(
         const legalName = makeLegalJSName(baseName).replace(trimLeadingUnderscoreRegex, "");
         let index = 0;
 
-        let currentName = addIndexAtEnd
-            ? "__" + legalName + index
-            : "__" + legalName;
+        let currentName = addIndexAtEnd ? "__" + legalName + index : "__" + legalName;
         while (envVarNames.has(currentName)) {
-            currentName = addIndexAtEnd
-                ? "__" + legalName + index
-                : "__" + index + "_" + legalName;
+            currentName = addIndexAtEnd ? "__" + legalName + index : "__" + index + "_" + legalName;
             index++;
         }
 
@@ -325,14 +419,12 @@ function serializeJavaScriptText(
             if (obj.proto) {
                 const protoVar = envEntryToString(obj.proto, `${varName}_proto`);
                 environmentText += `var ${envVar} = Object.create(${protoVar});\n`;
-            }
-            else {
+            } else {
                 environmentText += `var ${envVar} = {};\n`;
             }
 
             emitComplexObjectProperties(envVar, varName, obj);
-        }
-        else {
+        } else {
             // All values inside this obj are simple.  We can just emit the object
             // directly as an object literal with all children embedded in the literal.
             const props: string[] = [];
@@ -344,8 +436,7 @@ function serializeJavaScriptText(
 
                 if (typeof keyEntry.json === "string" && utils.isLegalMemberName(keyEntry.json)) {
                     props.push(`${keyEntry.json}: ${propVal}`);
-                }
-                else {
+                } else {
                     props.push(`[${propName}]: ${propVal}`);
                 }
             }
@@ -379,15 +470,12 @@ function serializeJavaScriptText(
             return true;
         }
 
-        return info.enumerable === true &&
-               info.writable === true &&
-               info.configurable === true &&
-               !info.get && !info.set;
+        return (
+            info.enumerable === true && info.writable === true && info.configurable === true && !info.get && !info.set
+        );
     }
 
-    function emitComplexObjectProperties(
-            envVar: string, varName: string, objEntry: closure.ObjectInfo): void {
-
+    function emitComplexObjectProperties(envVar: string, varName: string, objEntry: closure.ObjectInfo): void {
         for (const [keyEntry, { info, entry: valEntry }] of objEntry.env) {
             const subName = typeof keyEntry.json === "string" ? keyEntry.json : "sym";
             const keyString = envEntryToString(keyEntry, varName + "_" + subName);
@@ -397,20 +485,16 @@ function serializeJavaScriptText(
                 // normal property.  Just emit simply as a direct assignment.
                 if (typeof keyEntry.json === "string" && utils.isLegalMemberName(keyEntry.json)) {
                     environmentText += `${envVar}.${keyEntry.json} = ${valString};\n`;
-                }
-                else {
+                } else {
                     environmentText += `${envVar}${`[${keyString}]`} = ${valString};\n`;
                 }
-            }
-            else {
+            } else {
                 // complex property.  emit as Object.defineProperty
                 emitDefineProperty(info!, valString, keyString);
             }
         }
 
-        function emitDefineProperty(
-            desc: closure.PropertyInfo, entryValue: string, propName: string) {
-
+        function emitDefineProperty(desc: closure.PropertyInfo, entryValue: string, propName: string) {
             const copy: any = {};
             if (desc.configurable) {
                 copy.configurable = desc.configurable;
@@ -430,13 +514,12 @@ function serializeJavaScriptText(
             if (desc.hasValue) {
                 copy.value = entryValue;
             }
-            const line = `Object.defineProperty(${envVar}, ${propName}, ${ envObjToString(copy) });\n`;
+            const line = `Object.defineProperty(${envVar}, ${propName}, ${envObjToString(copy)});\n`;
             environmentText += line;
         }
     }
 
-    function emitArray(
-            envVar: string, arr: closure.Entry[], varName: string): void {
+    function emitArray(envVar: string, arr: closure.Entry[], varName: string): void {
         if (arr.some(deepContainsObjOrArrayOrRegExp) || isSparse(arr) || hasNonNumericIndices(arr)) {
             // we have a complex child.  Because of the possibility of recursion in the object
             // graph, we have to spit out this variable initialized (but empty) first. Then we can
@@ -446,17 +529,13 @@ function serializeJavaScriptText(
             // Walk the names of the array properties directly. This ensures we work efficiently
             // with sparse arrays.  i.e. if the array has length 1k, but only has one value in it
             // set, we can just set htat value, instead of setting 999 undefineds.
-            let length = 0;
             for (const key of Object.getOwnPropertyNames(arr)) {
                 if (key !== "length") {
                     const entryString = envEntryToString(arr[<any>key], `${varName}_${key}`);
-                    environmentText += `${envVar}${
-                        isNumeric(key) ? `[${key}]` : `.${key}`} = ${entryString};\n`;
-                    length++;
+                    environmentText += `${envVar}${isNumeric(key) ? `[${key}]` : `.${key}`} = ${entryString};\n`;
                 }
             }
-        }
-        else {
+        } else {
             // All values inside this array are simple.  We can just emit the array elements in
             // place.  i.e. we can emit as ``var arr = [1, 2, 3]`` as that's far more preferred than
             // having four individual statements to do the same.
@@ -474,18 +553,18 @@ function serializeJavaScriptText(
 
 const makeLegalRegex = /[^0-9a-zA-Z_]/g;
 function makeLegalJSName(n: string) {
-    return n.replace(makeLegalRegex, x => "");
+    return n.replace(makeLegalRegex, (x) => "");
 }
 
 function isSparse<T>(arr: Array<T>) {
     // getOwnPropertyNames for an array returns all the indices as well as 'length'.
     // so we subtract one to get all the real indices.  If that's not the same as
     // the array length, then we must have missing properties and are thus sparse.
-    return arr.length !== (Object.getOwnPropertyNames(arr).length - 1);
+    return arr.length !== Object.getOwnPropertyNames(arr).length - 1;
 }
 
 function hasNonNumericIndices<T>(arr: Array<T>) {
-    return Object.keys(arr).some(k => k !== "length" && !isNumeric(k));
+    return Object.keys(arr).some((k) => k !== "length" && !isNumeric(k));
 }
 
 function isNumeric(n: string) {
@@ -497,19 +576,76 @@ function isObjOrArrayOrRegExp(env: closure.Entry): boolean {
 }
 
 function deepContainsObjOrArrayOrRegExp(env: closure.Entry): boolean {
-    return isObjOrArrayOrRegExp(env) ||
+    return (
+        isObjOrArrayOrRegExp(env) ||
         (env.output !== undefined && deepContainsObjOrArrayOrRegExp(env.output)) ||
-        (env.promise !== undefined && deepContainsObjOrArrayOrRegExp(env.promise));
+        (env.promise !== undefined && deepContainsObjOrArrayOrRegExp(env.promise))
+    );
 }
 
 /**
- * Converts an environment object into a string which can be embedded into a serialized function
- * body.  Note that this is not JSON serialization, as we may have property values which are
- * variable references to other global functions. In other words, there can be free variables in the
- * resulting object literal.
+ * Converts an environment object into a string which can be embedded into a
+ * serialized function body.  Note that this is not JSON serialization, as we
+ * may have property values which are variable references to other global
+ * functions. In other words, there can be free variables in the resulting
+ * object literal.
  *
- * @param envObj The environment object to convert to a string.
+ * @param envObj
+ *  The environment object to convert to a string.
  */
 function envObjToString(envObj: Record<string, string>): string {
-    return `{ ${Object.keys(envObj).map(k => `${k}: ${envObj[k]}`).join(", ")} }`;
+    return `{ ${Object.keys(envObj)
+        .map((k) => `${k}: ${envObj[k]}`)
+        .join(", ")} }`;
 }
+
+/**
+ * An identifier to be imported into a serialised function.
+ */
+interface ImportedIdentifier {
+    /**
+     * True if and only if the identifier to be imported would shadow a reserved
+     * identifier (e.g. "exports").
+     */
+    reserved: boolean;
+
+    /**
+     * The identifier required by serialised function code.
+     */
+    identifier: string;
+
+    /**
+     * An alias for the required identifier that doesn't clash with reserved
+     * identifiers. May be the required identifier itself if it doesn't clash.
+     */
+    as: string;
+}
+
+/**
+ * Computes an appropriate {@link ImportedIdentifier} for a given identifier.
+ */
+function importIdentifier(identifier: string): ImportedIdentifier {
+    if (RESERVED_IDENTIFIERS.has(identifier)) {
+        const as = `__pulumi_closure_import_${identifier}`;
+
+        return {
+            reserved: true,
+            identifier,
+            as,
+        };
+    }
+
+    return {
+        reserved: false,
+        identifier,
+        as: identifier,
+    };
+}
+
+/**
+ * The set of known reserved identifiers that we might encounter when
+ * serialising function code.
+ *
+ * @internal
+ */
+const RESERVED_IDENTIFIERS = new Set(["exports"]);

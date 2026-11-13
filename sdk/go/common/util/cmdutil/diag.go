@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,27 +15,30 @@
 package cmdutil
 
 import (
+	"fmt"
 	"os"
+	"sync"
 
-	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag/colors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
 )
 
-var snk diag.Sink
+var (
+	snkMutex sync.Mutex
+	snk      diag.Sink
+)
 
 // By default we'll attempt to figure out if we should have colors or not. This can be overridden
 // for any command by passing --color=... at the command line.
-var globalColorization = colors.Auto
+var globalColorization *colors.Colorization
 
 // GetGlobalColorization gets the global setting for how things should be colored.
 // This is helpful for the parts of our stack that do not take a DisplayOptions struct.
 func GetGlobalColorization() colors.Colorization {
-	if globalColorization != colors.Auto {
+	if globalColorization != nil {
 		// User has set an explicit colorization preference.  We'll respect whatever they asked for,
 		// no matter what.
-		return globalColorization
+		return *globalColorization
 	}
 
 	// Colorization is set to 'auto' (either explicit set to that by the user, or not set at all).
@@ -61,15 +64,18 @@ func GetGlobalColorization() colors.Colorization {
 func SetGlobalColorization(value string) error {
 	switch value {
 	case "auto":
-		globalColorization = colors.Auto
+		globalColorization = nil
 	case "always":
-		globalColorization = colors.Always
+		c := colors.Always
+		globalColorization = &c
 	case "never":
-		globalColorization = colors.Never
+		c := colors.Never
+		globalColorization = &c
 	case "raw":
-		globalColorization = colors.Raw
+		c := colors.Raw
+		globalColorization = &c
 	default:
-		return errors.Errorf("unsupported color option: '%s'.  Supported values are: auto, always, never, raw", value)
+		return fmt.Errorf("unsupported color option: '%s'.  Supported values are: auto, always, never, raw", value)
 	}
 
 	return nil
@@ -77,16 +83,12 @@ func SetGlobalColorization(value string) error {
 
 // Diag lazily allocates a sink to be used if we can't create a compiler.
 func Diag() diag.Sink {
+	snkMutex.Lock()
+	defer snkMutex.Unlock()
 	if snk == nil {
-		snk = diag.DefaultSink(os.Stdout, os.Stderr, diag.FormatOptions{
+		snk = diag.DefaultSink(os.Stderr, os.Stderr, diag.FormatOptions{
 			Color: GetGlobalColorization(),
 		})
 	}
 	return snk
-}
-
-// InitDiag forces initialization of the diagnostics sink with the given options.
-func InitDiag(opts diag.FormatOptions) {
-	contract.Assertf(snk == nil, "Cannot initialize diagnostics sink more than once")
-	snk = diag.DefaultSink(os.Stdout, os.Stderr, opts)
 }

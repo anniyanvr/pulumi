@@ -1,0 +1,11 @@
+replacements:
+  - type: file
+    file: ./sdk/.version
+    fileFormat: sed
+    updatePath: .*
+    versionFormat: ${SEMVER}
+  - type: file
+    file: ./pkg/go.mod
+    fileFormat: sed
+    updatePath: ^([[:space:]]+github\.com\/pulumi\/pulumi\/sdk\/v3) v[^[:space:]]+$
+    versionFormat: \1 v${SEMVER}

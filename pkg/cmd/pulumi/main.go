@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,17 +20,30 @@ import (
 	"runtime"
 	"runtime/debug"
 
-	"github.com/pulumi/pulumi/pkg/v2/version"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/cmd/pulumi/cmd"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/version"
+
+	"go.uber.org/automaxprocs/maxprocs"
 )
 
-func panicHandler() {
-	if panicPayload := recover(); panicPayload != nil {
+// panicHandler displays an emergency error message to the user and a stack trace to
+// report the panic.
+//
+// finished should be set to false when the handler is deferred and set to true as the
+// last statement in the scope. This trick is necessary to avoid catching and then
+// discarding a panic(nil).
+//
+// The panic handler runs before (and around) the cobra command, so it writes
+// directly to os.Stderr rather than going through cmd.ErrOrStderr().
+//
+//nolint:forbidigo
+func panicHandler(finished *bool) {
+	if panicPayload := recover(); !*finished {
 		stack := string(debug.Stack())
 		fmt.Fprintln(os.Stderr, "================================================================================")
 		fmt.Fprintln(os.Stderr, "The Pulumi CLI encountered a fatal error. This is a bug!")
 		fmt.Fprintln(os.Stderr, "We would appreciate a report: https://github.com/pulumi/pulumi/issues/")
-		fmt.Fprintln(os.Stderr, "Please provide all of the below text in your report.")
+		fmt.Fprintln(os.Stderr, "Please provide all of the text below in your report.")
 		fmt.Fprintln(os.Stderr, "================================================================================")
 		fmt.Fprintf(os.Stderr, "Pulumi Version:   %s\n", version.Version)
 		fmt.Fprintf(os.Stderr, "Go Version:       %s\n", runtime.Version())
@@ -39,15 +52,23 @@ func panicHandler() {
 		fmt.Fprintf(os.Stderr, "Operating System: %s\n", runtime.GOOS)
 		fmt.Fprintf(os.Stderr, "Panic:            %s\n\n", panicPayload)
 		fmt.Fprintln(os.Stderr, stack)
-		os.Exit(1)
+		os.Exit(1) //nolint:noosexit // panicHandler is the last-resort crash reporter; it must terminate.
 	}
 }
 
 func main() {
-	defer panicHandler()
-	if err := NewPulumiCmd().Execute(); err != nil {
-		_, err = fmt.Fprintf(os.Stderr, "An error occurred: %v\n", err)
-		contract.IgnoreError(err)
-		os.Exit(1)
+	maxprocs.Set() //nolint:errcheck
+
+	finished := new(bool)
+	defer panicHandler(finished)
+
+	pulumiCmd, cleanup := NewPulumiCmd()
+
+	if err := pulumiCmd.Execute(); err != nil {
+		cmd.DisplayErrorMessage(pulumiCmd.Context(), err, pulumiCmd.ErrOrStderr())
+		cleanup()
+		os.Exit(cmd.ExitCodeFor(err))
 	}
+	*finished = true
+	cleanup()
 }

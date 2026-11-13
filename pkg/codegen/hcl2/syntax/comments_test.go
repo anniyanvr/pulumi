@@ -1,34 +1,50 @@
+// Copyright 2020, Pulumi Corporation.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package syntax
 
 import (
 	"bytes"
-	"io/ioutil"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
 	"github.com/zclconf/go-cty/cty/convert"
 )
 
 func commentString(trivia []Trivia) string {
-	s := ""
+	var s strings.Builder
 	for _, t := range trivia {
 		if comment, ok := t.(Comment); ok {
 			for _, l := range comment.Lines {
-				s += strings.Replace(l, "✱", "*", -1)
+				s.WriteString(strings.ReplaceAll(l, "✱", "*"))
 			}
 		}
 	}
-	return s
+	return normString(s.String())
 }
 
 func validateTokenLeadingTrivia(t *testing.T, token Token) {
 	// There is nowhere to attach leading trivia to template control sequences.
 	if token.Raw.Type == hclsyntax.TokenTemplateControl {
-		assert.Len(t, token.LeadingTrivia, 0)
+		require.Len(t, token.LeadingTrivia, 0)
 		return
 	}
 
@@ -50,7 +66,7 @@ func validateTokenTrivia(t *testing.T, token Token) {
 	validateTokenTrailingTrivia(t, token)
 }
 
-func validateTrivia(t *testing.T, tokens ...interface{}) {
+func validateTrivia(t *testing.T, tokens ...any) {
 	for _, te := range tokens {
 		switch te := te.(type) {
 		case Token:
@@ -81,8 +97,8 @@ func validateTrivia(t *testing.T, tokens ...interface{}) {
 }
 
 func validateTemplateStringTrivia(t *testing.T, template *hclsyntax.TemplateExpr, n *hclsyntax.LiteralValueExpr,
-	tokens *LiteralValueTokens) {
-
+	tokens *LiteralValueTokens,
+) {
 	index := -1
 	for i := range template.Parts {
 		if template.Parts[i] == n {
@@ -93,25 +109,24 @@ func validateTemplateStringTrivia(t *testing.T, template *hclsyntax.TemplateExpr
 	assert.NotEqual(t, -1, index)
 
 	v, err := convert.Convert(n.Val, cty.String)
-	assert.NoError(t, err)
-	if v.AsString() == "" || !assert.Len(t, tokens.Value, 1) {
+	require.NoError(t, err)
+	if v.AsString() == "" {
 		return
 	}
+	require.Len(t, tokens.Value, 1)
 
 	value := tokens.Value[0]
 	if index == 0 {
-		assert.Len(t, value.LeadingTrivia, 0)
+		require.Len(t, value.LeadingTrivia, 0)
 	} else {
 		delim, ok := value.LeadingTrivia[0].(TemplateDelimiter)
 		assert.True(t, ok)
 		assert.Equal(t, hclsyntax.TokenTemplateSeqEnd, delim.Type)
 	}
 	if index == len(template.Parts)-1 {
-		assert.Len(t, value.TrailingTrivia, 0)
+		require.Len(t, value.TrailingTrivia, 0)
 	} else if len(value.TrailingTrivia) != 0 {
-		if !assert.Len(t, value.TrailingTrivia, 1) {
-			return
-		}
+		require.Len(t, value.TrailingTrivia, 1)
 		delim, ok := value.TrailingTrivia[0].(TemplateDelimiter)
 		assert.True(t, ok)
 		assert.Equal(t, hclsyntax.TokenTemplateInterp, delim.Type)
@@ -212,18 +227,78 @@ func (v *validator) Exit(n hclsyntax.Node) hcl.Diagnostics {
 }
 
 func TestComments(t *testing.T) {
-	contents, err := ioutil.ReadFile("./testdata/comments_all.hcl")
+	t.Parallel()
+
+	contents, err := os.ReadFile("./testdata/comments_all.hcl")
 	if err != nil {
 		t.Fatalf("failed to read test data: %v", err)
 	}
 
 	parser := NewParser()
 	err = parser.ParseFile(bytes.NewReader(contents), "comments_all.hcl")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	assert.Len(t, parser.Diagnostics, 0)
+	require.Len(t, parser.Diagnostics, 0)
 
 	f := parser.Files[0]
 	diags := hclsyntax.Walk(f.Body, &validator{t: t, tokens: f.Tokens})
 	assert.Nil(t, diags)
+}
+
+func normString(s string) string {
+	return strings.TrimSuffix(s, "\r")
+}
+
+func TestCommentLinesRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		lines    []string
+		expected string
+		parsed   []string
+	}{
+		{"no lines", nil, "", nil},
+		{"empty line", []string{""}, "//\n", []string{""}},
+		{"multiline", []string{" a", "", " b"}, "// a\n//\n// b\n", []string{" a", "", " b"}},
+		{"newline in line", []string{" a\n b"}, "// a\n// b\n", []string{" a", " b"}},
+		{"trailing newline", []string{" a\n"}, "// a\n//\n", []string{" a", ""}},
+		{"line comment", []string{" // a"}, "// // a\n", []string{" // a"}},
+		{"hash comment", []string{"# a"}, "//# a\n", []string{"# a"}},
+		{"block comment", []string{"/* a", "*/ b"}, "///* a\n//*/ b\n", []string{"/* a", "*/ b"}},
+		{"carriage return", []string{"a\r", "b\r"}, "//a\r\n//b\r\n", []string{"a\r", "b\r"}},
+		{"invalid utf8", []string{"\xff"}, "//\xff\n", []string{"\xff"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			comment := fmt.Sprintf("%v", TriviaList{Comment{Lines: tt.lines}})
+			assert.Equal(t, tt.expected, comment)
+
+			parser := NewParser()
+			require.NoError(t, parser.ParseFile(strings.NewReader(comment+"x = 1\n"), "main.pp"))
+			require.False(t, parser.Diagnostics.HasErrors(), parser.Diagnostics.Error())
+
+			file := parser.Files[0]
+			attrTokens := file.Tokens.ForNode(file.Body.Attributes["x"]).(*AttributeTokens)
+			var parsed []string
+			for _, trivia := range attrTokens.Name.LeadingTrivia {
+				if comment, ok := trivia.(Comment); ok {
+					parsed = append(parsed, comment.Lines...)
+				}
+			}
+			assert.Equal(t, tt.parsed, parsed)
+		})
+	}
+}
+
+func TestTemplateDelimiterBytes(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, []byte("${"), TemplateDelimiter{Type: hclsyntax.TokenTemplateInterp}.Bytes())
+	assert.Equal(t, []byte("%{"), TemplateDelimiter{Type: hclsyntax.TokenTemplateControl}.Bytes())
+	assert.Equal(t, []byte("}"), TemplateDelimiter{Type: hclsyntax.TokenTemplateSeqEnd}.Bytes())
+	assert.Nil(t, TemplateDelimiter{Type: hclsyntax.TokenOBrace}.Bytes())
+	assert.Equal(t, []byte("${"), NewTemplateDelimiter(hclsyntax.TokenTemplateInterp).Bytes())
 }

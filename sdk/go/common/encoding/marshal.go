@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,14 +15,24 @@
 package encoding
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"path/filepath"
 
-	yaml "gopkg.in/yaml.v2"
+	"github.com/klauspost/compress/gzip"
+	"github.com/klauspost/compress/zstd"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/yamlutil"
+	yaml "gopkg.in/yaml.v3"
 )
 
-var JSONExt = ".json"
-var YAMLExt = ".yaml"
+var (
+	JSONExt = ".json"
+	YAMLExt = ".yaml"
+	GZIPExt = ".gz"
+	ZSTDExt = ".zst"
+)
 
 // Exts contains a list of all the valid marshalable extension types.
 var Exts = []string{
@@ -56,30 +66,28 @@ func DefaultExt() string {
 
 // Marshaler is a type that knows how to marshal and unmarshal data in one format.
 type Marshaler interface {
-	IsJSONLike() bool
-	IsYAMLLike() bool
-	Marshal(v interface{}) ([]byte, error)
-	Unmarshal(data []byte, v interface{}) error
+	Marshal(v any) ([]byte, error)
+	Unmarshal(data []byte, v any) error
 }
 
+// JSON is a Marshaler that marshals and unmarshals JSON with indented printing.
 var JSON Marshaler = &jsonMarshaler{}
 
-type jsonMarshaler struct {
+type jsonMarshaler struct{}
+
+func (m *jsonMarshaler) Marshal(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "    ")
+	err := enc.Encode(v)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
-func (m *jsonMarshaler) IsJSONLike() bool {
-	return true
-}
-
-func (m *jsonMarshaler) IsYAMLLike() bool {
-	return false
-}
-
-func (m *jsonMarshaler) Marshal(v interface{}) ([]byte, error) {
-	return json.MarshalIndent(v, "", "    ")
-}
-
-func (m *jsonMarshaler) Unmarshal(data []byte, v interface{}) error {
+func (m *jsonMarshaler) Unmarshal(data []byte, v any) error {
 	// IDEA: use a "strict" marshaler, so that we can warn on unrecognized keys (avoiding silly mistakes).  We should
 	//     set aside an officially sanctioned area in the metadata for extensibility by 3rd parties.
 	return json.Unmarshal(data, v)
@@ -87,24 +95,192 @@ func (m *jsonMarshaler) Unmarshal(data []byte, v interface{}) error {
 
 var YAML Marshaler = &yamlMarshaler{}
 
-type yamlMarshaler struct {
+type yamlMarshaler struct{}
+
+func (m *yamlMarshaler) Marshal(v any) ([]byte, error) {
+	if r, ok := v.(yamlutil.HasRawValue); ok {
+		if len(r.RawValue()) > 0 {
+			// Attempt a comment preserving edit:
+			return yamlutil.Edit(r.RawValue(), v)
+		}
+	}
+
+	return yamlutil.YamlEncode(v)
 }
 
-func (m *yamlMarshaler) IsJSONLike() bool {
-	return false
-}
-
-func (m *yamlMarshaler) IsYAMLLike() bool {
-	return true
-}
-
-func (m *yamlMarshaler) Marshal(v interface{}) ([]byte, error) {
-	return yaml.Marshal(v)
-}
-
-func (m *yamlMarshaler) Unmarshal(data []byte, v interface{}) error {
+func (m *yamlMarshaler) Unmarshal(data []byte, v any) error {
 	// IDEA: use a "strict" marshaler, so that we can warn on unrecognized keys (avoiding silly mistakes).  We should
 	//     set aside an officially sanctioned area in the metadata for extensibility by 3rd parties.
 
-	return yaml.Unmarshal(data, v)
+	err := yaml.Unmarshal(data, v)
+	if err != nil {
+		// Return type errors directly
+		if _, ok := err.(*yaml.TypeError); ok {
+			return err
+		}
+		// Other errors will be parse errors due to invalid syntax
+		return fmt.Errorf("invalid YAML file: %w", err)
+	}
+	return nil
+}
+
+type gzipMarshaller struct {
+	inner Marshaler
+}
+
+func (m *gzipMarshaller) Marshal(v any) ([]byte, error) {
+	b, err := m.inner.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	writer := gzip.NewWriter(&buf)
+	defer writer.Close()
+	_, err = writer.Write(b)
+	if err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (m *gzipMarshaller) Unmarshal(data []byte, v any) error {
+	buf := bytes.NewBuffer(data)
+	reader, err := gzip.NewReader(buf)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	inflated, err := io.ReadAll(reader)
+	if err != nil {
+		return err
+	}
+	if err := reader.Close(); err != nil {
+		return err
+	}
+	return m.inner.Unmarshal(inflated, v)
+}
+
+type zstdMarshaller struct {
+	inner Marshaler
+}
+
+var (
+	zstdEncoder = newZstdEncoder()
+	zstdDecoder = newZstdDecoder()
+)
+
+func newZstdEncoder() *zstd.Encoder {
+	enc, err := zstd.NewWriter(nil, zstd.WithZeroFrames(true))
+	if err != nil {
+		panic(fmt.Sprintf("creating zstd encoder: %v", err))
+	}
+	return enc
+}
+
+func newZstdDecoder() *zstd.Decoder {
+	dec, err := zstd.NewReader(nil)
+	if err != nil {
+		panic(fmt.Sprintf("creating zstd decoder: %v", err))
+	}
+	return dec
+}
+
+func (m *zstdMarshaller) Marshal(v any) ([]byte, error) {
+	b, err := m.inner.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return zstdEncoder.EncodeAll(b, nil), nil
+}
+
+func (m *zstdMarshaller) Unmarshal(data []byte, v any) error {
+	inflated, err := zstdDecoder.DecodeAll(data, nil)
+	if err != nil {
+		return err
+	}
+	return m.inner.Unmarshal(inflated, v)
+}
+
+// Compression represents a compression format.
+type Compression string
+
+const (
+	CompressionNone Compression = ""
+	CompressionGzip Compression = "gzip"
+	CompressionZstd Compression = "zstd"
+)
+
+// Ext returns the extension for this compression format.
+func (c Compression) Ext() string {
+	switch c {
+	case CompressionNone:
+		return ""
+	case CompressionGzip:
+		return GZIPExt
+	case CompressionZstd:
+		return ZSTDExt
+	default:
+		return ""
+	}
+}
+
+// IsCompressed returns if data is gzip compressed.
+// Deprecated: use DetectCompression instead.
+func IsCompressed(buf []byte) bool {
+	return isGzipCompressed(buf)
+}
+
+func isGzipCompressed(buf []byte) bool {
+	// Taken from compress/gzip/gunzip.go
+	return len(buf) >= 3 && buf[0] == 31 && buf[1] == 139 && buf[2] == 8
+}
+
+func isZstdCompressed(buf []byte) bool {
+	return len(buf) >= 4 && buf[0] == 0x28 && buf[1] == 0xB5 && buf[2] == 0x2F && buf[3] == 0xFD
+}
+
+// DetectCompression returns the compression format of the provided data.
+func DetectCompression(buf []byte) Compression {
+	if isGzipCompressed(buf) {
+		return CompressionGzip
+	}
+	if isZstdCompressed(buf) {
+		return CompressionZstd
+	}
+	return CompressionNone
+}
+
+func Gzip(m Marshaler) Marshaler {
+	_, alreadyGZIP := m.(*gzipMarshaller)
+	if alreadyGZIP {
+		return m
+	}
+	return &gzipMarshaller{m}
+}
+
+// Zstd wraps a marshaler to compress/decompress with zstd.
+func Zstd(m Marshaler) Marshaler {
+	_, alreadyZSTD := m.(*zstdMarshaller)
+	if alreadyZSTD {
+		return m
+	}
+	return &zstdMarshaller{m}
+}
+
+// Compress wraps a marshaler with the selected compression.
+func Compress(m Marshaler, c Compression) Marshaler {
+	switch c {
+	case CompressionNone:
+		return m
+	case CompressionGzip:
+		return Gzip(m)
+	case CompressionZstd:
+		return Zstd(m)
+	default:
+		return m
+	}
 }

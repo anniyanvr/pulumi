@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,32 +15,31 @@
 package engine
 
 import (
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
+	"github.com/pulumi/pulumi/pkg/v3/display"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 func Import(u UpdateInfo, ctx *Context, opts UpdateOptions, imports []deploy.Import,
-	dryRun bool) (ResourceChanges, result.Result) {
+	dryRun bool,
+) (*deploy.Plan, display.ResourceChanges, error) {
+	contract.Requiref(ctx != nil, "ctx", "cannot be nil")
 
-	contract.Require(u != nil, "u")
-	contract.Require(ctx != nil, "ctx")
+	defer func() { ctx.Events <- NewCancelEvent() }()
 
-	defer func() { ctx.Events <- cancelEvent() }()
-
-	info, err := newDeploymentContext(u, "import", ctx.ParentSpan)
+	info, err := newDeploymentContext(ctx.Cancel.Base(), u, "import", ctx.ParentSpan)
 	if err != nil {
-		return nil, result.FromError(err)
+		return nil, nil, err
 	}
 	defer info.Close()
 
 	emitter, err := makeEventEmitter(ctx.Events, u)
 	if err != nil {
-		return nil, result.FromError(err)
+		return nil, nil, err
 	}
 	defer emitter.Close()
 
-	return update(ctx, info, deploymentOptions{
+	return update(ctx, info, &deploymentOptions{
 		UpdateOptions: opts,
 		SourceFunc:    newRefreshSource,
 		Events:        emitter,
@@ -48,5 +47,7 @@ func Import(u UpdateInfo, ctx *Context, opts UpdateOptions, imports []deploy.Imp
 		StatusDiag:    newEventSink(emitter, true),
 		isImport:      true,
 		imports:       imports,
-	}, dryRun)
+		DryRun:        dryRun,
+		pluginManager: ctx.PluginManager,
+	})
 }

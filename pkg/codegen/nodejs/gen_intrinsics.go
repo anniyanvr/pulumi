@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,9 @@
 
 package nodejs
 
-import "github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
+import (
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+)
 
 const (
 	// intrinsicAwait is the name of the await intrinsic.

@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,54 +19,101 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/property"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 )
 
-func TestMarshalMapJSON(t *testing.T) {
-	m := Map{
-		MustMakeKey("my", "testKey"):        NewValue("testValue"),
-		MustMakeKey("my", "anotherTestKey"): NewValue("anotherTestValue"),
+func TestMarshalMap(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		Value        Map
+		ExpectedYAML string
+		ExpectedJSON string
+	}{
+		{
+			Value: Map{
+				MustMakeKey("my", "testKey"):        NewValue("testValue"),
+				MustMakeKey("my", "anotherTestKey"): NewValue("anotherTestValue"),
+			},
+			ExpectedYAML: "my:anotherTestKey: anotherTestValue\nmy:testKey: testValue\n",
+			ExpectedJSON: `{"my:anotherTestKey":"anotherTestValue","my:testKey":"testValue"}`,
+		},
+		{
+			Value: Map{
+				MustMakeKey("my", "parent"): NewObjectValue(`{"nested":12321123131}`),
+			},
+			ExpectedYAML: "my:parent:\n  nested: 12321123131\n",
+			ExpectedJSON: `{"my:parent":{"nested":12321123131}}`,
+		},
+		{
+			Value: Map{
+				MustMakeKey("my", "parent"): NewObjectValue(`{"nested":[12321123131]}`),
+			},
+			ExpectedYAML: "my:parent:\n  nested:\n  - 12321123131\n",
+			ExpectedJSON: `{"my:parent":{"nested":[12321123131]}}`,
+		},
+		{
+			Value: Map{
+				MustMakeKey("my", "parent"): NewObjectValue(`{"nested":{"foo":12321123131}}`),
+			},
+			ExpectedYAML: "my:parent:\n  nested:\n    foo: 12321123131\n",
+			ExpectedJSON: `{"my:parent":{"nested":{"foo":12321123131}}}`,
+		},
+		{
+			Value: Map{
+				MustMakeKey("my", "parent"): NewObjectValue(`{"nested":4.2}`),
+			},
+			ExpectedYAML: "my:parent:\n  nested: 4.2\n",
+			ExpectedJSON: `{"my:parent":{"nested":4.2}}`,
+		},
+		{
+			Value: Map{
+				MustMakeKey("my", "parent"): NewObjectValue(`{"nested":[4.2]}`),
+			},
+			ExpectedYAML: "my:parent:\n  nested:\n  - 4.2\n",
+			ExpectedJSON: `{"my:parent":{"nested":[4.2]}}`,
+		},
+		{
+			Value: Map{
+				MustMakeKey("my", "parent"): NewObjectValue(`{"nested":{"foo":4.2}}`),
+			},
+			ExpectedYAML: "my:parent:\n  nested:\n    foo: 4.2\n",
+			ExpectedJSON: `{"my:parent":{"nested":{"foo":4.2}}}`,
+		},
 	}
+	for _, test := range tests {
+		t.Run(test.ExpectedYAML, func(t *testing.T) {
+			t.Parallel()
 
-	b, err := json.Marshal(m)
-	assert.NoError(t, err)
-	assert.Equal(t,
-		[]byte("{\"my:anotherTestKey\":\"anotherTestValue\",\"my:testKey\":\"testValue\"}"),
-		b)
+			yamlBytes, err := yaml.Marshal(test.Value)
+			require.NoError(t, err)
+			assert.Equal(t, test.ExpectedYAML, string(yamlBytes))
+			newYAMLMap, err := roundtripMapYAML(test.Value)
+			require.NoError(t, err)
+			assert.Equal(t, test.Value, newYAMLMap)
 
-	newM, err := roundtripMapJSON(m)
-	assert.NoError(t, err)
-	assert.Equal(t, m, newM)
-
-}
-
-func TestMarshalMapYAML(t *testing.T) {
-	m := Map{
-		MustMakeKey("my", "testKey"):        NewValue("testValue"),
-		MustMakeKey("my", "anotherTestKey"): NewValue("anotherTestValue"),
+			jsonBytes, err := json.Marshal(test.Value)
+			require.NoError(t, err)
+			assert.Equal(t, test.ExpectedJSON, string(jsonBytes))
+			newJSONMap, err := roundtripMapJSON(test.Value)
+			require.NoError(t, err)
+			assert.Equal(t, test.Value, newJSONMap)
+		})
 	}
-
-	b, err := yaml.Marshal(m)
-	assert.NoError(t, err)
-
-	s1 := string(b)
-	contract.Ignore(s1)
-	assert.Equal(t, []byte("my:anotherTestKey: anotherTestValue\nmy:testKey: testValue\n"), b)
-
-	newM, err := roundtripMapYAML(m)
-	assert.NoError(t, err)
-	assert.Equal(t, m, newM)
 }
 
 func TestMarshalling(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		Value    map[string]interface{}
+		Value    map[string]any
 		Expected Map
 	}{
 		{
-			Value: map[string]interface{}{
+			Value: map[string]any{
 				"my:anotherTestKey": "anotherTestValue",
 				"my:testKey":        "testValue",
 			},
@@ -76,8 +123,8 @@ func TestMarshalling(t *testing.T) {
 			},
 		},
 		{
-			Value: map[string]interface{}{
-				"my:secureTestKey": map[string]interface{}{
+			Value: map[string]any{
+				"my:secureTestKey": map[string]any{
 					"secure": "securevalue",
 				},
 			},
@@ -86,7 +133,7 @@ func TestMarshalling(t *testing.T) {
 			},
 		},
 		{
-			Value: map[string]interface{}{
+			Value: map[string]any{
 				"my:arrayKey": []string{"a", "b", "c"},
 			},
 			Expected: Map{
@@ -94,8 +141,8 @@ func TestMarshalling(t *testing.T) {
 			},
 		},
 		{
-			Value: map[string]interface{}{
-				"my:mapKey": map[string]interface{}{
+			Value: map[string]any{
+				"my:mapKey": map[string]any{
 					"a": "b",
 					"c": "d",
 				},
@@ -105,9 +152,9 @@ func TestMarshalling(t *testing.T) {
 			},
 		},
 		{
-			Value: map[string]interface{}{
-				"my:servers": []interface{}{
-					map[string]interface{}{"port": 80, "host": "example"},
+			Value: map[string]any{
+				"my:servers": []any{
+					map[string]any{"port": 80, "host": "example"},
 				},
 			},
 			Expected: Map{
@@ -115,7 +162,7 @@ func TestMarshalling(t *testing.T) {
 			},
 		},
 		{
-			Value: map[string]interface{}{
+			Value: map[string]any{
 				"my:mapKey": map[string][]int{
 					"nums": {1, 2, 3},
 				},
@@ -125,9 +172,9 @@ func TestMarshalling(t *testing.T) {
 			},
 		},
 		{
-			Value: map[string]interface{}{
-				"my:mapKey": map[string]interface{}{
-					"a": map[string]interface{}{"secure": "securevalue"},
+			Value: map[string]any{
+				"my:mapKey": map[string]any{
+					"a": map[string]any{"secure": "securevalue"},
 					"c": "d",
 				},
 			},
@@ -136,12 +183,12 @@ func TestMarshalling(t *testing.T) {
 			},
 		},
 		{
-			Value: map[string]interface{}{
-				"my:servers": []interface{}{
-					map[string]interface{}{
+			Value: map[string]any{
+				"my:servers": []any{
+					map[string]any{
 						"port": 80,
 						"host": "example",
-						"token": map[string]interface{}{
+						"token": map[string]any{
 							"secure": "securevalue",
 						},
 					},
@@ -155,9 +202,9 @@ func TestMarshalling(t *testing.T) {
 			},
 		},
 		{
-			Value: map[string]interface{}{
-				"my:mapKey": map[string]interface{}{
-					"a": map[string]interface{}{"secure": "foo", "bar": "blah"},
+			Value: map[string]any{
+				"my:mapKey": map[string]any{
+					"a": map[string]any{"secure": "foo", "bar": "blah"},
 					"c": "d",
 				},
 			},
@@ -169,39 +216,46 @@ func TestMarshalling(t *testing.T) {
 
 	for _, test := range tests {
 		yamlBytes, err := yaml.Marshal(test.Value)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		t.Run(fmt.Sprintf("YAML: %s", yamlBytes), func(t *testing.T) {
+			t.Parallel()
+
 			var m Map
 			err := yaml.Unmarshal(yamlBytes, &m)
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, test.Expected, m)
 
 			newM, err := roundtripMapYAML(m)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, m, newM)
 		})
 
 		jsonBytes, err := json.Marshal(test.Value)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		t.Run(fmt.Sprintf("JSON: %s", jsonBytes), func(t *testing.T) {
+			t.Parallel()
+
 			var m Map
 			err := json.Unmarshal(jsonBytes, &m)
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, test.Expected, m)
 
 			newM, err := roundtripMapJSON(m)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, m, newM)
 		})
 	}
 }
 
 func TestDecrypt(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		Config   Map
-		Expected map[Key]string
+		Config     Map
+		Expected   map[Key]string
+		SecureKeys []Key
 	}{
 		{
 			Config: Map{
@@ -218,6 +272,7 @@ func TestDecrypt(t *testing.T) {
 			Expected: map[Key]string{
 				MustMakeKey("my", "testKey"): "[secret]",
 			},
+			SecureKeys: []Key{MustMakeKey("my", "testKey")},
 		},
 		{
 			Config: Map{
@@ -234,6 +289,7 @@ func TestDecrypt(t *testing.T) {
 			Expected: map[Key]string{
 				MustMakeKey("my", "testKey"): `{"inner":"[secret]"}`,
 			},
+			SecureKeys: []Key{MustMakeKey("my", "testKey")},
 		},
 		{
 			Config: Map{
@@ -243,20 +299,28 @@ func TestDecrypt(t *testing.T) {
 			Expected: map[Key]string{
 				MustMakeKey("my", "testKey"): `[{"inner":"[secret]"},"[secret]"]`,
 			},
+			SecureKeys: []Key{MustMakeKey("my", "testKey")},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%v", test), func(t *testing.T) {
+			t.Parallel()
+
 			decrypter := NewBlindingDecrypter()
 			actual, err := test.Config.Decrypt(decrypter)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, test.Expected, actual)
+
+			assert.Equal(t, len(test.SecureKeys) != 0, test.Config.HasSecureValue())
+			assert.ElementsMatch(t, test.SecureKeys, test.Config.SecureKeys())
 		})
 	}
 }
 
 func TestGetSuccess(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		Key            string
 		Path           bool
@@ -421,15 +485,33 @@ func TestGetSuccess(t *testing.T) {
 			},
 			ExpectNotFound: true,
 		},
+		{
+			Key:  `my:parent.nested`,
+			Path: true,
+			Config: Map{
+				MustMakeKey("my", "parent"): NewObjectValue(`{"nested":12321123131}`),
+			},
+			Expected: NewValue("12321123131"),
+		},
+		{
+			Key:  `my:parent.nested`,
+			Path: true,
+			Config: Map{
+				MustMakeKey("my", "parent"): NewObjectValue(`{"nested":4.2}`),
+			},
+			Expected: NewValue("4.2"),
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%v", test), func(t *testing.T) {
+			t.Parallel()
+
 			key, err := ParseKey(test.Key)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			v, ok, err := test.Config.Get(key, test.Path)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			if test.ExpectNotFound {
 				assert.False(t, ok)
 				assert.Equal(t, Value{}, v)
@@ -442,29 +524,37 @@ func TestGetSuccess(t *testing.T) {
 }
 
 func TestGetFail(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		Key string
+		Key           string
+		ExpectedError string
 	}{
 		{
-			Key: `my:["foo`,
+			Key:           `my:["foo`,
+			ExpectedError: "invalid config key path: missing closing quote in property name",
 		},
 	}
 
 	for _, test := range tests {
-		t.Run(fmt.Sprintf("%v", test.Key), func(t *testing.T) {
+		t.Run(test.Key, func(t *testing.T) {
+			t.Parallel()
+
 			config := make(Map)
 
 			key, err := ParseKey(test.Key)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			_, found, err := config.Get(key, true /*path*/)
 			assert.False(t, found)
-			assert.Error(t, err)
+			assert.EqualError(t, err, test.ExpectedError)
 		})
 	}
 }
 
 func TestRemoveSuccess(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		Key      string
 		Path     bool
@@ -567,48 +657,79 @@ func TestRemoveSuccess(t *testing.T) {
 				MustMakeKey("my", "names"): NewObjectValue(`["a","b","c"]`),
 			},
 		},
-	}
-
-	for _, test := range tests {
-		t.Run(fmt.Sprintf("%v", test), func(t *testing.T) {
-			key, err := ParseKey(test.Key)
-			assert.NoError(t, err)
-			err = test.Config.Remove(key, test.Path)
-			assert.NoError(t, err)
-			assert.Equal(t, test.Expected, test.Config)
-		})
-	}
-}
-
-func TestRemoveFail(t *testing.T) {
-	tests := []struct {
-		Key    string
-		Config Map
-	}{
 		{
-			Key:    `my:["foo`,
-			Config: Map{},
+			Key:  `my:outer.inner.nested`,
+			Path: true,
+			Config: Map{
+				MustMakeKey("my", "outer"): NewObjectValue(`{"inner":{"nested": "value"}}`),
+			},
+			Expected: Map{
+				MustMakeKey("my", "outer"): NewObjectValue(`{"inner":{}}`),
+			},
 		},
 		{
-			Key: `my:foo.bar`,
+			Key:  `my:outer[0].nested`,
+			Path: true,
 			Config: Map{
-				MustMakeKey("my", "foo"): NewObjectValue(`{"bar":"baz","secure":"myvalue"}`),
+				MustMakeKey("my", "outer"): NewObjectValue(`[{"nested": "value"}]`),
+			},
+			Expected: Map{
+				MustMakeKey("my", "outer"): NewObjectValue(`[{}]`),
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%v", test), func(t *testing.T) {
+			t.Parallel()
+
 			key, err := ParseKey(test.Key)
-			assert.NoError(t, err)
+			require.NoError(t, err)
+			err = test.Config.Remove(key, test.Path)
+			require.NoError(t, err)
+			assert.Equal(t, test.Expected, test.Config)
+		})
+	}
+}
+
+func TestRemoveFail(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		Key           string
+		Config        Map
+		ExpectedError string
+	}{
+		{
+			Key:           `my:["foo`,
+			Config:        Map{},
+			ExpectedError: "invalid config key path: missing closing quote in property name",
+		},
+		{
+			Key: `my:foo.bar`,
+			Config: Map{
+				MustMakeKey("my", "foo"): NewObjectValue(`{"bar":"baz","secure":"myvalue"}`),
+			},
+			ExpectedError: "bar.bar: maps with the single key \"secure\" are reserved",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%v", test), func(t *testing.T) {
+			t.Parallel()
+
+			key, err := ParseKey(test.Key)
+			require.NoError(t, err)
 
 			err = test.Config.Remove(key, true /*path*/)
-			assert.Error(t, err)
+			assert.EqualError(t, err, test.ExpectedError)
 		})
 	}
 }
 
 func TestSetSuccess(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		Key      string
 		Value    Value
@@ -1080,19 +1201,32 @@ func TestSetSuccess(t *testing.T) {
 				MustMakeKey("my", "key"): NewObjectValue(`{"bar":"baz","secure":"value"}`),
 			},
 		},
+		{
+			Key:   `my:special.object`,
+			Path:  true,
+			Value: NewObjectValue(`{"foo":"bar","fizz":"buzz"}`),
+			Config: Map{
+				MustMakeKey("my", "special"): NewObjectValue(`{"thing1":1,"thing2":2}`),
+			},
+			Expected: Map{
+				MustMakeKey("my", "special"): NewObjectValue(`{"object":{"fizz":"buzz","foo":"bar"},"thing1":1,"thing2":2}`),
+			},
+		},
 	}
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%v", test), func(t *testing.T) {
+			t.Parallel()
+
 			if test.Config == nil {
 				test.Config = make(Map)
 			}
 
 			key, err := ParseKey(test.Key)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			err = test.Config.Set(key, test.Value, test.Path)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			assert.Equal(t, test.Expected, test.Config)
 		})
@@ -1100,33 +1234,59 @@ func TestSetSuccess(t *testing.T) {
 }
 
 func TestSetFail(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		Key    string
-		Config Map
+		Key           string
+		Config        Map
+		ExpectedError string
 	}{
 		// Syntax errors.
-		{Key: "my:root["},
-		{Key: `my:root["nested]`},
-		{Key: "my:root.array[abc]"},
-		{Key: "my:root.[1]"},
+		{
+			Key:           "my:root[",
+			ExpectedError: "invalid config key path: missing closing bracket in array index",
+		},
+		{
+			Key:           `my:root["nested]`,
+			ExpectedError: "invalid config key path: missing closing quote in property name",
+		},
+		{
+			Key:           "my:root.array[abc]",
+			ExpectedError: "invalid config key path: invalid array index: strconv.ParseInt: parsing \"abc\": invalid syntax",
+		},
 
 		// First path component must be a string.
-		{Key: `my:[""]`},
-		{Key: "my:[0]"},
+		{
+			Key:           `my:[""]`,
+			ExpectedError: "config key is empty",
+		},
+		{
+			Key:           "my:[0]",
+			ExpectedError: "first path segement of config key must be a string",
+		},
 
 		// Index out of range.
-		{Key: `my:name[-1]`},
-		{Key: `my:name[1]`},
+		{
+			Key:           `my:name[-1]`,
+			ExpectedError: "name[-1]: array index out of range",
+		},
 		{
 			Key: `my:name[4]`,
 			Config: Map{
 				MustMakeKey("my", "name"): NewObjectValue(`["a","b","c"]`),
 			},
+			ExpectedError: "name[4]: array index out of range",
 		},
 
 		// A "secure" key that is a map with a single string value is reserved by the system.
-		{Key: `my:key.secure`},
-		{Key: `my:super.nested.map.secure`},
+		{
+			Key:           `my:key.secure`,
+			ExpectedError: "maps with the single key \"secure\" are reserved",
+		},
+		{
+			Key:           `my:super.nested.map.secure`,
+			ExpectedError: "maps with the single key \"secure\" are reserved",
+		},
 
 		// Type mismatches.
 		{
@@ -1134,43 +1294,57 @@ func TestSetFail(t *testing.T) {
 			Config: Map{
 				MustMakeKey("my", "outer"): NewObjectValue("[1,2,3]"),
 			},
+			ExpectedError: "outer.inner: key for an array must be an int",
 		},
 		{
 			Key: `my:array[0]`,
 			Config: Map{
 				MustMakeKey("my", "array"): NewObjectValue(`{"inner":"value"}`),
 			},
+			ExpectedError: "array[0]: key for a map must be a string",
 		},
 		{
 			Key: `my:outer.inner.nested`,
 			Config: Map{
 				MustMakeKey("my", "outer"): NewObjectValue(`{"inner":"value"}`),
 			},
+			ExpectedError: "outer.inner: expected a map",
 		},
 		{
 			Key: `my:outer.inner[0]`,
 			Config: Map{
 				MustMakeKey("my", "outer"): NewObjectValue(`{"inner":"value"}`),
 			},
+			ExpectedError: "outer.inner: expected an array",
+		},
+
+		// Strict path parsing
+		{
+			Key:           `my:root.[1]"`,
+			ExpectedError: "invalid config key path: expected property name after '.'",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%v", test), func(t *testing.T) {
+			t.Parallel()
+
 			if test.Config == nil {
 				test.Config = make(Map)
 			}
 
 			key, err := ParseKey(test.Key)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			err = test.Config.Set(key, NewValue("value"), true /*path*/)
-			assert.Error(t, err)
+			assert.EqualError(t, err, test.ExpectedError)
 		})
 	}
 }
 
 func TestCopyMap(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		Config   Map
 		Expected Map
@@ -1237,13 +1411,120 @@ func TestCopyMap(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(fmt.Sprintf("%v", test), func(t *testing.T) {
+			t.Parallel()
+
 			newConfig, err := test.Config.Copy(newPrefixCrypter("stackA"), newPrefixCrypter("stackB"))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			assert.Equal(t, test.Expected, newConfig)
 		})
 	}
+}
 
+func TestPropertyMap(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		Config   Map
+		Expected property.Map
+	}{
+		{
+			Config: Map{
+				MustMakeKey("my", "testKey"): NewValue("testValue"),
+			},
+			Expected: property.NewMap(map[string]property.Value{
+				"my:testKey": property.New("testValue"),
+			}),
+		},
+		{
+			Config: Map{
+				MustMakeKey("my", "testKey"): NewValue("1"),
+			},
+			Expected: property.NewMap(map[string]property.Value{
+				"my:testKey": property.New(1.0),
+			}),
+		},
+		{
+			Config: Map{
+				MustMakeKey("my", "testKey"): NewValue("18446744073709551615"),
+			},
+			Expected: property.NewMap(map[string]property.Value{
+				"my:testKey": property.New(1.8446744073709552e+19),
+			}),
+		},
+		{
+			Config: Map{
+				MustMakeKey("my", "testKey"): NewValue("true"),
+			},
+			Expected: property.NewMap(map[string]property.Value{
+				"my:testKey": property.New(true),
+			}),
+		},
+		{
+			Config: Map{
+				MustMakeKey("my", "testKey"): NewSecureValue("stackAsecurevalue"),
+			},
+			Expected: property.NewMap(map[string]property.Value{
+				"my:testKey": property.New("stackAsecurevalue").WithSecret(true),
+			}),
+		},
+		{
+			Config: Map{
+				MustMakeKey("my", "testKey"): NewObjectValue(`{"inner":"value"}`),
+			},
+			Expected: property.NewMap(map[string]property.Value{
+				"my:testKey": property.New(map[string]property.Value{
+					"inner": property.New("value"),
+				}),
+			}),
+		},
+		{
+			Config: Map{
+				//nolint:lll
+				MustMakeKey("my", "testKey"): NewSecureObjectValue(`[{"inner":{"secure":"stackAsecurevalue"}},{"secure":"stackAsecurevalue2"}]`),
+			},
+			Expected: property.NewMap(map[string]property.Value{
+				"my:testKey": property.New([]property.Value{
+					property.New(map[string]property.Value{
+						"inner": property.New("stackAsecurevalue").WithSecret(true),
+					}),
+					property.New("stackAsecurevalue2").WithSecret(true),
+				}),
+			}),
+		},
+		{
+			Config: Map{
+				MustMakeKey("my", "test.Key"): NewValue("testValue"),
+			},
+			Expected: property.NewMap(map[string]property.Value{
+				"my:test.Key": property.New("testValue"),
+			}),
+		},
+		{
+			Config: Map{
+				MustMakeKey("my", "name"): NewObjectValue(`[["value"]]`),
+			},
+			Expected: property.NewMap(map[string]property.Value{
+				"my:name": property.New([]property.Value{
+					property.New([]property.Value{
+						property.New("value"),
+					}),
+				}),
+			}),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%v", test), func(t *testing.T) {
+			t.Parallel()
+
+			decrypter := nopCrypter{}
+			propMap, err := test.Config.AsDecryptedPropertyMap(t.Context(), decrypter)
+			require.NoError(t, err)
+
+			assert.Equal(t, test.Expected, propMap)
+		})
+	}
 }
 
 func roundtripMapYAML(m Map) (Map, error) {
@@ -1254,8 +1535,9 @@ func roundtripMapJSON(m Map) (Map, error) {
 	return roundtripMap(m, json.Marshal, json.Unmarshal)
 }
 
-func roundtripMap(m Map, marshal func(v interface{}) ([]byte, error),
-	unmarshal func([]byte, interface{}) error) (Map, error) {
+func roundtripMap(m Map, marshal func(v any) ([]byte, error),
+	unmarshal func([]byte, any) error,
+) (Map, error) {
 	b, err := marshal(m)
 	if err != nil {
 		return nil, err

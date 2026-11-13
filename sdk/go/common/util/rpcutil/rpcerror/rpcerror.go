@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,25 +29,28 @@
 package rpcerror
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/golang/protobuf/proto"
-	"github.com/pkg/errors"
+	pkgerrors "github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/runtime/protoiface"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	pulumirpc "github.com/pulumi/pulumi/sdk/v2/proto/go"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	perrors "github.com/pulumi/pulumi/sdk/v3/go/pulumi/errors"
+	pulumirpc "github.com/pulumi/pulumi/sdk/v3/proto/go"
 )
 
 // Error represents an error response from an RPC server endpoint.
 // It contains a gRPC error code, a message, and a chain of "wrapped"
 // errors that led to the final dispatch of this particular error message.
 type Error struct {
-	code    codes.Code
-	message string
-	cause   *ErrorCause
-	details []interface{}
+	code                  codes.Code
+	message               string
+	cause                 *ErrorCause
+	inputPropertiesErrors []perrors.InputPropertyErrorDetails
+	details               []any
 }
 
 var _ error = (*Error)(nil)
@@ -79,8 +82,14 @@ func (r *Error) Cause() *ErrorCause {
 // Details returns the list of all auxiliary protobuf objects that were
 // attached to this error by the server. It's up to the caller to try and
 // downcast them to look for the one they are interested in.
-func (r *Error) Details() []interface{} {
+func (r *Error) Details() []any {
 	return r.details
+}
+
+// InputPropertiesErrors returns the list of input properties error that
+// were attached to this error.
+func (r *Error) InputPropertiesErrors() []perrors.InputPropertyErrorDetails {
+	return r.inputPropertiesErrors
 }
 
 // ErrorCause represents a root cause of an error that ultimately caused
@@ -115,7 +124,7 @@ func New(code codes.Code, message string) error {
 
 // Newf creates a new gRPC-compatible `error` with the given code and
 // formatted message.
-func Newf(code codes.Code, messageFormat string, args ...interface{}) error {
+func Newf(code codes.Code, messageFormat string, args ...any) error {
 	status := status.Newf(code, messageFormat, args...)
 	return status.Err()
 }
@@ -129,7 +138,7 @@ func Wrap(code codes.Code, err error, message string) error {
 	status := status.New(code, message)
 	cause := serializeErrorCause(err)
 	status, newErr := status.WithDetails(cause)
-	contract.AssertNoError(newErr)
+	contract.AssertNoErrorf(newErr, "error adding details to status")
 	return status.Err()
 }
 
@@ -138,22 +147,40 @@ func Wrap(code codes.Code, err error, message string) error {
 //
 // It is a logic error to call this function on an error previously
 // returned by `rpcerrors.Wrap`.
-func Wrapf(code codes.Code, err error, messageFormat string, args ...interface{}) error {
+func Wrapf(code codes.Code, err error, messageFormat string, args ...any) error {
 	status := status.Newf(code, messageFormat, args...)
 	cause := serializeErrorCause(err)
 	status, newErr := status.WithDetails(cause)
-	contract.AssertNoError(newErr)
+	contract.AssertNoErrorf(newErr, "error adding details to status")
+	return status.Err()
+}
+
+func WrapDetailedError(err error) error {
+	if iperr, ok := errors.AsType[*perrors.InputPropertiesError](err); ok {
+		status := status.New(codes.InvalidArgument, iperr.Message)
+		errorDetails := pulumirpc.InputPropertiesError{}
+		for _, e := range iperr.Errors {
+			errorDetails.Errors = append(errorDetails.Errors, &pulumirpc.InputPropertiesError_PropertyError{
+				PropertyPath: e.PropertyPath,
+				Reason:       e.Reason,
+			})
+		}
+		status, newErr := status.WithDetails(&errorDetails)
+		contract.AssertNoErrorf(newErr, "error adding details to status")
+		return status.Err()
+	}
+	status := status.New(codes.Unknown, err.Error())
 	return status.Err()
 }
 
 // WithDetails adds arbitrary protobuf payloads to errors created by this package.
 // These errors will be accessible by calling `Details` on `Error` instances created
 // by `FromError`.
-func WithDetails(err error, details ...proto.Message) error {
+func WithDetails(err error, details ...protoiface.MessageV1) error {
 	status, ok := status.FromError(err)
 	contract.Assertf(ok, "WithDetails called on error not created by rpcerror")
 	status, conversionError := status.WithDetails(details...)
-	contract.AssertNoError(conversionError)
+	contract.AssertNoErrorf(conversionError, "error adding details to status")
 	return status.Err()
 }
 
@@ -177,6 +204,15 @@ func FromError(err error) (*Error, bool) {
 	rpcError.message = status.Message()
 	rpcError.details = status.Details()
 	for _, details := range status.Details() {
+		if d, ok := details.(*pulumirpc.InputPropertiesError); ok {
+			rpcError.inputPropertiesErrors = make([]perrors.InputPropertyErrorDetails, len(d.Errors))
+			for i, e := range d.GetErrors() {
+				rpcError.inputPropertiesErrors[i] = perrors.InputPropertyErrorDetails{
+					PropertyPath: e.GetPropertyPath(),
+					Reason:       e.GetReason(),
+				}
+			}
+		}
 		if errorCause, ok := details.(*pulumirpc.ErrorCause); ok {
 			contract.Assertf(rpcError.cause == nil, "RPC endpoint sent more than one ErrorCause")
 			rpcError.cause = &ErrorCause{
@@ -204,7 +240,7 @@ func serializeErrorCause(err error) *pulumirpc.ErrorCause {
 	// The pkg/errors documentation actually encourages this pattern (!) so
 	// that's what we're doing here to get at the error's stack trace.
 	type stackTracer interface {
-		StackTrace() errors.StackTrace
+		StackTrace() pkgerrors.StackTrace
 	}
 
 	message := err.Error()

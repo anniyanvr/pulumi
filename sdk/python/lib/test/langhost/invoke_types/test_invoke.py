@@ -1,4 +1,4 @@
-# Copyright 2016-2020, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,20 +20,27 @@ class TestInvoke(LanghostTest):
     def test_invoke_success(self):
         self.run_test(
             program=path.join(self.base_path(), "invoke_types"),
-            expected_resource_count=2)
+            expected_resource_count=2,
+        )
 
     def invoke(self, _ctx, token, args, provider, _version):
         def result(expected_first_value: str, expected_second_value: float):
-            self.assertDictEqual({
-                "firstValue": expected_first_value,
-                "secondValue": expected_second_value,
-            }, args)
-            return ([], {
-                "nested": {
-                    "firstValue": args["firstValue"] * 2,
-                    "secondValue": args["secondValue"] + 1,
+            self.assertDictEqual(
+                {
+                    "firstValue": expected_first_value,
+                    "secondValue": expected_second_value,
                 },
-            })
+                args,
+            )
+            return (
+                [],
+                {
+                    "nested": {
+                        "firstValue": args["firstValue"] * 2,
+                        "secondValue": args["secondValue"] + 1,
+                    },
+                },
+            )
 
         if token == "test:index:MyFunction":
             return result("hello", 42)
@@ -42,25 +49,49 @@ class TestInvoke(LanghostTest):
         else:
             self.fail(f"unexpected token {token}")
 
-
-    def register_resource(self, _ctx, _dry_run, ty, name, resource, _deps,
-                          _parent, _custom, _protect, _provider, _property_deps, _delete_before_replace,
-                          _ignore_changes, _version):
+    def register_resource(
+        self,
+        _ctx,
+        _dry_run,
+        ty,
+        name,
+        _resource,
+        _dependencies,
+        _parent,
+        _custom,
+        protect,
+        _provider,
+        _property_deps,
+        _delete_before_replace,
+        _ignore_changes,
+        _version,
+        _import,
+        _replace_on_changes,
+        _providers,
+        source_position,
+        stack_trace,
+    ):
         if name == "resourceA":
-            self.assertEqual({
-                "first_value": "hellohello",
-                "second_value": 43,
-            }, resource)
+            self.assertEqual(
+                {
+                    "first_value": "hellohello",
+                    "second_value": 43,
+                },
+                _resource,
+            )
         elif name == "resourceB":
-            self.assertEqual({
-                "first_value": "worldworld",
-                "second_value": 101,
-            }, resource)
+            self.assertEqual(
+                {
+                    "first_value": "worldworld",
+                    "second_value": 101,
+                },
+                _resource,
+            )
         else:
             self.fail(f"unknown resource: {name}")
 
         return {
             "urn": self.make_urn(ty, name),
             "id": name,
-            "object": resource,
+            "object": _resource,
         }

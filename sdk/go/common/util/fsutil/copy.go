@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,19 +15,18 @@
 package fsutil
 
 import (
-	"io/ioutil"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
 
 // CopyFile is a braindead simple function that copies a src file to a dst file.  Note that it is not general purpose:
-// it doesn't handle symbolic links, it doesn't try to be efficient, it doesn't handle copies where src and dst overlap,
+// it doesn't try to be efficient, it doesn't handle copies where src and dst overlap,
 // and it makes no attempt to preserve file permissions.  It is what we need for this utility package, no more, no less.
 func CopyFile(dst string, src string, excl map[string]bool) error {
-	info, err := os.Lstat(src)
-	if os.IsNotExist(err) {
-		return nil
-	} else if err != nil {
+	info, err := os.Stat(src)
+	if err != nil {
 		return err
 	} else if excl[info.Name()] {
 		return nil
@@ -35,9 +34,9 @@ func CopyFile(dst string, src string, excl map[string]bool) error {
 
 	if info.IsDir() {
 		// Recursively copy all files in a directory.
-		files, err := ioutil.ReadDir(src)
+		files, err := os.ReadDir(src)
 		if err != nil {
-			return err
+			return fmt.Errorf("read dir: %w", err)
 		}
 		for _, file := range files {
 			name := file.Name()
@@ -47,18 +46,22 @@ func CopyFile(dst string, src string, excl map[string]bool) error {
 			}
 		}
 	} else if info.Mode().IsRegular() {
-		// Copy files by reading and rewriting their contents.  Skip symlinks and other special files.
-		data, err := ioutil.ReadFile(src)
+		// Copy regular files by reading and rewriting their contents.  Skip other special files.
+
+		srcFile, err := os.Open(src)
 		if err != nil {
-			return err
+			return fmt.Errorf("open file: %w", err)
 		}
 		dstdir := filepath.Dir(dst)
-		if err = os.MkdirAll(dstdir, 0700); err != nil {
-			return err
+		if err = os.MkdirAll(dstdir, 0o700); err != nil {
+			return errors.Join(err, srcFile.Close())
 		}
-		if err = ioutil.WriteFile(dst, data, info.Mode()); err != nil {
-			return err
+		dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode())
+		if err != nil {
+			return errors.Join(err, srcFile.Close())
 		}
+		_, err = srcFile.WriteTo(dstFile)
+		return errors.Join(err, dstFile.Close(), srcFile.Close())
 	}
 
 	return nil

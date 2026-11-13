@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,73 +12,81 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// tslint:disable
+/* eslint-disable */
 
 import * as assert from "assert";
-import { ComponentResourceOptions, ProviderResource, merge, mergeOptions } from "../resource";
-import { asyncTest } from "./util";
+import { invokeOptionsFromResourceOptions, invokeOutputOptionsFromResourceOptions } from "../invoke";
+import {
+    ComponentResourceOptions,
+    ErrorHookFunction,
+    ProviderResource,
+    Resource,
+    ResourceOptions,
+    merge,
+    mergeOptions,
+} from "../resource";
 
 describe("options", () => {
     describe("merge", () => {
         describe("scaler", () => {
-            it("keeps value from opts1 if not provided in opts2", asyncTest(async () => {
+            it("keeps value from opts1 if not provided in opts2", async () => {
                 const result = mergeOptions({ id: "a" }, {});
                 assert.strictEqual(result.id, "a");
-            }));
-            it("keeps value from opts2 if not provided in opts1", asyncTest(async () => {
-                const result = mergeOptions({ }, { id: "a" });
+            });
+            it("keeps value from opts2 if not provided in opts1", async () => {
+                const result = mergeOptions({}, { id: "a" });
                 assert.strictEqual(result.id, "a");
-            }));
-            it("overwrites value from opts1 if given null in opts2", asyncTest(async () => {
+            });
+            it("overwrites value from opts1 if given null in opts2", async () => {
                 const result = mergeOptions({ id: "a" }, { id: null! });
                 assert.strictEqual(result.id, null);
-            }));
-            it("overwrites value from opts1 if given undefined in opts2", asyncTest(async () => {
+            });
+            it("overwrites value from opts1 if given undefined in opts2", async () => {
                 const result = mergeOptions({ id: "a" }, { id: undefined });
                 assert.strictEqual(result.id, undefined);
-            }));
-            it("overwrites value from opts1 if given value in opts2", asyncTest(async () => {
+            });
+            it("overwrites value from opts1 if given value in opts2", async () => {
                 const result = mergeOptions({ id: "a" }, { id: "b" });
                 assert.strictEqual(result.id, "b");
-            }));
-            it("overwrites promise-value from opts1 if given value in opts2", asyncTest(async () => {
+            });
+            it("overwrites promise-value from opts1 if given value in opts2", async () => {
                 const result: any = mergeOptions({ id: Promise.resolve("a") }, { id: "b" });
                 assert.strictEqual(await result.id.promise(), "b");
-            }));
-            it("overwrites value from opts1 if given promise-value in opts2", asyncTest(async () => {
+            });
+            it("overwrites value from opts1 if given promise-value in opts2", async () => {
                 const result: any = mergeOptions({ id: "a" }, { id: Promise.resolve("b") });
                 assert.strictEqual(await result.id.promise(), "b");
-            }));
-            it("overwrites promise-value from opts1 if given promise-value in opts2", asyncTest(async () => {
+            });
+            it("overwrites promise-value from opts1 if given promise-value in opts2", async () => {
                 const result: any = mergeOptions({ id: Promise.resolve("a") }, { id: Promise.resolve("b") });
                 assert.strictEqual(await result.id.promise(), "b");
-            }));
+            });
         });
 
         describe("array", () => {
-            it("keeps value from opts1 if not provided in opts2", asyncTest(async () => {
+            it("keeps value from opts1 if not provided in opts2", async () => {
                 const result = mergeOptions({ ignoreChanges: ["a"] }, {});
                 assert.deepStrictEqual(result.ignoreChanges, ["a"]);
-            }));
-            it("keeps value from opts2 if not provided in opts1", asyncTest(async () => {
-                const result = mergeOptions({ }, { ignoreChanges: ["a"] });
+            });
+            it("keeps value from opts2 if not provided in opts1", async () => {
+                const result = mergeOptions({}, { ignoreChanges: ["a"] });
                 assert.deepStrictEqual(result.ignoreChanges, ["a"]);
-            }));
-            it("does nothing to value from opts1 if given null in opts2", asyncTest(async () => {
+            });
+            it("does nothing to value from opts1 if given null in opts2", async () => {
                 const result = mergeOptions({ ignoreChanges: ["a"] }, { ignoreChanges: null! });
                 assert.deepStrictEqual(result.ignoreChanges, ["a"]);
-            }));
-            it("does nothing to value from opts1 if given undefined in opts2", asyncTest(async () => {
+            });
+            it("does nothing to value from opts1 if given undefined in opts2", async () => {
                 const result = mergeOptions({ ignoreChanges: ["a"] }, { ignoreChanges: undefined });
                 assert.deepStrictEqual(result.ignoreChanges, ["a"]);
-            }));
-            it("merges values from opts1 if given value in opts2", asyncTest(async () => {
+            });
+            it("merges values from opts1 if given value in opts2", async () => {
                 const result = mergeOptions({ ignoreChanges: ["a"] }, { ignoreChanges: ["b"] });
                 assert.deepStrictEqual(result.ignoreChanges, ["a", "b"]);
-            }));
+            });
 
             describe("including promises", () => {
-                it("merges non-promise in opts1 and promise in opts2", asyncTest(async () => {
+                it("merges non-promise in opts1 and promise in opts2", async () => {
                     const result = mergeOptions({ aliases: ["a"] }, { aliases: [Promise.resolve("b")] });
                     const aliases = result.aliases!;
                     assert.deepStrictEqual(Array.isArray(aliases), true);
@@ -88,8 +96,8 @@ describe("options", () => {
 
                     const val1 = await aliases[1];
                     assert.deepStrictEqual(val1, "b");
-                }));
-                it("merges promise in opts1 and non-promise in opts2", asyncTest(async () => {
+                });
+                it("merges promise in opts1 and non-promise in opts2", async () => {
                     const result = mergeOptions({ aliases: [Promise.resolve("a")] }, { aliases: ["b"] });
                     const aliases = result.aliases!;
                     assert.deepStrictEqual(Array.isArray(aliases), true);
@@ -99,33 +107,43 @@ describe("options", () => {
 
                     const val0 = await aliases[0];
                     assert.deepStrictEqual(val0, "a");
-                }));
+                });
             });
         });
 
         describe("arrayTransformations", () => {
             const a = () => undefined;
             const b = () => undefined;
-            it("keeps value from opts1 if not provided in opts2", asyncTest(async () => {
+            it("keeps value from opts1 if not provided in opts2", async () => {
                 const result = mergeOptions({ transformations: [a] }, {});
                 assert.deepStrictEqual(result.transformations, [a]);
-            }));
-            it("keeps value from opts2 if not provided in opts1", asyncTest(async () => {
-                const result = mergeOptions({ }, { transformations: [a] });
+            });
+            it("keeps value from opts2 if not provided in opts1", async () => {
+                const result = mergeOptions({}, { transformations: [a] });
                 assert.deepStrictEqual(result.transformations, [a]);
-            }));
-            it("does nothing to value from opts1 if given null in opts2", asyncTest(async () => {
+            });
+            it("does nothing to value from opts1 if given null in opts2", async () => {
                 const result = mergeOptions({ transformations: [a] }, { transformations: null! });
                 assert.deepStrictEqual(result.transformations, [a]);
-            }));
-            it("does nothing to value from opts1 if given undefined in opts2", asyncTest(async () => {
+            });
+            it("does nothing to value from opts1 if given undefined in opts2", async () => {
                 const result = mergeOptions({ transformations: [a] }, { transformations: undefined });
                 assert.deepStrictEqual(result.transformations, [a]);
-            }));
-            it("merges values from opts1 if given value in opts2", asyncTest(async () => {
+            });
+            it("merges values from opts1 if given value in opts2", async () => {
                 const result = mergeOptions({ transformations: [a] }, { transformations: [b] });
                 assert.deepStrictEqual(result.transformations, [a, b]);
-            }));
+            });
+        });
+
+        describe("stateMigrations", () => {
+            const a = () => undefined;
+            const b = () => undefined;
+
+            it("merges migrations in order", () => {
+                const result = mergeOptions({ stateMigrations: [a] }, { stateMigrations: [b] });
+                assert.deepStrictEqual(result.stateMigrations, [a, b]);
+            });
         });
 
         describe("providers", () => {
@@ -135,32 +153,45 @@ describe("options", () => {
 
             it("merges singleton into map", () => {
                 const result = mergeOptions({ providers: { aws: awsProvider } }, { provider: azureProvider });
-                assert.deepStrictEqual(result, { providers: { aws: awsProvider, azure: azureProvider } });
+                assert.deepStrictEqual(result, { providers: { aws: awsProvider }, provider: azureProvider });
             });
             it("merges singleton-array into map", () => {
                 const result = mergeOptions({ providers: { aws: awsProvider } }, { providers: [azureProvider] });
                 assert.deepStrictEqual(result, { providers: { aws: awsProvider, azure: azureProvider } });
             });
             it("merges array into map", () => {
-                const result = mergeOptions({ providers: { aws: awsProvider } }, { providers: [azureProvider, gcpProvider] });
-                assert.deepStrictEqual(result, { providers: { aws: awsProvider, azure: azureProvider, gcp: gcpProvider } });
+                const result = mergeOptions(
+                    { providers: { aws: awsProvider } },
+                    { providers: [azureProvider, gcpProvider] },
+                );
+                assert.deepStrictEqual(result, {
+                    providers: { aws: awsProvider, azure: azureProvider, gcp: gcpProvider },
+                });
             });
 
             it("merges map into singleton", () => {
                 const result = mergeOptions({ provider: awsProvider }, { providers: { azure: azureProvider } });
-                assert.deepStrictEqual(result, { providers: { aws: awsProvider, azure: azureProvider } });
+                assert.deepStrictEqual(result, { provider: awsProvider, providers: { azure: azureProvider } });
             });
             it("merges map into singleton-array", () => {
                 const result = mergeOptions({ providers: [awsProvider] }, { providers: { azure: azureProvider } });
                 assert.deepStrictEqual(result, { providers: { aws: awsProvider, azure: azureProvider } });
             });
             it("merges map into array", () => {
-                const result = mergeOptions({ providers: [awsProvider, azureProvider] }, { providers: { gcp: gcpProvider } });
-                assert.deepStrictEqual(result, { providers: { aws: awsProvider, azure: azureProvider, gcp: gcpProvider } });
+                const result = mergeOptions(
+                    { providers: [awsProvider, azureProvider] },
+                    { providers: { gcp: gcpProvider } },
+                );
+                assert.deepStrictEqual(result, {
+                    providers: { aws: awsProvider, azure: azureProvider, gcp: gcpProvider },
+                });
             });
 
             it("merges map into map", () => {
-                const result = mergeOptions({ providers: { aws: awsProvider } }, { providers: { azure: azureProvider } });
+                const result = mergeOptions(
+                    { providers: { aws: awsProvider } },
+                    { providers: { azure: azureProvider } },
+                );
                 assert.deepStrictEqual(result, { providers: { aws: awsProvider, azure: azureProvider } });
             });
 
@@ -170,8 +201,10 @@ describe("options", () => {
             });
 
             it("merges singleton into singleton", () => {
-                const result = mergeOptions(<ComponentResourceOptions>{ provider: awsProvider }, { provider: azureProvider });
-                assert.deepStrictEqual(result, { providers: { aws: awsProvider, azure: azureProvider } });
+                const result = mergeOptions(<ComponentResourceOptions>{ provider: awsProvider }, {
+                    provider: azureProvider,
+                });
+                assert.deepStrictEqual(result, { provider: azureProvider });
             });
         });
 
@@ -221,6 +254,86 @@ describe("options", () => {
             it("merges promise-array and promise-array into array", async () => {
                 const result = mergeDependsOn(Promise.resolve(["a"]), Promise.resolve(["b"]));
                 assert.deepStrictEqual(await result.promise(), ["a", "b"]);
+            });
+        });
+
+        describe("hooks.onError", () => {
+            const makeHook = (name: string) => ({
+                name,
+                callback: (() => false) as ErrorHookFunction,
+                __registered: Promise.resolve(),
+                __pulumiErrorHook: true as const,
+            });
+
+            it("keeps onError hooks from opts1 if not provided in opts2", async () => {
+                const hook = makeHook("h1");
+                const result = mergeOptions({ hooks: { onError: [hook] } }, {});
+                assert.deepStrictEqual(result.hooks?.onError, [hook]);
+            });
+            it("keeps onError hooks from opts2 if not provided in opts1", async () => {
+                const hook = makeHook("h1");
+                const result = mergeOptions({}, { hooks: { onError: [hook] } });
+                assert.deepStrictEqual(result.hooks?.onError, [hook]);
+            });
+            it("merges onError hooks from opts1 and opts2", async () => {
+                const hook1 = makeHook("h1");
+                const hook2 = makeHook("h2");
+                const result = mergeOptions({ hooks: { onError: [hook1] } }, { hooks: { onError: [hook2] } });
+                assert.deepStrictEqual(result.hooks?.onError, [hook1, hook2]);
+            });
+        });
+
+        describe("envVarMappings", () => {
+            it("keeps value from opts1 if not provided in opts2", async () => {
+                const result = mergeOptions({ envVarMappings: { MY_VAR: "PROVIDER_VAR" } }, {});
+                assert.deepStrictEqual(result.envVarMappings, { MY_VAR: "PROVIDER_VAR" });
+            });
+            it("keeps value from opts2 if not provided in opts1", async () => {
+                const result = mergeOptions({}, { envVarMappings: { MY_VAR: "PROVIDER_VAR" } });
+                assert.deepStrictEqual(result.envVarMappings, { MY_VAR: "PROVIDER_VAR" });
+            });
+            it("overwrites value from opts1 if given value in opts2", async () => {
+                const result = mergeOptions(
+                    { envVarMappings: { VAR_A: "TARGET_A" } },
+                    { envVarMappings: { VAR_B: "TARGET_B" } },
+                );
+                assert.deepStrictEqual(result.envVarMappings, { VAR_B: "TARGET_B" });
+            });
+        });
+    });
+
+    describe("fromResourceOptions", () => {
+        const provider = <ProviderResource>{ getPackage: () => "aws" };
+        const parent = <Resource>(<unknown>{ getProvider: () => provider });
+        const dep = <Resource>(<unknown>{});
+        const resOpts: ResourceOptions = {
+            parent,
+            provider,
+            version: "1.2.3",
+            pluginDownloadURL: "https://example.com/plugin",
+            dependsOn: [dep],
+            protect: true,
+            ignoreChanges: ["prop"],
+        };
+
+        it("copies the invoke-relevant options and drops the rest", () => {
+            const result = invokeOptionsFromResourceOptions(resOpts);
+            assert.deepStrictEqual(result, {
+                parent,
+                provider,
+                version: "1.2.3",
+                pluginDownloadURL: "https://example.com/plugin",
+            });
+        });
+
+        it("preserves dependsOn for output invokes", () => {
+            const result = invokeOutputOptionsFromResourceOptions(resOpts);
+            assert.deepStrictEqual(result, {
+                parent,
+                provider,
+                version: "1.2.3",
+                pluginDownloadURL: "https://example.com/plugin",
+                dependsOn: [dep],
             });
         });
     });

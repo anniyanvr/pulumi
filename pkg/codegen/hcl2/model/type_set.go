@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,18 +19,21 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model/pretty"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
 )
 
 // SetType represents sets of particular element types.
 type SetType struct {
 	// ElementType is the element type of the set.
 	ElementType Type
+
+	cache *typeCache
 }
 
 // NewSetType creates a new set type with the given element type.
 func NewSetType(elementType Type) *SetType {
-	return &SetType{ElementType: elementType}
+	return &SetType{ElementType: elementType, cache: &typeCache{}}
 }
 
 // SyntaxNode returns the syntax node for the type. This is always syntax.None.
@@ -46,9 +49,9 @@ func (t *SetType) Traverse(traverser hcl.Traverser) (Traversable, hcl.Diagnostic
 // Equals returns true if this type has the same identity as the given type.
 func (t *SetType) Equals(other Type) bool {
 	return t.equals(other, nil)
-
 }
-func (t *SetType) equals(other Type, seen map[Type]struct{}) bool {
+
+func (t *SetType) equals(other Type, seen comparePairs) bool {
 	if t == other {
 		return true
 	}
@@ -59,9 +62,13 @@ func (t *SetType) equals(other Type, seen map[Type]struct{}) bool {
 // AssignableFrom returns true if this type is assignable from the indicated source type. A set(T) is assignable
 // from values of type set(U) where T is assignable from U.
 func (t *SetType) AssignableFrom(src Type) bool {
-	return assignableFrom(t, src, func() bool {
+	return t.assignableFrom(src, nil)
+}
+
+func (t *SetType) assignableFrom(src Type, seen *cycleSet) bool {
+	return assignableFrom(t, src, seen, func(seen *cycleSet) bool {
 		if src, ok := src.(*SetType); ok {
-			return t.ElementType.AssignableFrom(src.ElementType)
+			return t.ElementType.assignableFrom(src.ElementType, seen)
 		}
 		return false
 	})
@@ -72,49 +79,76 @@ func (t *SetType) AssignableFrom(src Type) bool {
 // the entire conversion is unsafe; otherwise the conversion is safe. An unsafe conversion exists from list(U) or
 // or tuple(U_0 ... U_N) to set(T) if a conversion exists from each U to T.
 func (t *SetType) ConversionFrom(src Type) ConversionKind {
-	return t.conversionFrom(src, false)
+	kind, _ := t.conversionFrom(src, false, nil)
+	return kind
 }
 
-func (t *SetType) conversionFrom(src Type, unifying bool) ConversionKind {
-	return conversionFrom(t, src, unifying, func() ConversionKind {
+func (t *SetType) conversionFrom(src Type, unifying bool, seen *cycleSet) (ConversionKind, lazyDiagnostics) {
+	return conversionFrom(t, src, unifying, seen, t.cache, func() (ConversionKind, lazyDiagnostics) {
 		switch src := src.(type) {
 		case *SetType:
-			return t.ElementType.conversionFrom(src.ElementType, unifying)
+			return t.ElementType.conversionFrom(src.ElementType, unifying, seen)
 		case *ListType:
-			if conversionKind := t.ElementType.conversionFrom(src.ElementType, unifying); conversionKind == NoConversion {
-				return NoConversion
+			if conversionKind, why := t.ElementType.conversionFrom(src.ElementType, unifying, seen); conversionKind ==
+				NoConversion {
+				return NoConversion, why
 			}
-			return UnsafeConversion
+			return UnsafeConversion, nil
 		case *TupleType:
-			if conversionKind := NewListType(t.ElementType).conversionFrom(src, unifying); conversionKind == NoConversion {
-				return NoConversion
+			if conversionKind, why := NewListType(t.ElementType).conversionFrom(src, unifying, seen); conversionKind ==
+				NoConversion {
+				return NoConversion, why
 			}
-			return UnsafeConversion
+			return UnsafeConversion, nil
 		}
-		return NoConversion
+		return NoConversion, func() hcl.Diagnostics { return hcl.Diagnostics{typeNotConvertible(t, src)} }
 	})
 }
 
-func (t *SetType) String() string {
-	return fmt.Sprintf("set(%v)", t.ElementType)
+func (t *SetType) pretty(seenFormatters map[Type]pretty.Formatter) pretty.Formatter {
+	var formatter pretty.Formatter
+	if seenFormatter, ok := seenFormatters[t.ElementType]; ok {
+		formatter = seenFormatter
+	} else {
+		formatter = t.ElementType.pretty(seenFormatters)
+	}
+
+	return &pretty.Wrap{
+		Prefix:  "set(",
+		Postfix: ")",
+		Value:   formatter,
+	}
 }
 
-func (t *SetType) unify(other Type) (Type, ConversionKind) {
-	return unify(t, other, func() (Type, ConversionKind) {
+func (t *SetType) Pretty() pretty.Formatter {
+	seenFormatters := map[Type]pretty.Formatter{}
+	return t.pretty(seenFormatters)
+}
+
+func (t *SetType) String() string {
+	return t.string(nil)
+}
+
+func (t *SetType) string(seen map[Type]struct{}) string {
+	return fmt.Sprintf("set(%s)", t.ElementType.string(seen))
+}
+
+func (t *SetType) unify(other Type, seen *cycleSet) (Type, ConversionKind) {
+	return unify(t, other, seen, func() (Type, ConversionKind) {
 		switch other := other.(type) {
 		case *SetType:
 			// If the other type is a set type, unify based on the element type.
-			elementType, conversionKind := t.ElementType.unify(other.ElementType)
+			elementType, conversionKind := t.ElementType.unify(other.ElementType, seen)
 			return NewSetType(elementType), conversionKind
 		case *ListType:
 			// Prefer the list type, but unify the element types.
-			element, conversionKind := t.ElementType.unify(other.ElementType)
+			element, conversionKind := t.ElementType.unify(other.ElementType, seen)
 			return NewListType(element), conversionKind
 		case *TupleType:
 			// Prefer the set type, but unify the element type.
 			elementType, conversionKind := t.ElementType, UnsafeConversion
 			for _, other := range other.ElementTypes {
-				element, ck := elementType.unify(other)
+				element, ck := elementType.unify(other, seen)
 				if ck < conversionKind {
 					conversionKind = ck
 				}
@@ -123,7 +157,8 @@ func (t *SetType) unify(other Type) (Type, ConversionKind) {
 			return NewSetType(elementType), conversionKind
 		default:
 			// Prefer the set type.
-			return t, t.conversionFrom(other, true)
+			kind, _ := t.conversionFrom(other, true, seen)
+			return t, kind
 		}
 	})
 }

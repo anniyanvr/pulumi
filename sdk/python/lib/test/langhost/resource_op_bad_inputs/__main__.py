@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,12 +13,17 @@
 # limitations under the License.
 from pulumi import CustomResource
 
+
 class MyClass:
     def __init__(self):
         self.prop = "oh no!"
 
+
 class MyResource(CustomResource):
     def __init__(self, name):
-        CustomResource.__init__(self, "test:index:MyResource", name, {"class": MyClass()})
+        CustomResource.__init__(
+            self, "test:index:MyResource", name, {"class": MyClass()}
+        )
+
 
 MyResource("testResource1")

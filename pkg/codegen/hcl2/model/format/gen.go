@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 	"io"
 	"math"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // ExpressionGenerator is an interface that can be implemented in order to generate code for semantically-analyzed HCL2
@@ -87,19 +87,19 @@ func (e *Formatter) Indented(f func()) {
 }
 
 // Fprint prints one or more values to the generator's output stream.
-func (e *Formatter) Fprint(w io.Writer, a ...interface{}) {
+func (e *Formatter) Fprint(w io.Writer, a ...any) {
 	_, err := fmt.Fprint(w, a...)
 	contract.IgnoreError(err)
 }
 
 // Fprintln prints one or more values to the generator's output stream, followed by a newline.
-func (e *Formatter) Fprintln(w io.Writer, a ...interface{}) {
+func (e *Formatter) Fprintln(w io.Writer, a ...any) {
 	e.Fprint(w, a...)
 	e.Fprint(w, "\n")
 }
 
 // Fprintf prints a formatted message to the generator's output stream.
-func (e *Formatter) Fprintf(w io.Writer, format string, a ...interface{}) {
+func (e *Formatter) Fprintf(w io.Writer, format string, a ...any) {
 	_, err := fmt.Fprintf(w, format, a...)
 	contract.IgnoreError(err)
 }
@@ -111,11 +111,11 @@ func (e *Formatter) gen(w io.Writer, parentPrecedence int, rhs bool, x model.Exp
 		// OK
 	case precedence < parentPrecedence || rhs:
 		_, err := fmt.Fprint(w, "(")
-		contract.AssertNoError(err)
+		contract.AssertNoErrorf(err, "write error")
 
 		defer func() {
 			_, err = fmt.Fprint(w, ")")
-			contract.AssertNoError(err)
+			contract.AssertNoErrorf(err, "write error")
 		}()
 	}
 
@@ -157,13 +157,13 @@ func (e *Formatter) gen(w io.Writer, parentPrecedence int, rhs bool, x model.Exp
 
 // Fgen generates code for a list of strings and expression trees. The former are written directly to the destination;
 // the latter are recursively generated using the appropriate gen* functions.
-func (e *Formatter) Fgen(w io.Writer, vs ...interface{}) {
+func (e *Formatter) Fgen(w io.Writer, vs ...any) {
 	for _, v := range vs {
 		if x, ok := v.(model.Expression); ok {
 			e.gen(w, math.MaxInt32, false, x)
 		} else {
 			_, err := fmt.Fprint(w, v)
-			contract.AssertNoError(err)
+			contract.AssertNoErrorf(err, "write error")
 		}
 	}
 }
@@ -172,7 +172,7 @@ func (e *Formatter) Fgen(w io.Writer, vs ...interface{}) {
 // a Func that calls the appropriate recursive generation function. This allows for the composition of standard
 // format strings with expression/property code gen (e.e. `e.genf(w, ".apply(__arg0 => %v)", then)`, where `then` is
 // an expression tree).
-func (e *Formatter) Fgenf(w io.Writer, format string, args ...interface{}) {
+func (e *Formatter) Fgenf(w io.Writer, format string, args ...any) {
 	for i := range args {
 		if node, ok := args[i].(model.Expression); ok {
 			args[i] = Func(func(f fmt.State, c rune) {

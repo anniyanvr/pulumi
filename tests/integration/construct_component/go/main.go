@@ -1,15 +1,17 @@
-// Copyright 2016-2020, Pulumi Corporation.  All rights reserved.
+// Copyright 2016, Pulumi Corporation.  All rights reserved.
+//go:build !all
+// +build !all
 
 package main
 
 import (
 	"reflect"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 type componentArgs struct {
-	Echo interface{} `pulumi:"echo"`
+	Echo any `pulumi:"echo"`
 }
 
 type ComponentArgs struct {
@@ -25,11 +27,12 @@ type Component struct {
 
 	Echo    pulumi.AnyOutput    `pulumi:"echo"`
 	ChildID pulumi.StringOutput `pulumi:"childId"`
+	Secret  pulumi.StringOutput `pulumi:"secret"`
 }
 
 func NewComponent(
-	ctx *pulumi.Context, name string, args *ComponentArgs, opts ...pulumi.ResourceOption) (*Component, error) {
-
+	ctx *pulumi.Context, name string, args *ComponentArgs, opts ...pulumi.ResourceOption,
+) (*Component, error) {
 	var resource Component
 	err := ctx.RegisterRemoteComponentResource("testcomponent:index:Component", name, args, &resource, opts...)
 	if err != nil {

@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build windows
+//go:build windows
 
 package main
 
@@ -25,7 +25,7 @@ import (
 
 	winio "github.com/Microsoft/go-winio"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
 )
 
 // Windows specific pipe implementation. Slightly complex as it sits on top of a pair of named pipes

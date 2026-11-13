@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,23 +15,47 @@
 """The Resource module, containing all resource-related definitions."""
 
 import asyncio
-
-from typing import Optional, List, Any, Mapping, Union, Callable, TYPE_CHECKING, cast
-
 import copy
+import warnings
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Optional,
+    Union,
+    cast,
+)
 
+from . import _types, log
+from . import urn as urn_util
+from .output import Output, _is_prompt, _map2_input, _map_input, _OutputData
+from .resource_hooks import ResourceHookBinding
 from .runtime import known_types
-from .runtime.resource import get_resource, register_resource, register_resource_outputs, read_resource
+from .runtime._state_migration_context import _ensure_not_in_state_migration
+from .runtime.resource import (
+    _pkg_from_type,
+    collapse_alias_to_urn,
+    get_resource,
+    read_resource,
+    register_resource,
+    register_resource_outputs,
+)
+from .runtime.resource import (
+    create_urn as create_urn_internal,
+)
 from .runtime.settings import get_root_resource
 
-from .metadata import get_project, get_stack
-
 if TYPE_CHECKING:
-    from .output import Input, Inputs, Output
+    from .output import Input, Inputs
     from .runtime.stack import Stack
 
 
 class CustomTimeouts:
+    """
+    CustomTimeouts allows specifying custom timeouts for resource operations. Timeouts can
+    be specified separately for create, update, delete, and read operations.
+    """
+
     create: Optional[str]
     """
     create is the optional create timout represented as a string e.g. 5m, 40s, 1d.
@@ -47,46 +71,22 @@ class CustomTimeouts:
     delete is the optional delete timout represented as a string e.g. 5m, 40s, 1d.
     """
 
-    def __init__(self,
-                 create: Optional[str] = None,
-                 update: Optional[str] = None,
-                 delete: Optional[str] = None) -> None:
+    read: Optional[str]
+    """
+    read is the optional read timout represented as a string e.g. 5m, 40s, 1d.
+    """
 
+    def __init__(
+        self,
+        create: Optional[str] = None,
+        update: Optional[str] = None,
+        delete: Optional[str] = None,
+        read: Optional[str] = None,
+    ) -> None:
         self.create = create
         self.update = update
         self.delete = delete
-
-
-def inherited_child_alias(
-        child_name: str,
-        parent_name: str,
-        parent_alias: 'Input[str]',
-        child_type: str) -> 'Output[str]':
-    """
-    inherited_child_alias computes the alias that should be applied to a child based on an alias
-    applied to it's parent. This may involve changing the name of the resource in cases where the
-    resource has a named derived from the name of the parent, and the parent name changed.
-    """
-
-#   If the child name has the parent name as a prefix, then we make the assumption that it was
-#   constructed from the convention of using `{name}-details` as the name of the child resource.  To
-#   ensure this is aliased correctly, we must then also replace the parent aliases name in the prefix of
-#   the child resource name.
-#
-#   For example:
-#   * name: "newapp-function"
-#   * opts.parent.__name: "newapp"
-#   * parentAlias: "urn:pulumi:stackname::projectname::awsx:ec2:Vpc::app"
-#   * parentAliasName: "app"
-#   * aliasName: "app-function"
-#   * childAlias: "urn:pulumi:stackname::projectname::aws:s3/bucket:Bucket::app-function"
-    from . import Output  # pylint: disable=import-outside-toplevel
-    alias_name = Output.from_input(child_name)
-    if child_name.startswith(parent_name):
-        alias_name = Output.from_input(parent_alias).apply(
-            lambda u: u[u.rfind("::") + 2:] + child_name[len(parent_name):])
-
-    return create_urn(alias_name, child_type, parent_alias)
+        self.read = read
 
 
 ROOT_STACK_RESOURCE = None
@@ -143,21 +143,21 @@ class Alias:
     The previous type of the resource.  If not provided, the current type of the resource is used.
     """
 
-    parent: Optional[Union['Resource', 'Input[str]']]
+    parent: Optional[Union["Resource", "Input[str]"]]
     """
     The previous parent of the resource.  If not provided (i.e. `Alias(name="foo")`), the current
     parent of the resource is used (`opts.parent` if provided, else the implicit stack resource
     parent).
 
-    To specify no original parent, use `Alias(parent=pulumi.rootStackResource)`.
+    To specify no original parent, use `Alias(parent=pulumi.ROOT_STACK_RESOURCE)`.
     """
 
-    stack: Optional['Input[str]']
+    stack: Optional["Input[str]"]
     """
     The name of the previous stack of the resource.  If not provided, defaults to `pulumi.getStack()`.
     """
 
-    project: Optional['Input[str]']
+    project: Optional["Input[str]"]
     """
     The previous project of the resource. If not provided, defaults to `pulumi.getProject()`.
     """
@@ -165,13 +165,14 @@ class Alias:
     # Ignoring type errors associated with the ellipsis constant being assigned to a string value.
     # We use it as a internal sentinel value, and don't need to expose this in the user facing type system.
     # https://docs.python.org/3/library/constants.html#Ellipsis
-    def __init__(self,
-                 name: Optional[str] = ...,  # type: ignore
-                 type_: Optional[str] = ...,  # type: ignore
-                 parent: Optional[Union['Resource', 'Input[str]']] = ...,  # type: ignore
-                 stack: Optional['Input[str]'] = ...,  # type: ignore
-                 project: Optional['Input[str]'] = ...) -> None:  # type: ignore
-
+    def __init__(
+        self,
+        name: Optional[str] = ...,  # type: ignore
+        type_: Optional[str] = ...,  # type: ignore
+        parent: Optional[Union["Resource", "Input[str]"]] = ...,  # type: ignore
+        stack: Optional["Input[str]"] = ...,  # type: ignore
+        project: Optional["Input[str]"] = ...,  # type: ignore
+    ) -> None:
         self.name = name
         self.type_ = type_
         self.parent = parent
@@ -179,44 +180,12 @@ class Alias:
         self.project = project
 
 
-def collapse_alias_to_urn(
-        alias: 'Input[Union[Alias, str]]',
-        defaultName: str,
-        defaultType: str,
-        defaultParent: Optional['Resource']) -> 'Output[str]':
-    """
-    collapse_alias_to_urn turns an Alias into a URN given a set of default data
-    """
-    from . import Output  # pylint: disable=import-outside-toplevel
-
-    def collapse_alias_to_urn_worker(inner: Union[Alias, str]) -> Output[str]:
-        if isinstance(inner, str):
-            return Output.from_input(inner)
-
-        name = inner.name if inner.name is not ... else defaultName # type: ignore
-        type_ = inner.type_ if inner.type_ is not ... else defaultType # type: ignore
-        parent = inner.parent if inner.parent is not ... else defaultParent # type: ignore
-        project: str = inner.project if inner.project is not ... else get_project() # type: ignore
-        stack: str = inner.stack if inner.stack is not ... else get_stack() # type: ignore
-
-        if name is None:
-            raise Exception("No valid 'name' passed in for alias.")
-
-        if type_ is None:
-            raise Exception("No valid 'type_' passed in for alias.")
-
-        return create_urn(name, type_, parent, project, stack)
-
-    inputAlias: Output[Union[Alias, str]] = Output.from_input(alias)
-    return inputAlias.apply(collapse_alias_to_urn_worker)
-
-
 class ResourceTransformationArgs:
     """
     ResourceTransformationArgs is the argument bag passed to a resource transformation.
     """
 
-    resource: 'Resource'
+    resource: "Resource"
     """
     The Resource instance that is being transformed.
     """
@@ -231,22 +200,24 @@ class ResourceTransformationArgs:
     The name of the Resource.
     """
 
-    props: 'Inputs'
+    props: "Inputs"
     """
     The original properties passed to the Resource constructor.
     """
 
-    opts: 'ResourceOptions'
+    opts: "ResourceOptions"
     """
     The original resource options passed to the Resource constructor.
     """
 
-    def __init__(self,
-                 resource: 'Resource',
-                 type_: str,
-                 name: str,
-                 props: 'Inputs',
-                 opts: 'ResourceOptions') -> None:
+    def __init__(
+        self,
+        resource: "Resource",
+        type_: str,
+        name: str,
+        props: "Inputs",
+        opts: "ResourceOptions",
+    ) -> None:
         self.resource = resource
         self.type_ = type_
         self.name = name
@@ -261,31 +232,199 @@ class ResourceTransformationResult:
     the originally provided values.
     """
 
-    props: 'Inputs'
+    props: "Inputs"
     """
     The new properties to use in place of the original `props`.
     """
 
-    opts: 'ResourceOptions'
+    opts: "ResourceOptions"
     """
     The new resource options to use in place of the original `opts`
     """
 
-    def __init__(self,
-                 props: 'Inputs',
-                 opts: 'ResourceOptions') -> None:
+    def __init__(self, props: "Inputs", opts: "ResourceOptions") -> None:
         self.props = props
         self.opts = opts
 
 
-ResourceTransformation = Callable[[ResourceTransformationArgs], Optional[ResourceTransformationResult]]
+ResourceTransformation = Callable[
+    [ResourceTransformationArgs], Optional[ResourceTransformationResult]
+]
 """
 ResourceTransformation is the callback signature for the `transformations` resource option.  A
 transformation is passed the same set of inputs provided to the `Resource` constructor, and can
 optionally return back alternate values for the `props` and/or `opts` prior to the resource
 actually being created.  The effect will be as though those props and opts were passed in place
-of the original call to the `Resource` constructor.  If the transformation returns undefined,
+of the original call to the `Resource` constructor.  If the transformation returns None,
 this indicates that the resource will not be transformed.
+"""
+
+
+class ResourceTransformArgs:
+    """
+    ResourceTransformArgs is the argument bag passed to a resource transform.
+    """
+
+    custom: bool
+    """
+    If the resource is a custom or component resource.
+    """
+
+    type_: str
+    """
+    The type of the Resource.
+    """
+
+    name: str
+    """
+    The name of the Resource.
+    """
+
+    props: "Inputs"
+    """
+    The original properties passed to the Resource constructor.
+    """
+
+    opts: "ResourceOptions"
+    """
+    The original resource options passed to the Resource constructor.
+    """
+
+    def __init__(
+        self,
+        custom: bool,
+        type_: str,
+        name: str,
+        props: "Inputs",
+        opts: "ResourceOptions",
+    ) -> None:
+        self.custom = custom
+        self.type_ = type_
+        self.name = name
+        self.props = props
+        self.opts = opts
+
+
+class ResourceTransformResult:
+    """
+    ResourceTransformResult is the result that must be returned by a resource transform callback.
+    It includes new values to use for the `props` and `opts` of the `Resource` in place of the
+    originally provided values.
+    """
+
+    props: "Inputs"
+    """
+    The new properties to use in place of the original `props`.
+    """
+
+    opts: "ResourceOptions"
+    """
+    The new resource options to use in place of the original `opts`
+    """
+
+    def __init__(self, props: "Inputs", opts: "ResourceOptions") -> None:
+        self.props = props
+        self.opts = opts
+
+
+ResourceTransform = Callable[
+    [ResourceTransformArgs],
+    Optional[
+        Union[Awaitable[Optional[ResourceTransformResult]], ResourceTransformResult]
+    ],
+]
+"""
+ResourceTransform is the callback signature for the `transforms` resource option.  A
+transform is passed the same set of inputs provided to the `Resource` constructor, and can
+optionally return back alternate values for the `props` and/or `opts` prior to the resource
+actually being created.  The effect will be as though those props and opts were passed in place
+of the original call to the `Resource` constructor.  If the transform returns None,
+this indicates that the resource will not be transformed.
+"""
+
+
+class StateMigrationArgs:
+    """
+    Arguments passed to a state migration callback, containing the prior state of the resource
+    and its descendants in `checkpoint resource format
+    <https://pulumi-developer-docs.readthedocs.io/latest/docs/references/deployment-schema.html#pulumi-resource-state>`__.
+
+    This API is experimental and may change.
+    """
+
+    urn: str
+    """
+    The URN of the resource being registered. This may differ from its URN in `old_state`
+    when the prior resource is matched through an alias.
+    """
+
+    old_state: list[dict[str, Any]]
+    """
+    The prior state of the resource and its descendants in `checkpoint resource format
+    <https://pulumi-developer-docs.readthedocs.io/latest/docs/references/deployment-schema.html#pulumi-resource-state>`__,
+    with the resource itself first. For subsequent callbacks, this includes changes made by
+    earlier callbacks in the chain.
+    """
+
+    def __init__(self, urn: str, old_state: list[dict[str, Any]]) -> None:
+        self.urn = urn
+        self.old_state = old_state
+
+
+class StateMigrationResult:
+    """
+    StateMigrationResult is the result that must be returned by a state migration callback when
+    it changes the state. Every resource present in the old state must either be returned in
+    `new_state` under the same URN or have an entry in `successors`, but not both.
+
+    This API is experimental and may change.
+    """
+
+    new_state: list[dict[str, Any]]
+    """
+    The complete migrated subtree in `checkpoint resource format
+    <https://pulumi-developer-docs.readthedocs.io/latest/docs/references/deployment-schema.html#pulumi-resource-state>`__,
+    including unchanged resources. This replaces `old_state`.
+    """
+
+    successors: Optional[dict[str, str]]
+    """
+    Maps each old URN removed from the state to the URN in `new_state` that succeeds it. Multiple
+    old URNs may map to the same successor. A resource cannot be removed without a successor.
+    The engine uses these mappings to rewrite resource references.
+    """
+
+    def __init__(
+        self,
+        new_state: list[dict[str, Any]],
+        successors: Optional[dict[str, str]] = None,
+    ) -> None:
+        self.new_state = new_state
+        self.successors = successors
+
+
+StateMigration = Callable[
+    [StateMigrationArgs],
+    Optional[Union[Awaitable[Optional[StateMigrationResult]], StateMigrationResult]],
+]
+"""
+StateMigration is the callback signature for the :attr:`pulumi.ResourceOptions.state_migrations` resource option.
+
+This API is experimental and may change.
+
+A callback receives the prior state of the resource and its descendants, and may return a
+replacement subtree for the engine to use before diffing those resources. Returning None leaves
+the callback's input state unchanged and allows later callbacks to run. Callbacks may be synchronous
+or asynchronous and must be idempotent.
+
+Migrations run during updates and previews when prior state exists, including state matched
+through aliases. Migrations rewrite state only, they do not create, import, or modify physical
+resources.
+
+The callback receives plaintext secret values and must not log or otherwise expose them. It must
+not perform Pulumi runtime operations or await unresolved Outputs. Every resource omitted from the
+returned state must identify a returned successor. Provider resource states must remain unchanged,
+and custom resources must preserve their physical identity and lifecycle safety flags.
 """
 
 
@@ -294,15 +433,15 @@ class ResourceOptions:
     ResourceOptions is a bag of optional settings that control a resource's behavior.
     """
 
-    parent: Optional['Resource']
+    parent: Optional["Resource"]
     """
     If provided, the currently-constructing resource should be the child of the provided parent
     resource.
     """
 
-    depends_on: Optional[List['Resource']]
+    depends_on: Optional["Input[Union[Sequence[Input[Resource]], Resource]]"]
     """
-    If provided, the currently-constructing resource depends on the provided list of resources.
+    If provided, declares that the currently-constructing resource depends on the given resources.
     """
 
     protect: Optional[bool]
@@ -315,21 +454,24 @@ class ResourceOptions:
     If provided and True, this resource must be deleted before it is replaced.
     """
 
-    provider: Optional['ProviderResource']
+    provider: Optional["ProviderResource"]
     """
     An optional provider to use for this resource's CRUD operations. If no provider is supplied, the
     default provider for the resource's package will be used. The default provider is pulled from
     the parent's provider bag (see also ResourceOptions.providers).
     """
 
-    providers: Optional[Union[Mapping[str, 'ProviderResource'], List['ProviderResource']]]
+    providers: Optional[
+        Union[Mapping[str, "ProviderResource"], Sequence["ProviderResource"]]
+    ]
     """
-    An optional set of providers to use for child resources. Keyed by package name (e.g. "aws"), or just
-    provided as a list. In the latter case, the package name will be retrieved from the provider itself.
-    Note: do not provide both provider and providers.
+    An optional set of providers to use for this resource and child resources. Keyed by package name
+    (e.g. "aws"), or just provided as a list. In the latter case, the package name will be retrieved
+    from the provider itself.
+    Note: Only a list should be used. Mapping keys are not respected.
     """
 
-    ignore_changes: Optional[List[str]]
+    ignore_changes: Optional[list[str]]
     """
     If provided, ignore changes to any of the specified properties.
     """
@@ -341,31 +483,60 @@ class ResourceOptions:
     current package and should rarely be used.
     """
 
-    aliases: Optional[List['Input[Union[str, Alias]]']]
+    plugin_download_url: Optional[str]
+    """
+    An optional url. If provided, the engine loads a provider with downloaded from the provided url.
+    This url overrides the plugin download url inferred from the current package and should rarely
+    be used.
+    """
+
+    aliases: Optional[Sequence["Input[Union[str, Alias]]"]]
     """
     An optional list of aliases to treat this resource as matching.
     """
 
-    additional_secret_outputs: Optional[List[str]]
+    additional_secret_outputs: Optional[list[str]]
     """
     The names of outputs for this resource that should be treated as secrets. This augments the list
     that the resource provider and pulumi engine already determine based on inputs to your resource.
     It can be used to mark certain outputs as a secrets on a per resource basis.
     """
 
-    custom_timeouts: Optional['CustomTimeouts']
+    custom_timeouts: Optional["CustomTimeouts"]
     """
     An optional customTimeouts config block.
     """
 
-    transformations: Optional[List[ResourceTransformation]]
+    transformations: Optional[list[ResourceTransformation]]
     """
     Optional list of transformations to apply to this resource during construction. The
     transformations are applied in order, and are applied prior to transformation applied to
     parents walking from the resource up to the stack.
     """
 
-    id: Optional['Input[str]']
+    transforms: Optional[list[ResourceTransform]]
+    """
+    Optional list of transforms to apply to this resource during construction. The
+    transforms are applied in order, and are applied prior to transform applied to
+    parents walking from the resource up to the stack.
+    """
+
+    state_migrations: Optional[list[StateMigration]]
+    """
+    Optional list of state migrations to apply to this resource's prior state and its descendants.
+    The migrations are applied in order, each receiving the state produced by earlier callbacks.
+    See :obj:`pulumi.StateMigration` for the callback contract and safety restrictions.
+
+    This API is experimental and may change.
+    """
+
+    hooks: Optional[ResourceHookBinding]
+    """
+    Optional resource hooks to bind to this resource. The hooks will be invoked during
+    certain step of the lifecycle of the resource.
+    """
+
+    id: Optional["Input[str]"]
     """
     An optional existing ID to load, rather than create.
     """
@@ -383,36 +554,97 @@ class ResourceOptions:
     The URN of a previously-registered resource of this type to read from the engine.
     """
 
-    # pylint: disable=redefined-builtin
-    def __init__(self,
-                 parent: Optional['Resource'] = None,
-                 depends_on: Optional[List['Resource']] = None,
-                 protect: Optional[bool] = None,
-                 provider: Optional['ProviderResource'] = None,
-                 providers: Optional[Union[Mapping[str, 'ProviderResource'], List['ProviderResource']]] = None,
-                 delete_before_replace: Optional[bool] = None,
-                 ignore_changes: Optional[List[str]] = None,
-                 version: Optional[str] = None,
-                 aliases: Optional[List['Input[Union[str, Alias]]']] = None,
-                 additional_secret_outputs: Optional[List[str]] = None,
-                 id: Optional['Input[str]'] = None,
-                 import_: Optional[str] = None,
-                 custom_timeouts: Optional['CustomTimeouts'] = None,
-                 transformations: Optional[List[ResourceTransformation]] = None,
-                 urn: Optional[str] = None) -> None:
+    replace_on_changes: Optional[list[str]]
+    """
+    Changes to any of these property paths will force a replacement.  If this list includes `"*"`, changes
+    to any properties will force a replacement.  Initialization errors from previous deployments will
+    require replacement instead of update only if `"*"` is passed.
+    """
+
+    replacement_trigger: Optional["Input[Any]"]
+    """
+    If set, the engine will diff this with the last recorded value, and trigger
+    a replace if they are not equal.
+    """
+
+    retain_on_delete: Optional[bool]
+    """
+    If set to True, the providers Delete method will not be called for this resource.
+    """
+
+    deleted_with: Optional["Resource"]
+    """
+    If set, the providers Delete method will not be called for this resource
+    if specified resource is being deleted as well. If the named resource is
+    being replaced, this resource will be replaced as well.
+    """
+
+    replace_with: Optional[list["Resource"]]
+    """
+    If set, this resource will also be replaced whenever any of the provided
+    resources are replaced.
+    """
+
+    hide_diffs: Optional[list[str]]
+    """
+    If set, diffs from the included property paths will not be shown.
+    This only affects the diff display, and does not affect update behavior.
+    """
+
+    env_var_mappings: Optional[Mapping[str, str]]
+    """
+    Environment variable mappings for provider resources. Maps source environment variable
+    names to target names. If the source variable exists, the provider will see the target
+    variable set to its value. For example, {"MY_VAR": "PROVIDER_VAR"} means if MY_VAR
+    is set, the provider sees PROVIDER_VAR with MY_VAR's value.
+    """
+
+    def __init__(
+        self,
+        parent: Optional["Resource"] = None,
+        depends_on: Optional[
+            "Input[Union[Sequence[Input[Resource]], Resource]]"
+        ] = None,
+        protect: Optional[bool] = None,
+        provider: Optional["ProviderResource"] = None,
+        providers: Optional[
+            Union[Mapping[str, "ProviderResource"], list["ProviderResource"]]
+        ] = None,
+        delete_before_replace: Optional[bool] = None,
+        ignore_changes: Optional[list[str]] = None,
+        version: Optional[str] = None,
+        aliases: Optional[Sequence["Input[Union[str, Alias]]"]] = None,
+        additional_secret_outputs: Optional[list[str]] = None,
+        id: Optional["Input[str]"] = None,
+        import_: Optional[str] = None,
+        custom_timeouts: Optional["CustomTimeouts"] = None,
+        transformations: Optional[list[ResourceTransformation]] = None,
+        transforms: Optional[list[ResourceTransform]] = None,
+        hooks: Optional[ResourceHookBinding] = None,
+        urn: Optional[str] = None,
+        replace_on_changes: Optional[list[str]] = None,
+        replacement_trigger: Optional["Input[Any]"] = None,
+        plugin_download_url: Optional[str] = None,
+        retain_on_delete: Optional[bool] = None,
+        deleted_with: Optional["Resource"] = None,
+        replace_with: Optional[list["Resource"]] = None,
+        hide_diffs: Optional[list[str]] = None,
+        env_var_mappings: Optional[Mapping[str, str]] = None,
+        state_migrations: Optional[list[StateMigration]] = None,
+    ) -> None:
         """
         :param Optional[Resource] parent: If provided, the currently-constructing resource should be the child of
                the provided parent resource.
-        :param Optional[List[Resource]] depends_on: If provided, the currently-constructing resource depends on the
-               provided list of resources.
+        :param Optional[Input[Union[List[Input[Resource]],Resource]]] depends_on: If provided, declares that the
+               currently-constructing resource depends on the given resources.
         :param Optional[bool] protect: If provided and True, this resource is not allowed to be deleted.
         :param Optional[ProviderResource] provider: An optional provider to use for this resource's CRUD operations.
                If no provider is supplied, the default provider for the resource's package will be used. The default
-               provider is pulled from the parent's provider bag.
+               provider is pulled from the providers field, then the parent's provider bag.
         :param Optional[Union[Mapping[str, ProviderResource], List[ProviderResource]]] providers: An optional set of
-               providers to use for child resources. Keyed by package name (e.g. "aws"), or just provided as a list.
-               In the latter case, the package name will be retrieved from the provider itself. Note: do not provide
-               both provider and providers.
+               providers to use for this resource and child resources. Keyed by package name (e.g. "aws"), or just
+               provided as a list. In the latter case, the package name will be retrieved from the provider itself.
+               Note: Only a list should be used. Mapping keys are not respected.
         :param Optional[bool] delete_before_replace: If provided and True, this resource must be deleted before it is replaced.
         :param Optional[List[str]] ignore_changes: If provided, a list of property names to ignore for purposes of updates
                or replacements.
@@ -424,49 +656,120 @@ class ResourceOptions:
         :param Optional[List[str]] additional_secret_outputs: If provided, a list of output property names that should
                also be treated as secret.
         :param Optional[Input[str]] id: If provided, an existing resource ID to read, rather than create.
-        :param Optional[str] import_: When provided with a resource ID, import indicates that this resource's provider should
+        :param Optional[str] import\\_: When provided with a resource ID, import indicates that this resource's provider should
                import its state from the cloud resource with the given ID. The inputs to the resource's constructor must align
                with the resource's current state. Once a resource has been imported, the import property must be removed from
                the resource's options.
         :param Optional[CustomTimeouts] custom_timeouts: If provided, a config block for custom timeout information.
         :param Optional[List[ResourceTransformation]] transformations: If provided, a list of transformations to apply
                to this resource during construction.
+        :param Optional[List[ResourceTransform]] transforms: If provided, a list of transforms to apply
+               to this resource during construction. This is experimental.
         :param Optional[str] urn: The URN of a previously-registered resource of this type to read from the engine.
+        :param Optional[List[str]] replace_on_changes: Changes to any of these property paths will force a replacement.
+               If this list includes `"*"`, changes to any properties will force a replacement.  Initialization errors
+               from previous deployments will require replacement instead of update only if `"*"` is passed.
+        :param Optional[str] plugin_download_url: An optional url. If provided, the engine loads a provider with downloaded
+               from the provided url. This url overrides the plugin download url inferred from the current package and should
+               rarely be used.
+        :param Optional[bool] retain_on_delete: If set to True, the providers Delete method will not be called for this resource.
+        :param Optional[Resource] deleted_with: If set, the providers Delete method will not be called for this resource
+               if specified resource is being deleted as well. If the named resource is being replaced, this resource
+               will be replaced as well.
+        :param Optional[List[Resource]] replace_with: If set, this resource will also be replaced whenever any of the provided resources are replaced.
+        :param Optional[ResourceHookBinding] hooks: Optional resource hooks to bind to this resource. The hooks will be
+                invoked during certain step of the lifecycle of the resource.
+        :param Optional[List[StateMigration]] state_migrations: Optional list of state migrations to apply to this
+                resource's prior state and its descendants, in order. See :obj:`pulumi.StateMigration` for the callback contract
+                and safety restrictions. This API is experimental and may change.
         """
 
-        # Expose 'merge' again this this object, but this time as an instance method.
-        # TODO[python/mypy#2427]: mypy disallows method assignment
-        self.merge = self._merge_instance # type: ignore
-        self.merge.__func__.__doc__ = ResourceOptions.merge.__doc__ # type: ignore
-
         self.parent = parent
-        self.depends_on = depends_on
         self.protect = protect
         self.provider = provider
         self.providers = providers
         self.delete_before_replace = delete_before_replace
         self.ignore_changes = ignore_changes
         self.version = version
+        self.plugin_download_url = plugin_download_url
         self.aliases = aliases
         self.additional_secret_outputs = additional_secret_outputs
         self.custom_timeouts = custom_timeouts
         self.id = id
         self.import_ = import_
         self.transformations = transformations
+        self.transforms = transforms
+        self.state_migrations = state_migrations
+        self.hooks = hooks
         self.urn = urn
+        self.replace_on_changes = replace_on_changes
+        self.replacement_trigger = replacement_trigger
+        self.depends_on = depends_on
+        self.retain_on_delete = retain_on_delete
+        self.deleted_with = deleted_with
+        self.replace_with = replace_with
+        self.hide_diffs = hide_diffs
+        self.env_var_mappings = env_var_mappings
 
-        if depends_on is not None:
-            for dep in depends_on:
-                if not isinstance(dep, Resource):
-                    raise Exception(
-                        "'depends_on' was passed a value that was not a Resource.")
+        # Proactively check that `depends_on` values are of type
+        # `Resource`. We cannot complete the check in the general case
+        # and can only do it on promptly available arguments.
+        deps = self._depends_on_list()
+        if isinstance(deps, list):
+            for dep in deps:
+                if _is_prompt(dep) and not isinstance(dep, Resource):
+                    raise TypeError(
+                        f"'depends_on' was passed a value {dep} that was not a Resource."
+                    )
 
-    def _merge_instance(self, opts: 'ResourceOptions') -> 'ResourceOptions':
-        return ResourceOptions.merge(self, opts)
+    def _depends_on_list(self) -> "Input[list[Input[Resource]]]":
+        if self.depends_on is None:
+            return []
 
-    # pylint: disable=method-hidden
-    @staticmethod
-    def merge(opts1: Optional['ResourceOptions'], opts2: Optional['ResourceOptions']) -> 'ResourceOptions':
+        return _map_input(
+            self.depends_on,
+            lambda x: list(x) if isinstance(x, Sequence) else [cast(Any, x)],
+        )
+
+    def _copy(self) -> "ResourceOptions":
+        """
+        Copy a ResourceOptions.
+        """
+
+        # ResourceOptions.merge is a static method that is reassigned to a field, not a
+        # true method. This assignment captures the original class. When we copy a
+        # ResourceOptions, we need update merge to point to the new class.
+        #
+        # We can illustrate this with an example.
+        #
+        # instance_1 of type ResourceOptions :
+        #   merge = instance_1._instance_merge
+        #   id: id_1
+        #   # other fields:
+        #   ...
+        #
+        # instance_2 = copy.copy(instance_1):
+        #   merge = instance_1._instance_merge
+        #   id: id_1
+        #   # other fields
+        #   ...
+        #
+        # instance_2.parent = parent_2
+        #
+        # instance_3 = instance_2.merge(None)
+        #
+        # We get `instance_3.parent == None`, when we should get `instance_3.parent ==
+        # parent_2`. This is because merge had a handle to instance_1, instead of
+        # instance_2.
+        #
+        # The fix is to re-assign merge after the copy.
+
+        out = copy.copy(self)
+        return out
+
+    def merge(
+        opts1: Optional["ResourceOptions"], opts2: Optional["ResourceOptions"]
+    ) -> "ResourceOptions":
         """
         merge produces a new ResourceOptions object with the respective attributes of the `opts1`
         instance in it with the attributes of `opts2` merged over them.
@@ -476,15 +779,15 @@ class ResourceOptions:
 
         Conceptually attributes merging follows these basic rules:
 
-        1. if the attributes is a collection, the final value will be a collection containing the
-            values from each options object. Both original collections in each options object will
-            be unchanged.
+        1. If the attributes is a collection, the final value will be a collection containing the
+           values from each options object. Both original collections in each options object will
+           be unchanged.
 
         2. Simple scalar values from `opts2` (i.e. strings, numbers, bools) will replace the values
-            from `opts1`.
+           from `opts1`.
 
-        3. For the purposes of merging `depends_on`, `provider` and `providers` are always treated
-            as collections, even if only a single value was provided.
+        3. For the purposes of merging `depends_on` is always treated
+           as collections, even if only a single value was provided.
 
         4. Attributes with value 'None' will not be copied over.
 
@@ -497,34 +800,92 @@ class ResourceOptions:
         opts2 = ResourceOptions() if opts2 is None else opts2
 
         if not isinstance(opts1, ResourceOptions):
-            raise TypeError('Expected opts1 to be a ResourceOptions instance')
+            raise TypeError("Expected opts1 to be a ResourceOptions instance")
 
         if not isinstance(opts2, ResourceOptions):
-            raise TypeError('Expected opts2 to be a ResourceOptions instance')
+            raise TypeError("Expected opts2 to be a ResourceOptions instance")
 
-        dest = copy.copy(opts1)
-        source = copy.copy(opts2)
+        dest = opts1._copy()
+        source = opts2._copy()
 
-        # Ensure provider/providers are all expanded into the `List[ResourceProvider]` form.
         # This makes merging simple.
-        _expand_providers(dest)
-        _expand_providers(source)
+        def expand_providers(providers) -> Optional[Sequence["ProviderResource"]]:
+            if isinstance(providers, Mapping):
+                for k, p in providers.items():
+                    if k != p.package:
+                        message = f"Provider map key {k} disagrees with associated provider {p.package}. Key will be ignored."
+                        warnings.warn(message, UserWarning)
+                        log.warn(message)
+                return list(providers.values())
+            return providers
 
-        dest.providers = _merge_lists(dest.providers, source.providers)
-        dest.depends_on = _merge_lists(dest.depends_on, source.depends_on)
+        dest_providers = expand_providers(dest.providers)
+        source_providers = expand_providers(source.providers)
+
+        dest.providers = _merge_lists(dest_providers, source_providers)
+
+        dest.depends_on = _map2_input(
+            dest._depends_on_list(), source._depends_on_list(), lambda xs, ys: xs + ys
+        )
+
         dest.ignore_changes = _merge_lists(dest.ignore_changes, source.ignore_changes)
+        dest.replace_on_changes = _merge_lists(
+            dest.replace_on_changes, source.replace_on_changes
+        )
+        dest.replacement_trigger = (
+            dest.replacement_trigger
+            if source.replacement_trigger is None
+            else source.replacement_trigger
+        )
         dest.aliases = _merge_lists(dest.aliases, source.aliases)
-        dest.additional_secret_outputs = _merge_lists(dest.additional_secret_outputs, source.additional_secret_outputs)
-        dest.transformations = _merge_lists(dest.transformations, source.transformations)
-
+        dest.additional_secret_outputs = _merge_lists(
+            dest.additional_secret_outputs, source.additional_secret_outputs
+        )
+        dest.transformations = _merge_lists(
+            dest.transformations, source.transformations
+        )
+        dest.transforms = _merge_lists(dest.transforms, source.transforms)
+        dest.state_migrations = _merge_lists(
+            dest.state_migrations, source.state_migrations
+        )
+        dest.hooks = ResourceHookBinding.merge(dest.hooks, source.hooks)
         dest.parent = dest.parent if source.parent is None else source.parent
         dest.protect = dest.protect if source.protect is None else source.protect
-        dest.delete_before_replace = dest.delete_before_replace if source.delete_before_replace is None else source.delete_before_replace
+        dest.delete_before_replace = (
+            dest.delete_before_replace
+            if source.delete_before_replace is None
+            else source.delete_before_replace
+        )
         dest.version = dest.version if source.version is None else source.version
-        dest.custom_timeouts = dest.custom_timeouts if source.custom_timeouts is None else source.custom_timeouts
+        dest.plugin_download_url = (
+            dest.plugin_download_url
+            if source.plugin_download_url is None
+            else source.plugin_download_url
+        )
+        dest.custom_timeouts = (
+            dest.custom_timeouts
+            if source.custom_timeouts is None
+            else source.custom_timeouts
+        )
         dest.id = dest.id if source.id is None else source.id
         dest.import_ = dest.import_ if source.import_ is None else source.import_
         dest.urn = dest.urn if source.urn is None else source.urn
+        dest.provider = dest.provider if source.provider is None else source.provider
+        dest.retain_on_delete = (
+            dest.retain_on_delete
+            if source.retain_on_delete is None
+            else source.retain_on_delete
+        )
+        dest.deleted_with = (
+            dest.deleted_with if source.deleted_with is None else source.deleted_with
+        )
+        dest.replace_with = _merge_lists(dest.replace_with, source.replace_with)
+        dest.hide_diffs = _merge_lists(dest.hide_diffs, source.hide_diffs)
+        dest.env_var_mappings = (
+            dest.env_var_mappings
+            if source.env_var_mappings is None
+            else source.env_var_mappings
+        )
 
         # Now, if we are left with a .providers that is just a single key/value pair, then
         # collapse that down into .provider form.
@@ -533,27 +894,17 @@ class ResourceOptions:
         return dest
 
 
-def _expand_providers(options: 'ResourceOptions'):
-    # Move 'provider' up to 'providers' if we have it.
-    if options.provider is not None:
-        options.providers = [options.provider]
-
-    # Convert 'providers' map to list form.
-    if options.providers is not None and not isinstance(options.providers, list):
-        options.providers = list(options.providers.values())
-
-    options.provider = None
-
-
-def _collapse_providers(opts: 'ResourceOptions'):
-    # If we have only 0-1 providers, then merge that back down to the .provider field.
-    providers: Optional[Union[Mapping[str, ProviderResource], List[ProviderResource]]] = opts.providers
+def _collapse_providers(opts: "ResourceOptions"):
+    """
+    If we have 0 providers, we set .providers to None. Otherwise, we ensure that
+    .providers is returned as a map.
+    """
+    providers: Optional[
+        Union[Mapping[str, ProviderResource], Sequence[ProviderResource]]
+    ] = opts.providers
     if providers is not None:
         provider_length = len(providers)
         if provider_length == 0:
-            opts.providers = None
-        elif isinstance(providers, list) and provider_length == 1:
-            opts.provider = providers[0]
             opts.providers = None
         else:
             opts.providers = {}
@@ -561,7 +912,7 @@ def _collapse_providers(opts: 'ResourceOptions'):
                 for prov in providers:
                     opts.providers[prov.package] = prov
             elif isinstance(providers, dict):
-                for key, prov in providers:
+                for key, prov in providers.items():
                     opts.providers[key] = prov
 
 
@@ -575,29 +926,39 @@ def _merge_lists(dest, source):
     return dest + source
 
 
-# !!! IMPORTANT !!! If you add a new attribute to this type, make sure to verify that merge_options
+# !!! IMPORTANT !!! If you add a new attribute to this type, make sure to verify that ResourceOptions.merge
 # works properly for it.
 class Resource:
     """
     Resource represents a class whose CRUD operations are implemented by a provider plugin.
     """
 
-    _providers: Mapping[str, 'ProviderResource']
+    _providers: Mapping[str, "ProviderResource"]
     """
     The set of providers to use for child resources. Keyed by package name (e.g. "aws").
     """
 
-    _protect: bool
+    _provider: Optional["ProviderResource"]
+    """
+    The specified provider or provider determined from the parent for custom resources, or None.
+    """
+
+    _version: Optional[str]
+    """
+    The specified provider version or None.
+    """
+
+    _protect: Optional[bool]
     """
     When set to true, protect ensures this resource cannot be deleted.
     """
 
-    _transformations: 'List[ResourceTransformation]'
+    _transformations: list["ResourceTransformation"]
     """
     A collection of transformations to apply as part of resource registration.
     """
 
-    _aliases: 'List[Input[str]]'
+    _aliases: "list[Input[str]]"
     """
     A list of aliases applied to this resource.
     """
@@ -607,57 +968,101 @@ class Resource:
     The name assigned to the resource at construction.
     """
 
-# !!! IMPORTANT !!! If you add a new attribute to this type, make sure to verify that merge_options
-# works properly for it.
+    _type: str
+    """
+    The type of the resource.
+    """
 
-    def __init__(self,
-                 t: str,
-                 name: str,
-                 custom: bool,
-                 props: Optional['Inputs'] = None,
-                 opts: Optional[ResourceOptions] = None,
-                 remote: bool = False,
-                 dependency: bool = False) -> None:
+    _plugin_download_url: Optional[str]
+    """
+    The specified download URL associated with the provider or None.
+    """
+
+    _childResources: set["Resource"]
+
+    # !!! IMPORTANT !!! If you add a new attribute to this type, make sure to verify that ResourceOptions.merge
+    # works properly for it.
+
+    def __init__(
+        self,
+        t: str,
+        name: str,
+        custom: bool,
+        props: Optional["Inputs"] = None,
+        opts: Optional[ResourceOptions] = None,
+        remote: bool = False,
+        dependency: bool = False,
+        package_ref: Optional[Awaitable[Optional[str]]] = None,
+    ) -> None:
         """
         :param str t: The type of this resource.
         :param str name: The name of this resource.
         :param bool custom: True if this resource is a custom resource.
-        :param Optional[dict] props: An optional list of input properties to use as inputs for the resource.
+        :param Optional[Inputs] props: An optional list of input properties to use as inputs for the resource.
+               If props is an input type (decorated with `@input_type`), dict keys will be translated using
+               the type's and resource's type/name metadata rather than using the `translate_input_property`
+               and `translate_output_property` methods.
         :param Optional[ResourceOptions] opts: Optional set of :class:`pulumi.ResourceOptions` to use for this
                resource.
-        :param bool remote: True if this is a remote component resource.
+        :param bool remote: This parameter is intended for use by code-generated component SDKs;
+               end users authoring their own :class:`ComponentResource` subclasses should leave this at
+               its default (``False``). When ``True``, the component's children are constructed by the
+               engine rather than in this process, and the constructor skips local child registration
+               accordingly.
         :param bool dependency: True if this is a synthetic resource used internally for dependency tracking.
+        :param Optional[Awaitable[Optional[str]]] package_ref: The package reference for this resource.
         """
 
         if dependency:
-            self._protect = False
             self._providers = {}
+            self._transformations = []
+            self._childResources = set()
             return
+
+        _ensure_not_in_state_migration("resource construction")
 
         if props is None:
             props = {}
         if not t:
-            raise TypeError('Missing resource type argument')
+            raise TypeError("Missing resource type argument")
         if not isinstance(t, str):
-            raise TypeError('Expected resource type to be a string')
+            raise TypeError("Expected resource type to be a string")
         if not name:
-            raise TypeError('Missing resource name argument (for URN creation)')
+            raise TypeError("Missing resource name argument (for URN creation)")
         if not isinstance(name, str):
-            raise TypeError('Expected resource name to be a string')
+            raise TypeError("Expected resource name to be a string")
         if opts is None:
             opts = ResourceOptions()
         elif not isinstance(opts, ResourceOptions):
-            raise TypeError('Expected resource options to be a ResourceOptions instance')
+            raise TypeError(
+                "Expected resource options to be a ResourceOptions instance"
+            )
+
+        # If `props` is an input type, convert it into an untranslated dictionary.
+        # Translation of the keys will happen later using the type's and resource's type/name metadata.
+        # If `props` is not an input type, set `typ` to None to make translation behave as it has previously.
+        typ: Optional[type] = type(props)
+        assert typ is not None
+        if _types.is_input_type(typ):
+            props = _types.input_type_to_untranslated_dict(props)
+        else:
+            if not isinstance(props, Mapping):
+                raise TypeError("Expected resource properties to be a mapping")
+            typ = None
 
         # Before anything else - if there are transformations registered, give them a chance to run to modify the user
         # provided properties and options assigned to this resource.
         parent = opts.parent
         if parent is None:
             parent = get_root_resource()
-        parent_transformations = (parent._transformations or []) if parent is not None else []
+        parent_transformations = (
+            (parent._transformations or []) if parent is not None else []
+        )
         self._transformations = (opts.transformations or []) + parent_transformations
         for transformation in self._transformations:
-            args = ResourceTransformationArgs(resource=self, type_=t, name=name, props=props, opts=opts)
+            args = ResourceTransformationArgs(
+                resource=self, type_=t, name=name, props=props, opts=opts
+            )
             tres = transformation(args)
             if tres is not None:
                 if tres.opts.parent != opts.parent:
@@ -667,108 +1072,126 @@ class Resource:
                     # modifying it here would only even partially take affect).  It's theoretically
                     # possible this restriction could be lifted in the future, but for now just
                     # disallow re-parenting resources in transformations to be safe.
-                    raise Exception("Transformations cannot currently be used to change the `parent` of a resource.")
+                    raise Exception(
+                        "Transformations cannot currently be used to change the `parent` of a resource."
+                    )
                 props = tres.props
                 opts = tres.opts
 
         self._name = name
+        self._type = t
 
         # Make a shallow clone of opts to ensure we don't modify the value passed in.
-        opts = copy.copy(opts)
+        opts = opts._copy()
+
+        self._aliases = []
+        if opts is not None and opts.aliases is not None:
+            for alias in opts.aliases:
+                self._aliases.append(collapse_alias_to_urn(alias, name, t, opts.parent))
 
         self._providers = {}
+        self._childResources = set()
+
         # Check the parent type if one exists and fill in any default options.
         if opts.parent is not None:
             if not isinstance(opts.parent, Resource):
                 raise TypeError("Resource parent is not a valid Resource")
 
+            # Add this resource to its parent's set of child resources.
+            opts.parent._childResources.add(self)
+
             # Infer protection from parent, if one was provided.
             if opts.protect is None:
                 opts.protect = opts.parent._protect
 
-            # Make a copy of the aliases array, and add to it any implicit aliases inherited from
-            # its parent
-            if opts.aliases is None:
-                opts.aliases = []
-
-            opts.aliases = opts.aliases.copy()
-            for parent_alias in opts.parent._aliases:
-                child_alias = inherited_child_alias(
-                    name, opts.parent._name, parent_alias, t)
-                opts.aliases.append(cast('Output[Union[str, Alias]]', child_alias))
-
             # Infer providers and provider maps from parent, if one was provided.
             self._providers = opts.parent._providers
 
-        if custom:
-            provider = opts.provider
-            if provider is None:
-                if not opts.parent is None:
-                    # If no provider was given, but we have a parent, then inherit the
-                    # provider from our parent.
-                    opts.provider = opts.parent.get_provider(t)
-            else:
-                # If a provider was specified, add it to the providers map under this type's package
-                # so that any children of this resource inherit its provider.
-                type_components = t.split(":")
-                if len(type_components) == 3:
-                    [pkg, _, _] = type_components
-                    self._providers = {**self._providers, pkg: provider}
-        else:
-            providers = self._convert_providers(opts.provider, opts.providers)
-            self._providers = {**self._providers, **providers}
+        pkg = _pkg_from_type(t)
+        opts.provider, opts.providers = self._get_providers(t, pkg, opts)
 
-        self._protect = bool(opts.protect)
-
-        # Collapse any `Alias`es down to URNs. We have to wait until this point to do so because we
-        # do not know the default `name` and `type` to apply until we are inside the resource
-        # constructor.
-        self._aliases: 'List[Input[str]]' = []
-        if opts.aliases is not None:
-            for alias in opts.aliases:
-                self._aliases.append(collapse_alias_to_urn(
-                    alias, name, t, opts.parent))
-
+        self._protect = opts.protect
+        self._provider = opts.provider if (custom or remote) else None
+        if self._provider and self._provider.package != pkg:
+            action = (
+                "get"
+                if opts.urn is not None
+                else "read"
+                if opts.id is not None
+                else "register"
+            )
+            raise ValueError(
+                f"Attempted to {action} resource {t} with a provider for '{self._provider.package}'"
+            )
+        self._providers = opts.providers
+        self._version = opts.version
+        self._plugin_download_url = opts.plugin_download_url
         if opts.urn is not None:
             # This is a resource that already exists. Read its state from the engine.
-            get_resource(self, props, custom, opts.urn)
+            get_resource(self, props, custom, opts.urn, typ)
         elif opts.id is not None:
             # If this is a custom resource that already exists, read its state from the provider.
             if not custom:
                 raise Exception(
-                    "Cannot read an existing resource unless it has a custom provider")
-            read_resource(cast('CustomResource', self), t, name, props, opts)
+                    "Cannot read an existing resource unless it has a custom provider"
+                )
+            read_resource(
+                cast("CustomResource", self), t, name, props, opts, typ, package_ref
+            )
         else:
-            register_resource(self, t, name, custom, remote, DependencyResource, props, opts)
+            register_resource(
+                self,
+                t,
+                name,
+                custom,
+                remote,
+                DependencyResource,
+                props,
+                opts,
+                typ,
+                package_ref,
+            )
+
+    def _get_providers(
+        self, t: str, pkg: Optional[str], opts: ResourceOptions
+    ) -> tuple[Optional["ProviderResource"], Mapping[str, "ProviderResource"]]:
+        """
+        Fetches the correct provider and providers for this resource. See `_select_providers`.
+
+        Does not mutate self.
+        """
+        return _select_providers(t, pkg, opts, self._providers, self)
 
     @property
-    def urn(self) -> 'Output[str]':
+    def pulumi_resource_type(self) -> str:
+        """
+        The type assigned to the resource at construction.
+        """
+        return self._type
+
+    @property
+    def pulumi_resource_name(self) -> str:
+        """
+        The name assigned to the resource at construction.
+        """
+        return self._name
+
+    @property
+    def urn(self) -> "Output[str]":
         """
         The stable, logical URN used to distinctly address a resource, both before and after
         deployments.
         """
         return self.__dict__["urn"]
 
-    def _convert_providers(self, provider: Optional['ProviderResource'], providers: Optional[Union[Mapping[str, 'ProviderResource'], List['ProviderResource']]]) -> Mapping[str, 'ProviderResource']:
-        if provider is not None:
-            return self._convert_providers(None, [provider])
-
-        if providers is None:
-            return {}
-
-        if not isinstance(providers, list):
-            return providers
-
-        result = {}
-        for p in providers:
-            result[p.package] = p
-
-        return result
-
     def translate_output_property(self, prop: str) -> str:
         """
         Provides subclasses of Resource an opportunity to translate names of output properties
         into a format of their choosing before writing those properties to the resource object.
+
+        If the `props` passed to `__init__` is an input type (decorated with `@input_type`), the
+        type/name metadata of the resource will be used to translate names instead of calling this
+        method.
 
         :param str prop: A property name.
         :return: A potentially transformed property name.
@@ -781,13 +1204,17 @@ class Resource:
         Provides subclasses of Resource an opportunity to translate names of input properties into
         a format of their choosing before sending those properties to the Pulumi engine.
 
+        If the `props` passed to `__init__` is an input type (decorated with `@input_type`), the
+        type/name metadata of `props` will be used to translate names instead of calling this
+        method.
+
         :param str prop: A property name.
         :return: A potentially transformed property name.
         :rtype: str
         """
         return prop
 
-    def get_provider(self, module_member: str) -> Optional['ProviderResource']:
+    def get_provider(self, module_member: str) -> Optional["ProviderResource"]:
         """
         Fetches the provider for the given module member, if this resource has been provided a specific
         provider for the given module member.
@@ -798,11 +1225,10 @@ class Resource:
         :return: The :class:`ProviderResource` associated with the given module member, or None if one does not exist.
         :rtype: Optional[ProviderResource]
         """
-        components = module_member.split(":")
-        if len(components) != 3:
+        pkg = _pkg_from_type(module_member)
+        if pkg is None:
             return None
 
-        [pkg, _, _] = components
         return self._providers.get(pkg)
 
 
@@ -814,18 +1240,15 @@ class CustomResource(Resource):
     dynamically loaded plugin for the defining package.
     """
 
-    __pulumi_type: str
-    """
-    Private field containing the type ID for this object. Useful for implementing `isInstance` on
-    classes that inherit from `CustomResource`.
-    """
-
-    def __init__(self,
-                 t: str,
-                 name: str,
-                 props: Optional[dict] = None,
-                 opts: Optional[ResourceOptions] = None,
-                 dependency: bool = False) -> None:
+    def __init__(
+        self,
+        t: str,
+        name: str,
+        props: Optional["Inputs"] = None,
+        opts: Optional[ResourceOptions] = None,
+        dependency: bool = False,
+        package_ref: Optional[Awaitable[Optional[str]]] = None,
+    ) -> None:
         """
         :param str t: The type of this resource.
         :param str name: The name of this resource.
@@ -833,12 +1256,14 @@ class CustomResource(Resource):
         :param Optional[ResourceOptions] opts: Optional set of :class:`pulumi.ResourceOptions` to use for this
                resource.
         :param bool dependency: True if this is a synthetic resource used internally for dependency tracking.
+        :param Optional[Awaitable[Optional[str]]] package_ref: The package reference for this resource.
         """
-        Resource.__init__(self, t, name, True, props, opts, False, dependency)
-        self.__pulumi_type = t
+        Resource.__init__(
+            self, t, name, True, props, opts, False, dependency, package_ref
+        )
 
     @property
-    def id(self) -> 'Output[str]':
+    def id(self) -> "Output[str]":
         """
         id is the provider-assigned unique ID for this managed resource.  It is set during
         deployments and may be missing (undefined) during planning phases.
@@ -853,32 +1278,43 @@ class ComponentResource(Resource):
     operations for provisioning.
     """
 
-    def __init__(self,
-                 t: str,
-                 name: str,
-                 props: Optional[dict] = None,
-                 opts: Optional[ResourceOptions] = None,
-                 remote: bool = False) -> None:
+    _remote: bool
+
+    def __init__(
+        self,
+        t: str,
+        name: str,
+        props: Optional["Inputs"] = None,
+        opts: Optional[ResourceOptions] = None,
+        remote: bool = False,
+        package_ref: Optional[Awaitable[Optional[str]]] = None,
+    ) -> None:
         """
         :param str t: The type of this resource.
         :param str name: The name of this resource.
         :param Optional[dict] props: An optional list of input properties to use as inputs for the resource.
         :param Optional[ResourceOptions] opts: Optional set of :class:`pulumi.ResourceOptions` to use for this
                resource.
-        :param bool remote: True if this is a remote component resource.
+        :param bool remote: This parameter is intended for use by code-generated component SDKs;
+               end users authoring their own :class:`ComponentResource` subclasses should leave this at
+               its default (``False``). When ``True``, the component's children are constructed by the
+               engine rather than in this process, and the constructor skips local child registration
+               accordingly.
+        :param Optional[Awaitable[Optional[str]]] package_ref: The package reference for this resource.
         """
-        Resource.__init__(self, t, name, False, props, opts, remote, False)
-        self.__dict__["id"] = None
+        Resource.__init__(self, t, name, False, props, opts, remote, False, package_ref)
+        if not remote:
+            self.__dict__["id"] = None
+        self._remote = remote
 
-    def register_outputs(self, outputs):
+    def register_outputs(self, outputs: "Inputs"):
         """
         Register synthetic outputs that a component has initialized, usually by allocating other child
         sub-resources and propagating their resulting property values.
 
         :param dict output: A dictionary of outputs to associate with this resource.
         """
-        if outputs:
-            register_resource_outputs(self, outputs)
+        register_resource_outputs(self, outputs)
 
 
 class ProviderResource(CustomResource):
@@ -892,12 +1328,15 @@ class ProviderResource(CustomResource):
     package is the name of the package this is provider for.  Common examples are "aws" and "azure".
     """
 
-    def __init__(self,
-                 pkg: str,
-                 name: str,
-                 props: Optional[dict] = None,
-                 opts: Optional[ResourceOptions] = None,
-                 dependency: bool = False) -> None:
+    def __init__(
+        self,
+        pkg: str,
+        name: str,
+        props: Optional["Inputs"] = None,
+        opts: Optional[ResourceOptions] = None,
+        dependency: bool = False,
+        package_ref: Optional[Awaitable[Optional[str]]] = None,
+    ) -> None:
         """
         :param str pkg: The package type of this provider resource.
         :param str name: The name of this resource.
@@ -905,14 +1344,17 @@ class ProviderResource(CustomResource):
         :param Optional[ResourceOptions] opts: Optional set of :class:`pulumi.ResourceOptions` to use for this
                resource.
         :param bool dependency: True if this is a synthetic resource used internally for dependency tracking.
+        :param Optional[Awaitable[Optional[str]]] package_ref: The package reference for this resource.
         """
 
         if opts is not None and opts.provider is not None:
             raise TypeError(
-                "Explicit providers may not be used with provider resources")
+                "Explicit providers may not be used with provider resources"
+            )
         # Provider resources are given a well-known type, prefixed with "pulumi:providers".
         CustomResource.__init__(
-            self, f"pulumi:providers:{pkg}", name, props, opts, dependency)
+            self, f"pulumi:providers:{pkg}", name, props, opts, dependency, package_ref
+        )
         self.package = pkg
 
 
@@ -925,15 +1367,11 @@ class DependencyResource(CustomResource):
     def __init__(self, urn: str) -> None:
         super().__init__(t="", name="", props={}, opts=None, dependency=True)
 
-        from . import Output  # pylint: disable=import-outside-toplevel
-
-        urn_future: asyncio.Future[str] = asyncio.Future()
-        urn_known: asyncio.Future[bool] = asyncio.Future()
-        urn_secret: asyncio.Future[bool] = asyncio.Future()
-        urn_future.set_result(urn)
-        urn_known.set_result(True)
-        urn_secret.set_result(False)
-        self.__dict__["urn"] = Output({self}, urn_future, urn_known, urn_secret)
+        urn_data: asyncio.Future[_OutputData[str]] = asyncio.Future()
+        urn_data.set_result(
+            _OutputData(resources={self}, value=urn, is_known=True, is_secret=False)
+        )
+        self.__dict__["urn"] = Output._from_data(urn_data)
 
 
 class DependencyProviderResource(ProviderResource):
@@ -943,30 +1381,26 @@ class DependencyProviderResource(ProviderResource):
     """
 
     def __init__(self, ref: str) -> None:
-        super().__init__(pkg="", name="", props={}, opts=None, dependency=True)
+        ref_urn, ref_id = _parse_resource_reference(ref)
+        urn_parts = urn_util._parse_urn(ref_urn)
 
-        # Parse the URN and ID out of the provider reference.
-        last_sep = ref.rindex("::")
-        ref_urn = ref[:last_sep]
-        ref_id = ref[last_sep+2:]
+        # `typ` will be `pulumi:providers:<package>` and we want the
+        # last part, which normally parses as `typ_name`.
+        pkg = urn_parts.typ_name
 
-        from . import Output  # pylint: disable=import-outside-toplevel
+        super().__init__(pkg=pkg, name="", props={}, opts=None, dependency=True)
 
-        urn_future: asyncio.Future[str] = asyncio.Future()
-        urn_known: asyncio.Future[bool] = asyncio.Future()
-        urn_secret: asyncio.Future[bool] = asyncio.Future()
-        urn_future.set_result(ref_urn)
-        urn_known.set_result(True)
-        urn_secret.set_result(False)
-        self.__dict__["urn"] = Output({self}, urn_future, urn_known, urn_secret)
+        urn_data: asyncio.Future[_OutputData[str]] = asyncio.Future()
+        urn_data.set_result(
+            _OutputData(resources={self}, value=ref_urn, is_known=True, is_secret=False)
+        )
+        self.__dict__["urn"] = Output._from_data(urn_data)
 
-        id_future: asyncio.Future[str] = asyncio.Future()
-        id_known: asyncio.Future[bool] = asyncio.Future()
-        id_secret: asyncio.Future[bool] = asyncio.Future()
-        id_future.set_result(ref_id)
-        id_known.set_result(True)
-        id_secret.set_result(False)
-        self.__dict__["id"] = Output({self}, id_future, id_known, id_secret)
+        id_data: asyncio.Future[_OutputData[str]] = asyncio.Future()
+        id_data.set_result(
+            _OutputData(resources={self}, value=ref_id, is_known=True, is_secret=False)
+        )
+        self.__dict__["id"] = Output._from_data(id_data)
 
 
 def export(name: str, value: Any):
@@ -976,43 +1410,103 @@ def export(name: str, value: Any):
     :param str name: The name to assign to this output.
     :param Any value: The value of this output.
     """
-    res = cast('Stack', get_root_resource())
+    _ensure_not_in_state_migration("export stack output")
+
+    res = cast("Stack", get_root_resource())
     if known_types.is_stack(res):
         res.output(name, value)
     else:
-        raise Exception("Failed to export output. Root resource is not an instance of 'Stack'")
+        raise Exception(
+            "Failed to export output. Root resource is not an instance of 'Stack'"
+        )
 
 
 def create_urn(
-        name: 'Input[str]',
-        type_: 'Input[str]',
-        parent: Optional[Union['Resource', 'Input[str]']] = None,
-        project: str = None,
-        stack: str = None) -> 'Output[str]':
+    name: "Input[str]",
+    type_: "Input[str]",
+    parent: Optional[Union["Resource", "Input[str]"]] = None,
+    project: Optional[str] = None,
+    stack: Optional[str] = None,
+) -> "Output[str]":
     """
     create_urn computes a URN from the combination of a resource name, resource type, optional
     parent, optional project and optional stack.
     """
-    from . import Output  # pylint: disable=import-outside-toplevel
-    parent_prefix: Optional[Output[str]] = None
-    if parent is not None:
-        parent_urn = None
-        if isinstance(parent, Resource):
-            parent_urn = parent.urn
-        else:
-            parent_urn = Output.from_input(parent)
+    return create_urn_internal(name, type_, parent, project, stack)
 
-        parent_prefix = parent_urn.apply(
-            lambda u: u[0:u.rfind("::")] + "$")
+
+def _parse_resource_reference(ref: str) -> tuple[str, str]:
+    """
+    Parses the URN and ID out of the provider reference.
+    """
+    last_sep = ref.rindex("::")
+    ref_urn = ref[:last_sep]
+    ref_id = ref[last_sep + 2 :]
+    return (ref_urn, ref_id)
+
+
+def _select_providers(
+    t: str,
+    pkg: Optional[str],
+    opts: ResourceOptions,
+    inherited_providers: Mapping[str, "ProviderResource"],
+    resource: Optional[Resource] = None,
+) -> tuple[Optional["ProviderResource"], Mapping[str, "ProviderResource"]]:
+    """
+    Fetches the correct provider and providers for a resource of type `t`.
+
+    provider is the first option that does not return none
+        1. opts.provider
+        2. a matching provider in opts.providers
+        3. a matching provider inherited from opts.parent
+
+    providers is found by combining (in descending order of priority)
+        1. opts_providers
+        2. inherited_providers
+        3. provider
+    """
+    if isinstance(opts.providers, Sequence):
+        opts_providers = {p.package: p for p in opts.providers}
+    elif opts.providers:
+        opts_providers = {**opts.providers}
     else:
-        if stack is None:
-            stack = get_stack()
+        opts_providers = {}
 
-        if project is None:
-            project = get_project()
+    # The provider provided by opts.providers
+    ambient_provider: Optional[ProviderResource] = None
+    if pkg and pkg in opts_providers:
+        ambient_provider = opts_providers[pkg]
 
-        parent_prefix = Output.from_input("urn:pulumi:" + stack + "::" + project + "::")
+    # The provider supplied by the parent
 
-    all_args = [parent_prefix, type_, name]
-    # invariant http://mypy.readthedocs.io/en/latest/common_issues.html#variance
-    return Output.all(*all_args).apply(lambda arr: arr[0] + arr[1] + "::" + arr[2]) # type: ignore
+    # Cast is safe because the `and` will resolve to only None or the result
+    # of get_provider (which is Optional[ProviderResource]). This holds as
+    # long as Resource does not impliment __bool__.
+    parent_provider = cast(
+        Optional[ProviderResource], opts.parent and opts.parent.get_provider(t)
+    )
+
+    provider = ambient_provider or parent_provider
+    if opts.provider:
+        # If an explicit provider was passed in,
+        # its package may or may not match the package we're looking for.
+        provider_pkg = opts.provider.package
+        if pkg == provider_pkg:
+            # Explicit provider takes precedence over parent or ambient providers.
+            provider = opts.provider
+
+        # Regardless of whether it matches,
+        # we still want to keep the provider in the
+        # providers map, so that it can be used for child resources.
+        if provider_pkg in opts_providers:
+            message = f"There is a conflict between the `provider` field ({provider_pkg}) and a member of the `providers` map"
+            deprecation = "This will become an error in a future version. See https://github.com/pulumi/pulumi/issues/8799 for more details"
+            warnings.warn(f"{message} for resource {t}. " + deprecation)
+            log.warn(f"{message}. {deprecation}", resource=resource)
+        else:
+            opts_providers[provider_pkg] = opts.provider
+
+    # opts_providers takes priority over inherited_providers
+    providers = {**inherited_providers, **opts_providers}
+
+    return provider, providers

@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,10 +19,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rivo/uniseg"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestTrimPartialCommand(t *testing.T) {
+	t.Parallel()
+
 	noPartial := Red + "foo" + Green + "bar" + Reset
 	assert.Equal(t, noPartial, TrimPartialCommand(noPartial))
 
@@ -37,6 +40,8 @@ func codes(codes ...string) string {
 }
 
 func TestColorizer(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		command, codes string
 	}{
@@ -62,6 +67,8 @@ func TestColorizer(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.command, func(t *testing.T) {
+			t.Parallel()
+
 			const content = "hello"
 			str := c.command + content + Reset + "\n"
 
@@ -77,12 +84,38 @@ func TestColorizer(t *testing.T) {
 			trimmedContent := content[:3]
 			actualTrimmed := TrimColorizedString(str, len(trimmedContent))
 			assert.Equal(t, c.command+trimmedContent+Reset, actualTrimmed)
+
+			assert.Equal(t, uniseg.StringWidth("hello\n"), measureText(str))
+			assert.Equal(t, uniseg.StringWidth(actualNever), measureText(str))
 		})
 	}
 }
 
+func TestColorizer_10351(t *testing.T) {
+	t.Parallel()
+
+	// Regression test for https://github.com/pulumi/pulumi/issues/10351. If the character codes "%}>" were
+	// present in a string our lookup for color delimiters could crash with out of range errors.
+
+	str := "%}>" + Red + "hello" + Reset + "\n"
+
+	actualRaw := colorizeText(str, Raw, -1)
+	assert.Equal(t, str, actualRaw)
+
+	actualAlways := Always.Colorize(str)
+	assert.Equal(t, "%}>"+codes("38", "5", "1")+"hello"+codes("0")+"\n", actualAlways)
+
+	actualNever := Never.Colorize(str)
+	assert.Equal(t, "%}>hello\n", actualNever)
+
+	actualTrimmed := TrimColorizedString(str, 6)
+	assert.Equal(t, "%}>"+Red+"hel"+Reset, actualTrimmed)
+}
+
 // TestTrimColorizedString provides extra coverage for TrimColorizedString.
 func TestTrimColorizedString(t *testing.T) {
+	t.Parallel()
+
 	str := "hello, " + Green + "world" + Reset + "!!"
 
 	actual := TrimColorizedString(str, len("hello"))
@@ -103,4 +136,43 @@ func TestTrimColorizedString(t *testing.T) {
 	plain := "hello, world!!"
 	actual = TrimColorizedString(plain, len("hello"))
 	assert.Equal(t, "hello", actual)
+
+	assert.Equal(t, uniseg.StringWidth("hello, world!!"), measureText(str))
+	assert.Equal(t, uniseg.StringWidth(Never.Colorize(str)), measureText(str))
+}
+
+func TestHyperlink(t *testing.T) {
+	t.Parallel()
+
+	// Pin the exact OSC 8 bytes so that dropping one of the escape terminators is caught here rather than
+	// as visible garbage in a terminal.
+	assert.Equal(t,
+		"\x1b]8;;https://example.com\x1b\\"+Always.Colorize(Underline+BrightBlue+"click me"+Reset)+"\x1b]8;;\x1b\\",
+		Always.Hyperlink("https://example.com", "click me"))
+	assert.Equal(t,
+		"\x1b]8;;https://example.com\x1b\\"+Underline+BrightBlue+"click me"+Reset+"\x1b]8;;\x1b\\",
+		Raw.Hyperlink("https://example.com", "click me"))
+	assert.Equal(t, "click me", Never.Hyperlink("https://example.com", "click me"))
+	// With no URL there is nothing to link to; an empty-target escape renders as a broken link in
+	// some terminals.
+	assert.Equal(t, "plain", Always.Hyperlink("", "plain"))
+}
+
+func TestHighlightCommands(t *testing.T) {
+	t.Parallel()
+
+	msg := "not logged in; run `pulumi login` first, then `pulumi up`"
+	assert.Equal(t, msg, Never.Colorize(HighlightCommands(msg)))
+	assert.Equal(t,
+		"not logged in; run `"+Always.Colorize(SpecCommand+"pulumi login"+Reset)+"` first, then `"+
+			Always.Colorize(SpecCommand+"pulumi up"+Reset)+"`",
+		Always.Colorize(HighlightCommands(msg)))
+	assert.Equal(t, "an unmatched ` backtick", HighlightCommands("an unmatched ` backtick"))
+
+	multiline := "unexpected ` in input\nrun `pulumi up`"
+	assert.Equal(t,
+		"unexpected ` in input\nrun `"+Always.Colorize(SpecCommand+"pulumi up"+Reset)+"`",
+		Always.Colorize(HighlightCommands(multiline)))
+	fence := "```json\n{}\n```"
+	assert.Equal(t, fence, HighlightCommands(fence))
 }

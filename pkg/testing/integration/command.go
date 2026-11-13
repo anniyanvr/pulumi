@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,12 +23,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
 )
 
-// RunCommand executes the specified command and additional arguments, wrapping any output in the
-// specialized test output streams that list the location the test is running in.
 func RunCommand(t *testing.T, name string, args []string, wd string, opts *ProgramTestOptions) error {
+	return RunCommandPulumiHome(t, name, args, wd, opts, "")
+}
+
+// RunCommandPulumiHome executes the specified command and additional arguments, wrapping any output in the
+// specialized test output streams that list the location the test is running in, and sets the PULUMI_HOME
+// environment variable.
+func RunCommandPulumiHome(
+	t *testing.T,
+	name string,
+	args []string,
+	wd string,
+	opts *ProgramTestOptions,
+	pulumiHome string,
+) error {
 	path := args[0]
 	command := strings.Join(args, " ")
 	t.Logf("**** Invoke '%v' in '%v'", command, wd)
@@ -40,6 +52,12 @@ func RunCommand(t *testing.T, name string, args []string, wd string, opts *Progr
 	env = append(env, "PULUMI_DEBUG_COMMANDS=true")
 	env = append(env, "PULUMI_RETAIN_CHECKPOINTS=true")
 	env = append(env, "PULUMI_CONFIG_PASSPHRASE=correct horse battery staple")
+	if coverdir := os.Getenv("PULUMI_GOCOVERDIR"); coverdir != "" {
+		env = append(env, "GOCOVERDIR="+coverdir)
+	}
+	if pulumiHome != "" {
+		env = append(env, "PULUMI_HOME="+pulumiHome)
+	}
 
 	cmd := exec.Cmd{
 		Path: path,
@@ -65,10 +83,10 @@ func RunCommand(t *testing.T, name string, args []string, wd string, opts *Progr
 	if opts.ReportStats != nil {
 		// Note: This data is archived and used by external analytics tools.  Take care if changing the schema or format
 		// of this data.
-		opts.ReportStats.ReportCommand(TestCommandStats{
+		opts.ReportStats.ReportCommand(t.Context(), TestCommandStats{
 			StartTime:      startTime.Format("2006/01/02 15:04:05"),
 			EndTime:        endTime.Format("2006/01/02 15:04:05"),
-			ElapsedSeconds: float64((endTime.Sub(startTime)).Nanoseconds()) / 1000000000,
+			ElapsedSeconds: float64(endTime.Sub(startTime).Nanoseconds()) / 1000000000,
 			StepName:       name,
 			CommandLine:    command,
 			StackName:      string(opts.GetStackName()),
@@ -83,9 +101,15 @@ func RunCommand(t *testing.T, name string, args []string, wd string, opts *Progr
 		t.Logf("Invoke '%v' failed: %s\n", command, cmdutil.DetailedError(runerr))
 
 		if !opts.Verbose {
+			stderr := opts.Stderr
+
+			if stderr == nil {
+				stderr = os.Stderr
+			}
+
 			// Make sure we write the output in case of a failure to stderr so
 			// tests can assert the shape of the error message.
-			_, _ = fmt.Fprintf(opts.Stderr, "%s\n", string(runout))
+			_, _ = fmt.Fprintf(stderr, "%s\n", string(runout))
 		}
 	}
 

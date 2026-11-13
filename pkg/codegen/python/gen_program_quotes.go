@@ -1,23 +1,38 @@
+// Copyright 2020, Pulumi Corporation.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package python
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+
+	mapset "github.com/deckarep/golang-set/v2"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/pcl"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/zclconf/go-cty/cty"
 )
 
 func (g *generator) rewriteTraversal(traversal hcl.Traversal, source model.Expression,
-	parts []model.Traversable) (model.Expression, hcl.Diagnostics) {
-
+	parts []model.Traversable,
+) model.Expression {
 	// TODO(pdg): transfer trivia
 
 	var rootName string
@@ -32,7 +47,6 @@ func (g *generator) rewriteTraversal(traversal hcl.Traversal, source model.Expre
 		}
 	}
 
-	var diagnostics hcl.Diagnostics
 	for i, traverser := range traversal {
 		var key cty.Value
 		switch traverser := traverser.(type) {
@@ -53,19 +67,11 @@ func (g *generator) rewriteTraversal(traversal hcl.Traversal, source model.Expre
 		keyVal, objectKey := key.AsString(), false
 
 		receiver := parts[i]
-		if schemaType, ok := hcl2.GetSchemaForType(model.GetTraversableType(receiver)); ok {
-			obj := schemaType.(*schema.ObjectType)
+		_, hasSchema := pcl.GetSchemaForType(model.GetTraversableType(receiver))
+		_, isComponent := receiver.(*pcl.Component)
 
-			info, ok := obj.Language["python"].(objectTypeInfo)
-			if ok {
-				objectKey = !info.isDictionary
-				if mapped, ok := info.camelCaseToSnakeCase[keyVal]; ok {
-					keyVal = mapped
-				}
-			} else {
-				objectKey, keyVal = true, PyName(keyVal)
-			}
-
+		if hasSchema || isComponent {
+			objectKey = true
 			switch t := traverser.(type) {
 			case hcl.TraverseAttr:
 				t.Name = keyVal
@@ -76,7 +82,7 @@ func (g *generator) rewriteTraversal(traversal hcl.Traversal, source model.Expre
 			}
 		}
 
-		if objectKey && isLegalIdentifier(keyVal) {
+		if objectKey && isLegalIdentifier(PyName(keyVal)) {
 			currentTraversal = append(currentTraversal, traverser)
 			currentParts = append(currentParts, parts[i+1])
 			continue
@@ -88,8 +94,6 @@ func (g *generator) rewriteTraversal(traversal hcl.Traversal, source model.Expre
 				Traversal: currentTraversal,
 				Parts:     currentParts,
 			}
-			checkDiags := currentExpression.Typecheck(false)
-			diagnostics = append(diagnostics, checkDiags...)
 
 			currentTraversal, currentParts = nil, nil
 		} else if len(currentTraversal) > 0 {
@@ -98,9 +102,6 @@ func (g *generator) rewriteTraversal(traversal hcl.Traversal, source model.Expre
 				Traversal: currentTraversal,
 				Parts:     currentParts,
 			}
-			checkDiags := currentExpression.Typecheck(false)
-			diagnostics = append(diagnostics, checkDiags...)
-
 			currentTraversal, currentParts = nil, []model.Traversable{currentExpression.Type()}
 		}
 
@@ -110,15 +111,32 @@ func (g *generator) rewriteTraversal(traversal hcl.Traversal, source model.Expre
 				Value: cty.StringVal(keyVal),
 			},
 		}
-		checkDiags := currentExpression.Typecheck(false)
-		diagnostics = append(diagnostics, checkDiags...)
+
+		// typechecking the index expression will compute the type of the expression
+		// so that when we call Type() later on, we get the correct type.
+		typecheckDiags := currentExpression.Typecheck(true)
+		g.diagnostics = g.diagnostics.Extend(typecheckDiags)
+	}
+
+	if currentExpression == nil {
+		currentExpression = &model.ScopeTraversalExpression{
+			RootName:  rootName,
+			Traversal: currentTraversal,
+			Parts:     currentParts,
+		}
+	} else if len(currentTraversal) > 0 {
+		currentExpression = &model.RelativeTraversalExpression{
+			Source:    currentExpression,
+			Traversal: currentTraversal,
+			Parts:     currentParts,
+		}
 	}
 
 	if currentExpression == source {
-		return nil, nil
+		return nil
 	}
 
-	return currentExpression, diagnostics
+	return currentExpression
 }
 
 type quoteTemp struct {
@@ -146,18 +164,18 @@ type quoteAllocations struct {
 
 type quoteAllocator struct {
 	allocations *quoteAllocations
-	allocated   codegen.StringSet
+	allocated   mapset.Set[string]
 	stack       []model.Expression
 }
 
 func (qa *quoteAllocator) allocate(longString bool) (string, bool) {
 	if longString {
-		if !qa.allocated.Has(`"`) && !qa.allocated.Has(`"""`) {
+		if !qa.allocated.Contains(`"`) && !qa.allocated.Contains(`"""`) {
 			qa.allocated.Add(`"""`)
 			return `"""`, true
 		}
 
-		if !qa.allocated.Has(`'`) && !qa.allocated.Has(`'''`) {
+		if !qa.allocated.Contains(`'`) && !qa.allocated.Contains(`'''`) {
 			qa.allocated.Add(`'''`)
 			return `'''`, true
 		}
@@ -165,12 +183,12 @@ func (qa *quoteAllocator) allocate(longString bool) (string, bool) {
 		return "", false
 	}
 
-	if !qa.allocated.Has(`"`) {
+	if !qa.allocated.Contains(`"`) {
 		qa.allocated.Add(`"`)
 		return `"`, true
 	}
 
-	if !qa.allocated.Has(`'`) {
+	if !qa.allocated.Contains(`'`) {
 		qa.allocated.Add(`'`)
 		return `'`, true
 	}
@@ -179,7 +197,7 @@ func (qa *quoteAllocator) allocate(longString bool) (string, bool) {
 }
 
 func (qa *quoteAllocator) free(quotes string) {
-	qa.allocated.Delete(quotes)
+	qa.allocated.Remove(quotes)
 }
 
 func (qa *quoteAllocator) inTemplate() bool {
@@ -196,7 +214,7 @@ func (qa *quoteAllocator) allocateExpression(x model.Expression) (model.Expressi
 	var longString bool
 	switch x := x.(type) {
 	case *model.LiteralValueExpression:
-		if x.Type() != model.StringType || qa.inTemplate() {
+		if !model.StringType.AssignableFrom(x.Type()) || qa.inTemplate() {
 			return x, nil
 		}
 		v := x.Value.AsString()
@@ -210,7 +228,7 @@ func (qa *quoteAllocator) allocateExpression(x model.Expression) (model.Expressi
 		}
 	case *model.TemplateExpression:
 		for i, part := range x.Parts {
-			if lit, ok := part.(*model.LiteralValueExpression); ok && lit.Type() == model.StringType {
+			if lit, ok := part.(*model.LiteralValueExpression); ok && model.StringType.AssignableFrom(lit.Type()) {
 				v := lit.Value.AsString()
 				switch strings.Count(v, "\n") {
 				case 0:
@@ -233,7 +251,7 @@ func (qa *quoteAllocator) allocateExpression(x model.Expression) (model.Expressi
 		return x, nil
 	}
 
-	allocator := &quoteAllocator{allocated: codegen.StringSet{}, allocations: qa.allocations}
+	allocator := &quoteAllocator{allocated: mapset.NewSet[string](), allocations: qa.allocations}
 	value, valueDiags := model.VisitExpression(x, allocator.allocateExpression, allocator.freeExpression)
 
 	temp := &quoteTemp{
@@ -257,7 +275,7 @@ func (qa *quoteAllocator) freeExpression(x model.Expression) (model.Expression, 
 
 	switch x := x.(type) {
 	case *model.LiteralValueExpression:
-		if x.Type() != model.StringType || qa.inTemplate() {
+		if !model.StringType.AssignableFrom(x.Type()) || qa.inTemplate() {
 			return x, nil
 		}
 		// OK
@@ -268,39 +286,40 @@ func (qa *quoteAllocator) freeExpression(x model.Expression) (model.Expression, 
 	}
 
 	quotes, ok := qa.allocations.quotes[x]
-	contract.Assert(ok)
+	contract.Assertf(ok, "cannot free unknown expression")
 	qa.free(quotes)
 	return x, nil
 }
 
 func (g *generator) rewriteQuotes(x model.Expression) (model.Expression, []*quoteTemp, hcl.Diagnostics) {
-	var diagnostics hcl.Diagnostics
-
 	// First, rewrite traversals that require string indices into index expressions.
-	x, rewriteDiags := model.VisitExpression(x, nil, func(x model.Expression) (model.Expression, hcl.Diagnostics) {
+	x, rewriteDiags1 := model.VisitExpression(x, nil, func(x model.Expression) (model.Expression, hcl.Diagnostics) {
 		switch x := x.(type) {
 		case *model.RelativeTraversalExpression:
-			idx, diags := g.rewriteTraversal(x.Traversal, x.Source, x.Parts)
+			idx := g.rewriteTraversal(x.Traversal, x.Source, x.Parts)
 			if idx != nil {
-				return idx, diags
+				return idx, nil
 			}
 		case *model.ScopeTraversalExpression:
-			idx, diags := g.rewriteTraversal(x.Traversal, nil, x.Parts)
+			if isHookArgsTraversal(x) {
+				return x, nil
+			}
+			idx := g.rewriteTraversal(x.Traversal, nil, x.Parts)
 			if idx != nil {
-				return idx, diags
+				return idx, nil
 			}
 		}
 		return x, nil
 	})
-	diagnostics = append(diagnostics, rewriteDiags...)
 
 	// Then lift any expressions that cannot be allocated quotes into temps.
 	allocations := &quoteAllocations{
 		quotes: g.quotes,
 	}
-	allocator := &quoteAllocator{allocated: codegen.StringSet{}, allocations: allocations}
-	x, rewriteDiags = model.VisitExpression(x, allocator.allocateExpression, allocator.freeExpression)
-	diagnostics = append(diagnostics, rewriteDiags...)
+	allocator := &quoteAllocator{allocated: mapset.NewSet[string](), allocations: allocations}
+	x, rewriteDiags2 := model.VisitExpression(x, allocator.allocateExpression, allocator.freeExpression)
+
+	diagnostics := slices.Concat(rewriteDiags1, rewriteDiags2)
 
 	return x, allocations.temps, diagnostics
 }

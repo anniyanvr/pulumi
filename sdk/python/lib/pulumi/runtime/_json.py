@@ -1,4 +1,4 @@
-# Copyright 2016-2020, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,9 @@ def _to_json_serializable_obj(obj: Any) -> Any:
     """
     # Exclude some built-in types that are instances of Sequence that we don't want to treat as sequences here.
     # From: https://github.com/python/cpython/blob/master/Lib/_collections_abc.py
-    if isinstance(obj, abc.Sequence) and not isinstance(obj, (tuple, str, range, memoryview, bytes, bytearray)):
+    if isinstance(obj, abc.Sequence) and not isinstance(
+        obj, (tuple, str, range, memoryview, bytes, bytearray)
+    ):
         return [_to_json_serializable_obj(v) for v in obj]
 
     if _types.is_input_type(type(obj)):

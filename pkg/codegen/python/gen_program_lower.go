@@ -1,21 +1,97 @@
+// Copyright 2020, Pulumi Corporation.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package python
 
 import (
+	"strings"
+
+	mapset "github.com/deckarep/golang-set/v2"
+
 	"github.com/hashicorp/hcl/v2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/pcl"
 	"github.com/zclconf/go-cty/cty"
 )
 
-func isParameterReference(parameters codegen.Set, x model.Expression) bool {
+// Keep this set in sync with the non-private members of Output in sdk/python/lib/pulumi/output.py.
+// Output.__getattr__ cannot project properties whose names are already defined by Output.
+var outputMemberNames = mapset.NewSet(
+	"all",
+	"apply",
+	"concat",
+	"format",
+	"from_input",
+	"future",
+	"get",
+	"is_known",
+	"is_secret",
+	"json_dumps",
+	"json_loads",
+	"recover",
+	"resources",
+	"secret",
+	"unsecret",
+)
+
+func canLiftOutputTraversal(traversal hcl.Traversal) bool {
+	for _, traverser := range traversal {
+		var name string
+		switch traverser := traverser.(type) {
+		case hcl.TraverseAttr:
+			name = PyName(traverser.Name)
+		case hcl.TraverseIndex:
+			if traverser.Key.Type() != cty.String {
+				continue
+			}
+			name = PyName(traverser.Key.AsString())
+		default:
+			continue
+		}
+
+		// Attribute lifting uses Output.__getattr__, so it cannot project names already defined by Output.
+		if strings.HasPrefix(name, "_") || outputMemberNames.Contains(name) {
+			return false
+		}
+	}
+	return true
+}
+
+func isDirectParameterReference(parameters mapset.Set[model.Traversable], x model.Expression) bool {
 	scopeTraversal, ok := x.(*model.ScopeTraversalExpression)
-	if !ok {
+	if !ok || len(scopeTraversal.Parts) != 1 {
 		return false
 	}
 
-	return parameters.Has(scopeTraversal.Parts[0])
+	return parameters.Contains(scopeTraversal.Parts[0])
+}
+
+func parameterRelativeTraversal(parameters mapset.Set[model.Traversable], x model.Expression) (hcl.Traversal, bool) {
+	switch x := x.(type) {
+	case *model.ScopeTraversalExpression:
+		if !parameters.Contains(x.Parts[0]) {
+			return nil, false
+		}
+		return x.Traversal.SimpleSplit().Rel, true
+	case *model.RelativeTraversalExpression:
+		if !isDirectParameterReference(parameters, x.Source) {
+			return nil, false
+		}
+		return x.Traversal, true
+	default:
+		return nil, false
+	}
 }
 
 // parseProxyApply attempts to match and rewrite the given parsed apply using the following patterns:
@@ -26,9 +102,9 @@ func isParameterReference(parameters codegen.Set, x model.Expression) bool {
 //
 // Each of these patterns matches an apply that can be handled by `pulumi.Output`'s `__getitem__` or `__getattr__`
 // method. The rewritten expressions will use those methods rather than calling `apply`.
-func (g *generator) parseProxyApply(parameters codegen.Set, args []model.Expression,
-	then model.Expression) (model.Expression, bool) {
-
+func (g *generator) parseProxyApply(parameters mapset.Set[model.Traversable], args []model.Expression,
+	then model.Expression,
+) (model.Expression, bool) {
 	if len(args) != 1 {
 		return nil, false
 	}
@@ -37,30 +113,34 @@ func (g *generator) parseProxyApply(parameters codegen.Set, args []model.Express
 	switch then := then.(type) {
 	case *model.IndexExpression:
 		// Rewrite `__apply(<expr>, eval(x, x[index]))` to `<expr>[index]`.
-		if !isParameterReference(parameters, then.Collection) {
+		if !isDirectParameterReference(parameters, then.Collection) {
 			return nil, false
 		}
-		then.Collection = arg
-	case *model.ScopeTraversalExpression:
-		if !isParameterReference(parameters, then) {
+		// Create a new IndexExpression instead of mutating the original
+		newIndex := &model.IndexExpression{
+			Collection: arg,
+			Key:        then.Key,
+		}
+		// Typecheck to set the type
+		_ = newIndex.Typecheck(false)
+		return newIndex, true
+	case *model.ScopeTraversalExpression, *model.RelativeTraversalExpression:
+		traversal, ok := parameterRelativeTraversal(parameters, then)
+		if !ok || !canLiftOutputTraversal(traversal) {
 			return nil, false
 		}
 
-		switch arg := arg.(type) {
-		case *model.RelativeTraversalExpression:
-			arg.Traversal = append(arg.Traversal, then.Traversal[1:]...)
-			arg.Parts = append(arg.Parts, then.Parts...)
-		case *model.ScopeTraversalExpression:
-			arg.Traversal = append(arg.Traversal, then.Traversal[1:]...)
-			arg.Parts = append(arg.Parts, then.Parts...)
+		newTraversal := &model.RelativeTraversalExpression{
+			Source:    arg,
+			Traversal: traversal,
 		}
+		if diags := newTraversal.Typecheck(false); diags.HasErrors() {
+			return nil, false
+		}
+		return newTraversal, true
 	default:
 		return nil, false
 	}
-
-	diags := arg.Typecheck(false)
-	contract.Assert(len(diags) == 0)
-	return arg, true
 }
 
 // lowerProxyApplies lowers certain calls to the apply intrinsic into proxied property accesses. Concretely, this
@@ -81,14 +161,14 @@ func (g *generator) lowerProxyApplies(expr model.Expression) (model.Expression, 
 	rewriter := func(expr model.Expression) (model.Expression, hcl.Diagnostics) {
 		// Ignore the node if it is not a call to the apply intrinsic.
 		apply, ok := expr.(*model.FunctionCallExpression)
-		if !ok || apply.Name != hcl2.IntrinsicApply {
+		if !ok || apply.Name != pcl.IntrinsicApply {
 			return expr, nil
 		}
 
 		// Parse the apply call.
-		args, then := hcl2.ParseApplyCall(apply)
+		args, then := pcl.ParseApplyCall(apply)
 
-		parameters := codegen.Set{}
+		parameters := mapset.NewSet[model.Traversable]()
 		for _, p := range then.Parameters {
 			parameters.Add(p)
 		}
@@ -101,24 +181,4 @@ func (g *generator) lowerProxyApplies(expr model.Expression) (model.Expression, 
 		return expr, nil
 	}
 	return model.VisitExpression(expr, model.IdentityVisitor, rewriter)
-}
-
-func (g *generator) lowerObjectKeys(expr model.Expression, camelCaseToSnakeCase map[string]string) {
-	switch expr := expr.(type) {
-	case *model.ObjectConsExpression:
-		for _, item := range expr.Items {
-			// Ignore non-literal keys
-			if key, ok := item.Key.(*model.LiteralValueExpression); ok && key.Value.Type().Equals(cty.String) {
-				if keyVal, ok := camelCaseToSnakeCase[key.Value.AsString()]; ok {
-					key.Value = cty.StringVal(keyVal)
-				}
-			}
-
-			g.lowerObjectKeys(item.Value, camelCaseToSnakeCase)
-		}
-	case *model.TupleConsExpression:
-		for _, element := range expr.Expressions {
-			g.lowerObjectKeys(element, camelCaseToSnakeCase)
-		}
-	}
 }

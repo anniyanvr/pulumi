@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
 package backend
 
 import (
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/config"
+	"github.com/pulumi/pulumi/pkg/v3/display"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
 )
 
 // UpdateMetadata describes optional metadata about an update.
@@ -63,8 +63,10 @@ const (
 	VCSRepoOwner = "vcs.owner"
 	// VCSRepoName is the name of the repo, if the local git repo's remote origin is a cloud host.
 	VCSRepoName = "vcs.repo"
-	//VCSRepoKind is the cloud host where the repo is hosted.
+	// VCSRepoKind is the cloud host where the repo is hosted.
 	VCSRepoKind = "vcs.kind"
+	// VCSRepoRoot is the root directory of the project in the repo.
+	VCSRepoRoot = "vcs.root"
 
 	// CISystem is the name of the CI system running the pulumi operation.
 	CISystem = "ci.system"
@@ -88,6 +90,15 @@ const (
 
 	// ExecutionKind indicates how the update was executed. One of "cli", "auto.local", or "auto.inline".
 	ExecutionKind = "exec.kind"
+	// ExecutionAgent indicates the user agent of the updater for automated scenarios (GHA, Kubernetes Operator).
+	ExecutionAgent = "exec.agent"
+
+	// UpdatePlan ("true", "false") indicates if an explicit update plan was used for the update (either
+	// saving one, or constraining to one).
+	UpdatePlan = "updatePlan"
+
+	// StackEnvironments indicates the list of ESC environments imported by the stack being updated.
+	StackEnvironments = "stack.environments"
 )
 
 // UpdateInfo describes a previous update.
@@ -107,7 +118,8 @@ type UpdateInfo struct {
 	Config config.Map `json:"config"`
 
 	// Information obtained from an update completing.
-	Result          UpdateResult           `json:"result"`
-	EndTime         int64                  `json:"endTime"`
-	ResourceChanges engine.ResourceChanges `json:"resourceChanges,omitempty"`
+	Version         int                     `json:"version"`
+	Result          UpdateResult            `json:"result"`
+	EndTime         int64                   `json:"endTime"`
+	ResourceChanges display.ResourceChanges `json:"resourceChanges,omitempty"`
 }

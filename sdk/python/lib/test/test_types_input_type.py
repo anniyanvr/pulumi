@@ -1,4 +1,4 @@
-# Copyright 2016-2020, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,13 +16,15 @@ import unittest
 from typing import Optional
 
 import pulumi
-import pulumi._types as _types
+from pulumi import _types
 
 
 @pulumi.input_type
 class MySimpleInputType:
     first_value: pulumi.Input[str] = pulumi.property("firstValue")
-    second_value: Optional[pulumi.Input[float]] = pulumi.property("secondValue", default=None)
+    second_value: Optional[pulumi.Input[float]] = pulumi.property(
+        "secondValue", default=None
+    )
 
 
 @pulumi.input_type
@@ -30,31 +32,34 @@ class MyInputType:
     first_value: pulumi.Input[str] = pulumi.property("firstValue")
     second_value: Optional[pulumi.Input[float]] = pulumi.property("secondValue")
 
-    def __init__(self,
-                 first_value: pulumi.Input[str],
-                 second_value: Optional[pulumi.Input[float]] = None):
+    def __init__(
+        self,
+        first_value: pulumi.Input[str],
+        second_value: Optional[pulumi.Input[float]] = None,
+    ):
         pulumi.set(self, "first_value", first_value)
         pulumi.set(self, "second_value", second_value)
 
 
 @pulumi.input_type
 class MyDeclaredPropertiesInputType:
-    def __init__(self,
-                 first_value: pulumi.Input[str],
-                 second_value: Optional[pulumi.Input[float]] = None):
+    def __init__(
+        self,
+        first_value: pulumi.Input[str],
+        second_value: Optional[pulumi.Input[float]] = None,
+    ):
         pulumi.set(self, "first_value", first_value)
         pulumi.set(self, "second_value", second_value)
 
     # Property with empty getter/setter bodies.
     @property
     @pulumi.getter(name="firstValue")
-    def first_value(self) -> pulumi.Input[str]:
+    def first_value(self) -> pulumi.Input[str]:  # type: ignore
         """First value docstring."""
         ...
 
     @first_value.setter
-    def first_value(self, value: pulumi.Input[str]):
-        ...
+    def first_value(self, value: pulumi.Input[str]): ...
 
     # Property with implementations.
     @property
@@ -68,15 +73,24 @@ class MyDeclaredPropertiesInputType:
         pulumi.set(self, "second_value", value)
 
 
+@pulumi.input_type
+class DefaultArgs:
+    a: pulumi.Input[str] = pulumi.property("a", default="foo")
+    b: pulumi.Input[str] = pulumi.property("b", default="bar")
+    c: Optional[pulumi.Input[str]] = pulumi.property("c", default=None)
+
+
 class InputTypeTests(unittest.TestCase):
     def test_decorator_raises(self):
         with self.assertRaises(AssertionError) as cm:
+
             @pulumi.input_type
             @pulumi.input_type
             class Foo:
                 pass
 
         with self.assertRaises(AssertionError) as cm:
+
             @pulumi.input_type
             @pulumi.output_type
             class Bar:
@@ -122,18 +136,25 @@ class InputTypeTests(unittest.TestCase):
             self.assertIsInstance(second, property)
             self.assertTrue(callable(second.fget))
             self.assertEqual("second_value", second.fget.__name__)
-            self.assertEqual({"return": Optional[pulumi.Input[float]]}, second.fget.__annotations__)
+            self.assertEqual(
+                {"return": Optional[pulumi.Input[float]]}, second.fget.__annotations__
+            )
             if has_doc:
                 self.assertEqual("Second value docstring.", second.fget.__doc__)
             self.assertEqual("secondValue", second.fget._pulumi_name)
             self.assertTrue(callable(second.fset))
             self.assertEqual("second_value", second.fset.__name__)
-            self.assertEqual({"value": Optional[pulumi.Input[float]]}, second.fset.__annotations__)
+            self.assertEqual(
+                {"value": Optional[pulumi.Input[float]]}, second.fset.__annotations__
+            )
 
-            self.assertEqual({
-                "firstValue": "world",
-                "secondValue": 500,
-            }, _types.input_type_to_dict(t))
+            self.assertEqual(
+                {
+                    "firstValue": "world",
+                    "secondValue": 500,
+                },
+                _types.input_type_to_dict(t),
+            )
 
             self.assertTrue(hasattr(t, "__eq__"))
             self.assertTrue(t.__eq__(t))
@@ -146,17 +167,29 @@ class InputTypeTests(unittest.TestCase):
             self.assertTrue(t == t2)
             self.assertFalse(t != t2)
 
-            self.assertEqual({
-                "firstValue": "world",
-                "secondValue": 500,
-            }, _types.input_type_to_dict(t2))
+            self.assertEqual(
+                {
+                    "firstValue": "world",
+                    "secondValue": 500,
+                },
+                _types.input_type_to_dict(t2),
+            )
 
             t3 = typ(first_value="foo", second_value=1)
             self.assertFalse(t.__eq__(t3))
             self.assertFalse(t == t3)
             self.assertTrue(t != t3)
 
-            self.assertEqual({
-                "firstValue": "foo",
-                "secondValue": 1,
-            }, _types.input_type_to_dict(t3))
+            self.assertEqual(
+                {
+                    "firstValue": "foo",
+                    "secondValue": 1,
+                },
+                _types.input_type_to_dict(t3),
+            )
+
+    def test_input_type_defaults(self):
+        d = DefaultArgs()
+        self.assertEqual("foo", d.a)
+        self.assertEqual("bar", d.b)
+        self.assertEqual(None, d.c)

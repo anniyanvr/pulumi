@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,15 +15,16 @@
 // Pulling out some of the repeated strings tokens into constants would harm readability,
 // so we just ignore the goconst linter's warning.
 //
-// nolint: lll, goconst
+//nolint:lll, goconst
 package python
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/cgstrings"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 // DocLanguageHelper is the Python-specific implementation of the DocLanguageHelper.
@@ -47,16 +48,17 @@ func (d DocLanguageHelper) GetDocLinkForResourceType(pkg *schema.Package, modNam
 
 	var path string
 	var fqdnTypeName string
+	packageName := PyPack(pkg.Namespace, pkg.Name)
 	switch {
 	case pkg.Name != "" && modName != "":
-		path = fmt.Sprintf("pulumi_%s/%s", pkg.Name, modName)
-		fqdnTypeName = fmt.Sprintf("pulumi_%s.%s.%s", pkg.Name, modName, typeName)
+		path = fmt.Sprintf("%s/%s", packageName, modName)
+		fqdnTypeName = fmt.Sprintf("%s.%s.%s", packageName, modName, typeName)
 	case pkg.Name == "" && modName != "":
 		path = modName
 		fqdnTypeName = fmt.Sprintf("%s.%s", modName, typeName)
 	case pkg.Name != "" && modName == "":
-		path = fmt.Sprintf("pulumi_%s", pkg.Name)
-		fqdnTypeName = fmt.Sprintf("pulumi_%s.%s", pkg.Name, typeName)
+		path = packageName
+		fqdnTypeName = fmt.Sprintf("%s.%s", packageName, typeName)
 	}
 
 	return fmt.Sprintf("/docs/reference/pkg/python/%s/#%s", path, fqdnTypeName)
@@ -72,15 +74,29 @@ func (d DocLanguageHelper) GetDocLinkForFunctionInputOrOutputType(pkg *schema.Pa
 	return ""
 }
 
-// GetLanguageTypeString returns the Python-specific type given a Pulumi schema type.
-func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName string, t schema.Type, input, optional bool) string {
-	typeDetails := map[*schema.ObjectType]*typeDetails{}
-	mod := &modContext{
-		pkg:         pkg,
-		mod:         moduleName,
-		typeDetails: typeDetails,
+func (d DocLanguageHelper) GetModuleName(pkg schema.PackageReference, module string) string {
+	var info PackageInfo
+	if a, err := pkg.Language("python"); err == nil {
+		info, _ = a.(PackageInfo)
 	}
-	typeName := mod.typeString(t, input, false /*wrapInput*/, optional /*optional*/, false /*acceptMapping*/)
+
+	return moduleToPythonModule(module, info.ModuleNameOverrides)
+}
+
+// GetLanguageTypeString returns the Python-specific type given a Pulumi schema type.
+func (d DocLanguageHelper) GetTypeName(pkg schema.PackageReference, t schema.Type, input bool, relativeToModule string) string {
+	var info PackageInfo
+	if a, err := pkg.Language("python"); err == nil {
+		info, _ = a.(PackageInfo)
+	}
+
+	mod := &modContext{
+		pkg:              pkg,
+		mod:              moduleToPythonModule(relativeToModule, info.ModuleNameOverrides),
+		modNameOverrides: info.ModuleNameOverrides,
+		typeDetails:      map[*schema.ObjectType]*typeDetails{},
+	}
+	typeName := mod.typeString(t, typeStringOpts{input: input, forDocs: true})
 
 	// Remove any package qualifiers from the type name.
 	if !input {
@@ -93,26 +109,69 @@ func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName
 	return typeName
 }
 
-func (d DocLanguageHelper) GetFunctionName(modName string, f *schema.Function) string {
+func (d DocLanguageHelper) GetResourceName(r *schema.Resource) string {
+	return resourceName(r)
+}
+
+func (d DocLanguageHelper) GetFunctionName(f *schema.Function) string {
 	return PyName(tokenToName(f.Token))
 }
 
 // GetResourceFunctionResultName returns the name of the result type when a function is used to lookup
 // an existing resource.
 func (d DocLanguageHelper) GetResourceFunctionResultName(modName string, f *schema.Function) string {
-	return title(tokenToName(f.Token)) + "Result"
+	return cgstrings.UppercaseFirst(tokenToName(f.Token)) + "Result"
 }
 
-// GenPropertyCaseMap generates the case maps for a property.
-func (d DocLanguageHelper) GenPropertyCaseMap(pkg *schema.Package, modName, tool string, prop *schema.Property, snakeCaseToCamelCase, camelCaseToSnakeCase map[string]string, seenTypes codegen.Set) {
-	if _, imported := pkg.Language["python"]; !imported {
-		if err := pkg.ImportLanguages(map[string]schema.Language{"python": Importer}); err != nil {
-			fmt.Printf("error building case map for %q in module %q", prop.Name, modName)
-			return
+// ResolveDocRef renders a single doc ref as a Python name. It honours per-package
+// ModuleNameOverrides and resource→args class naming (including the `InitArgs` fallback used when
+// an object type collides with a resource token).
+func (d DocLanguageHelper) ResolveDocRef(pkg schema.PackageReference, selfRef, ref schema.DocRef) (string, bool, error) {
+	var info PackageInfo
+	if a, err := pkg.Language("python"); err == nil {
+		info, _ = a.(PackageInfo)
+	}
+	mod := &modContext{
+		pkg:              pkg,
+		mod:              "\x00docrefresolver",
+		modNameOverrides: info.ModuleNameOverrides,
+		typeDetails:      map[*schema.ObjectType]*typeDetails{},
+	}
+	name, ok := mod.docRefResolver(selfRef)(ref)
+	return name, ok, nil
+}
+
+func (d DocLanguageHelper) GetMethodName(m *schema.Method) string {
+	return PyName(m.Name)
+}
+
+func (d DocLanguageHelper) GetMethodResultName(pkg schema.PackageReference, modName string, r *schema.Resource,
+	m *schema.Method,
+) string {
+	var returnType *schema.ObjectType
+	if m.Function.ReturnType != nil {
+		if objectType, ok := m.Function.ReturnType.(*schema.ObjectType); ok && objectType != nil {
+			returnType = objectType
 		}
 	}
 
-	recordProperty(prop, snakeCaseToCamelCase, camelCaseToSnakeCase, seenTypes)
+	var info PackageInfo
+	if i, err := pkg.Language("python"); err == nil {
+		info, _ = i.(PackageInfo)
+	}
+
+	if info.LiftSingleValueMethodReturns && returnType != nil && len(returnType.Properties) == 1 {
+		typeDetails := map[*schema.ObjectType]*typeDetails{}
+		mod := &modContext{
+			pkg:         pkg,
+			mod:         modName,
+			typeDetails: typeDetails,
+		}
+		return mod.typeString(returnType.Properties[0].Type, typeStringOpts{
+			forDocs: true,
+		})
+	}
+	return fmt.Sprintf("%s.%sResult", resourceName(r), cgstrings.UppercaseFirst(d.GetMethodName(m)))
 }
 
 // GetPropertyName returns the property name specific to Python.
@@ -121,23 +180,10 @@ func (d DocLanguageHelper) GetPropertyName(p *schema.Property) (string, error) {
 }
 
 // GetEnumName returns the enum name specific to Python.
-func (d DocLanguageHelper) GetEnumName(e *schema.Enum) (string, error) {
+func (d DocLanguageHelper) GetEnumName(e *schema.Enum, typeName string) (string, error) {
 	name := fmt.Sprintf("%v", e.Value)
 	if e.Name != "" {
 		name = e.Name
 	}
-	return makeSafeEnumName(name)
-}
-
-// GetModuleDocLink returns the display name and the link for a module.
-func (d DocLanguageHelper) GetModuleDocLink(pkg *schema.Package, modName string) (string, string) {
-	var displayName string
-	var link string
-	if modName == "" {
-		displayName = pyPack(pkg.Name)
-	} else {
-		displayName = fmt.Sprintf("%s/%s", pyPack(pkg.Name), strings.ToLower(modName))
-	}
-	link = fmt.Sprintf("/docs/reference/pkg/python/%s", displayName)
-	return displayName, link
+	return makeSafeEnumName(name, typeName)
 }

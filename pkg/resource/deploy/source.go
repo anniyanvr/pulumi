@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,19 +18,32 @@ import (
 	"context"
 	"io"
 
-	pbempty "github.com/golang/protobuf/ptypes/empty"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy/providers"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
-	pulumirpc "github.com/pulumi/pulumi/sdk/v2/proto/go"
+	pkgresource "github.com/pulumi/pulumi/pkg/v3/resource"
+	"github.com/pulumi/pulumi/pkg/v3/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/providers"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/property"
+)
+
+type ResultState int
+
+const (
+	ResultStateSuccess ResultState = iota
+	ResultStateFailed
+	ResultStateSkipped
 )
 
 // A ProviderSource allows a Source to lookup provider plugins.
 type ProviderSource interface {
 	// GetProvider fetches the provider plugin for the given reference.
 	GetProvider(ref providers.Reference) (plugin.Provider, bool)
+	// ParameterizeExtension parameterizes the provider for the given reference with ext. The provider receives
+	// one Parameterize call per (provider, extension) pair, however many callers ask for it.
+	ParameterizeExtension(
+		ctx context.Context, ref providers.Reference, extRef apitype.ExtensionRef, ext apitype.Extension,
+	) error
 }
 
 // A Source can generate a new set of resources that the planner will process accordingly.
@@ -39,36 +52,18 @@ type Source interface {
 
 	// Project returns the package name of the Pulumi project we are obtaining resources from.
 	Project() tokens.PackageName
-	// Info returns a serializable payload that can be used to stamp snapshots for future reconciliation.
-	Info() interface{}
 
 	// Iterate begins iterating the source. Error is non-nil upon failure; otherwise, a valid iterator is returned.
-	Iterate(ctx context.Context, opts Options, providers ProviderSource) (SourceIterator, result.Result)
+	Iterate(ctx context.Context, providers ProviderSource) (SourceIterator, error)
 }
 
 // A SourceIterator enumerates the list of resources that a source has to offer and tracks associated state.
 type SourceIterator interface {
-	io.Closer
+	// Cancel the iterator. This will cancel the resource monitor attached to the iterator.
+	Cancel(context.Context) error
 
 	// Next returns the next event from the source.
-	Next() (SourceEvent, result.Result)
-}
-
-// SourceResourceMonitor directs resource operations from the `Source` to various resource
-// providers.
-type SourceResourceMonitor interface {
-	// NOTE: This interface does not implement pulumirpc.ResourceMonitorClient because the eval and
-	// query implementations of `Source` do not implement precisely the same signatures.
-
-	Address() string
-	Cancel() error
-	Invoke(ctx context.Context, req *pulumirpc.InvokeRequest) (*pulumirpc.InvokeResponse, error)
-	ReadResource(ctx context.Context,
-		req *pulumirpc.ReadResourceRequest) (*pulumirpc.ReadResourceResponse, error)
-	RegisterResource(ctx context.Context,
-		req *pulumirpc.RegisterResourceRequest) (*pulumirpc.RegisterResourceResponse, error)
-	RegisterResourceOutputs(ctx context.Context,
-		req *pulumirpc.RegisterResourceOutputsRequest) (*pbempty.Empty, error)
+	Next() (SourceEvent, error)
 }
 
 // SourceEvent is an event associated with the enumeration of a plan.  It is an intent expressed by the source
@@ -81,14 +76,26 @@ type SourceEvent interface {
 type RegisterResourceEvent interface {
 	SourceEvent
 	// Goal returns the goal state for the resource object that was allocated by the program.
-	Goal() *resource.Goal
+	Goal() *pkgresource.Goal
 	// Done indicates that we are done with this step.  It must be called to perform cleanup associated with the step.
 	Done(result *RegisterResult)
+	// Extension returns the extension parameterization, if any. A non-nil value
+	// means this resource came from an extension-parameterized package and the
+	// engine must apply that extension to the provider before producing steps.
+	Extension() *apitype.Extension
+	// ExtensionRef returns the per-deployment UUID identifying which extension
+	// registration this resource came from.
+	ExtensionRef() apitype.ExtensionRef
+	// StateMigrations returns the state migration functions to apply to the prior state of this resource and its
+	// descendants before diffing.
+	StateMigrations() []StateMigrationFunction
 }
 
 // RegisterResult is the state of the resource after it has been registered.
 type RegisterResult struct {
-	State *resource.State // the resource state.
+	State   *pkgresource.State // the resource state.
+	Result  ResultState        // the result of the registration.
+	Unknown bool               // true if the result is unknown, e.g. because the create was elided.
 }
 
 // RegisterResourceOutputsEvent is an event that asks the engine to complete the provisioning of a resource.
@@ -97,19 +104,19 @@ type RegisterResourceOutputsEvent interface {
 	// URN is the resource URN that this completion applies to.
 	URN() resource.URN
 	// Outputs returns a property map of output properties to add to a resource before completing.
-	Outputs() resource.PropertyMap
+	Outputs() property.Map
 	// Done indicates that we are done with this step.  It must be called to perform cleanup associated with the step.
 	Done()
 }
 
-// ReadResourceEvent is an event that asks the engine to read the state of a resource that already exists.
+// ReadResourceEvent is an event that asks the engine to read the state of an existing resource.
 type ReadResourceEvent interface {
 	SourceEvent
 
 	// ID is the requested ID of this read.
 	ID() resource.ID
 	// Name is the requested name of this read.
-	Name() tokens.QName
+	Name() string
 	// Type is type of the resource being read.
 	Type() tokens.Type
 	// Provider is a reference to the provider instance to use for this read.
@@ -117,15 +124,21 @@ type ReadResourceEvent interface {
 	// Parent is the parent resource of the resource being read.
 	Parent() resource.URN
 	// Properties is the property bag that will be passed to Read as search parameters.
-	Properties() resource.PropertyMap
+	Properties() property.Map
 	// Dependencies returns the list of URNs upon which this read depends.
 	Dependencies() []resource.URN
 	// Done indicates that we are done with this event.
 	Done(result *ReadResult)
 	// The names of any additional outputs that should be treated as secrets.
 	AdditionalSecretOutputs() []resource.PropertyKey
+	// The source position of the resource read
+	SourcePosition() string
+	// The stack grace at the time of the read
+	StackTrace() []pkgresource.StackFrame
 }
 
 type ReadResult struct {
-	State *resource.State
+	State   *pkgresource.State
+	Result  ResultState
+	Unknown bool // true if the read was elided; SDKs should resolve outputs as unknown.
 }

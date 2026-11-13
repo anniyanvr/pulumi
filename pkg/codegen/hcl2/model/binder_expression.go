@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,22 +16,28 @@ package model
 
 import (
 	"reflect"
+	"slices"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	_syntax "github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	_syntax "github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/zclconf/go-cty/cty"
 )
 
 type BindOption func(options *bindOptions)
 
+type bindOptions struct {
+	allowMissingVariables bool
+	skipRangeTypechecking bool
+}
+
 func AllowMissingVariables(options *bindOptions) {
 	options.allowMissingVariables = true
 }
 
-type bindOptions struct {
-	allowMissingVariables bool
+func SkipRangeTypechecking(options *bindOptions) {
+	options.skipRangeTypechecking = true
 }
 
 type expressionBinder struct {
@@ -43,8 +49,8 @@ type expressionBinder struct {
 
 // BindExpression binds an HCL2 expression using the given scope and token map.
 func BindExpression(syntax hclsyntax.Node, scope *Scope, tokens _syntax.TokenMap,
-	opts ...BindOption) (Expression, hcl.Diagnostics) {
-
+	opts ...BindOption,
+) (Expression, hcl.Diagnostics) {
 	var options bindOptions
 	for _, opt := range opts {
 		opt(&options)
@@ -62,8 +68,8 @@ func BindExpression(syntax hclsyntax.Node, scope *Scope, tokens _syntax.TokenMap
 
 // BindExpressionText parses and binds an HCL2 expression using the given scope.
 func BindExpressionText(source string, scope *Scope, initialPos hcl.Pos,
-	opts ...BindOption) (Expression, hcl.Diagnostics) {
-
+	opts ...BindOption,
+) (Expression, hcl.Diagnostics) {
 	syntax, tokens, diagnostics := _syntax.ParseExpression(source, "<anonymous>", initialPos)
 	if diagnostics.HasErrors() {
 		return nil, diagnostics
@@ -108,6 +114,10 @@ func (b *expressionBinder) bindExpression(syntax hclsyntax.Node) (Expression, hc
 		return b.bindTupleConsExpression(syntax)
 	case *hclsyntax.UnaryOpExpr:
 		return b.bindUnaryOpExpression(syntax)
+	case *hclsyntax.ParenthesesExpr:
+		// This provides the scoped range for the parentheses, but does not effect the
+		// precedence. That is handled elsewhere. We can just pass through.
+		return b.bindExpression(syntax.Expression)
 	default:
 		contract.Failf("unexpected expression node of type %T (%v)", syntax, syntax.Range())
 		return nil, nil
@@ -157,7 +167,7 @@ func ctyTypeToType(t cty.Type, optional bool) Type {
 	return result
 }
 
-var typeCapsule = cty.Capsule("type", reflect.TypeOf((*Type)(nil)).Elem())
+var typeCapsule = cty.Capsule("type", reflect.TypeFor[Type]())
 
 // encapsulateType wraps the given type in a cty capsule for use in TraverseIndex values.
 func encapsulateType(t Type) cty.Value {
@@ -192,6 +202,45 @@ func getOperationSignature(op *hclsyntax.Operation) StaticFunctionSignature {
 	sig.ReturnType = ctyTypeToType(op.Type, false)
 
 	return sig
+}
+
+// expandFinalArg returns args with the final argument expanded into one synthetic Expression per
+// element type when expandFinal is true and the final argument's type is a tuple, list, or set.
+// The synthetic expressions only carry the element type and the source range of the expanding
+// argument; they are intended for use during signature resolution and typechecking. If the final
+// argument's type cannot be expanded (e.g. dynamic), the original args are returned unchanged.
+func expandFinalArg(args []Expression, expandFinal bool) []Expression {
+	if !expandFinal || len(args) == 0 {
+		return args
+	}
+
+	last := args[len(args)-1]
+	rng := last.SyntaxNode().Range()
+	expanded := make([]Expression, 0, len(args))
+	expanded = append(expanded, args[:len(args)-1]...)
+
+	switch t := ResolveOutputs(last.Type()).(type) {
+	case *TupleType:
+		for _, et := range t.ElementTypes {
+			expanded = append(expanded, &LiteralValueExpression{
+				Syntax:   &hclsyntax.LiteralValueExpr{SrcRange: rng},
+				exprType: et,
+			})
+		}
+	case *ListType:
+		expanded = append(expanded, &LiteralValueExpression{
+			Syntax:   &hclsyntax.LiteralValueExpr{SrcRange: rng},
+			exprType: t.ElementType,
+		})
+	case *SetType:
+		expanded = append(expanded, &LiteralValueExpression{
+			Syntax:   &hclsyntax.LiteralValueExpr{SrcRange: rng},
+			exprType: t.ElementType,
+		})
+	default:
+		return args
+	}
+	return expanded
 }
 
 // typecheckArgs typechecks the arguments against a given function signature.
@@ -259,14 +308,10 @@ func (b *expressionBinder) bindAnonSymbolExpression(syntax *hclsyntax.AnonSymbol
 // bindBinaryOpExpression binds a binary operator expression. If the operands to the binary operator contain eventuals,
 // the result of the binary operator is eventual.
 func (b *expressionBinder) bindBinaryOpExpression(syntax *hclsyntax.BinaryOpExpr) (Expression, hcl.Diagnostics) {
-	var diagnostics hcl.Diagnostics
-
 	// Bind the operands.
 	leftOperand, leftDiags := b.bindExpression(syntax.LHS)
-	diagnostics = append(diagnostics, leftDiags...)
 
 	rightOperand, rightDiags := b.bindExpression(syntax.RHS)
-	diagnostics = append(diagnostics, rightDiags...)
 
 	tokens, _ := b.tokens.ForNode(syntax).(*_syntax.BinaryOpTokens)
 	if tokens == nil {
@@ -281,7 +326,8 @@ func (b *expressionBinder) bindBinaryOpExpression(syntax *hclsyntax.BinaryOpExpr
 	}
 
 	typecheckDiags := expr.Typecheck(false)
-	diagnostics = append(diagnostics, typecheckDiags...)
+
+	diagnostics := slices.Concat(leftDiags, rightDiags, typecheckDiags)
 
 	return expr, diagnostics
 }
@@ -290,17 +336,12 @@ func (b *expressionBinder) bindBinaryOpExpression(syntax *hclsyntax.BinaryOpExpr
 // the expression is unify(true result, false result). If the type of the condition is eventual, the type of the
 // expression is eventual.
 func (b *expressionBinder) bindConditionalExpression(syntax *hclsyntax.ConditionalExpr) (Expression, hcl.Diagnostics) {
-	var diagnostics hcl.Diagnostics
-
 	// Bind the operands.
 	condition, conditionDiags := b.bindExpression(syntax.Condition)
-	diagnostics = append(diagnostics, conditionDiags...)
 
 	trueResult, trueDiags := b.bindExpression(syntax.TrueResult)
-	diagnostics = append(diagnostics, trueDiags...)
 
 	falseResult, falseDiags := b.bindExpression(syntax.FalseResult)
-	diagnostics = append(diagnostics, falseDiags...)
 
 	expr := &ConditionalExpression{
 		Syntax:      syntax,
@@ -310,7 +351,8 @@ func (b *expressionBinder) bindConditionalExpression(syntax *hclsyntax.Condition
 		FalseResult: falseResult,
 	}
 	typecheckDiags := expr.Typecheck(false)
-	diagnostics = append(diagnostics, typecheckDiags...)
+
+	diagnostics := slices.Concat(conditionDiags, trueDiags, falseDiags, typecheckDiags)
 
 	return expr, diagnostics
 }
@@ -325,12 +367,13 @@ func (b *expressionBinder) bindForExpression(syntax *hclsyntax.ForExpr) (Express
 
 	collection, collectionDiags := b.bindExpression(syntax.CollExpr)
 	diagnostics = append(diagnostics, collectionDiags...)
-
-	// Poke through any eventual and optional types that may wrap the collection type.
-	collectionType := unwrapIterableSourceType(collection.Type())
-
 	// TODO(pdg): handle union types.
-	keyType, valueType, kvDiags := GetCollectionTypes(collectionType, syntax.CollExpr.Range())
+	strictCollectionTypechecking := !b.options.skipRangeTypechecking
+	keyType, valueType, kvDiags := GetCollectionTypes(
+		collection.Type(),
+		syntax.CollExpr.Range(),
+		strictCollectionTypechecking)
+
 	diagnostics = append(diagnostics, kvDiags...)
 
 	// Push a scope for the key and value variables and define these vars.
@@ -341,7 +384,7 @@ func (b *expressionBinder) bindForExpression(syntax *hclsyntax.ForExpr) (Express
 	if syntax.KeyVar != "" {
 		keyVariable = &Variable{Name: syntax.KeyVar, VariableType: keyType}
 		ok := b.scope.Define(syntax.KeyVar, keyVariable)
-		contract.Assert(ok)
+		contract.Assertf(ok, "key variable %q already defined", syntax.KeyVar)
 	}
 	valueVariable := &Variable{Name: syntax.ValVar, VariableType: valueType}
 	if ok := b.scope.Define(syntax.ValVar, valueVariable); !ok {
@@ -369,15 +412,16 @@ func (b *expressionBinder) bindForExpression(syntax *hclsyntax.ForExpr) (Express
 			syntax.CondExpr != nil)
 	}
 	expr := &ForExpression{
-		Syntax:        syntax,
-		Tokens:        tokens,
-		KeyVariable:   keyVariable,
-		ValueVariable: valueVariable,
-		Collection:    collection,
-		Key:           key,
-		Value:         value,
-		Condition:     condition,
-		Group:         syntax.Group,
+		Syntax:                       syntax,
+		Tokens:                       tokens,
+		KeyVariable:                  keyVariable,
+		ValueVariable:                valueVariable,
+		Collection:                   collection,
+		Key:                          key,
+		Value:                        value,
+		Condition:                    condition,
+		Group:                        syntax.Group,
+		StrictCollectionTypechecking: !b.options.skipRangeTypechecking,
 	}
 	typecheckDiags := expr.typecheck(false, false)
 	diagnostics = append(diagnostics, typecheckDiags...)
@@ -390,8 +434,8 @@ func (b *expressionBinder) bindForExpression(syntax *hclsyntax.ForExpr) (Express
 // error to omit arguments for trailing positional parameters if those parameters are optional. If any of the
 // parameters to the function are eventual, the result type of the function is also eventual.
 func (b *expressionBinder) bindFunctionCallExpression(
-	syntax *hclsyntax.FunctionCallExpr) (Expression, hcl.Diagnostics) {
-
+	syntax *hclsyntax.FunctionCallExpr,
+) (Expression, hcl.Diagnostics) {
 	var diagnostics hcl.Diagnostics
 
 	tokens, _ := b.tokens.ForNode(syntax).(*_syntax.FunctionCallTokens)
@@ -401,9 +445,49 @@ func (b *expressionBinder) bindFunctionCallExpression(
 
 	// Bind the function's arguments.
 	args := make([]Expression, len(syntax.Args))
-	for i, syntax := range syntax.Args {
-		arg, argDiagnostics := b.bindExpression(syntax)
+	for i, argSyntax := range syntax.Args {
+		if syntax.Name == "recover" && i == 1 {
+			b.scope = b.scope.Push(argSyntax)
+			ok := b.scope.Define("error", &Variable{Name: "error", VariableType: StringType})
+			contract.Assertf(ok, "error variable already defined")
+			arg, argDiagnostics := b.bindExpression(argSyntax)
+			b.scope = b.scope.Pop()
+			args[i], diagnostics = arg, append(diagnostics, argDiagnostics...)
+			continue
+		}
+
+		arg, argDiagnostics := b.bindExpression(argSyntax)
 		args[i], diagnostics = arg, append(diagnostics, argDiagnostics...)
+	}
+
+	// PCL defines lookup(m, k) as m[k], matching Terraform. Bind it as an index so that a
+	// literal key on an object yields that property's type instead of the unification of every
+	// property.
+	if syntax.Name == "lookup" && len(args) == 2 && !syntax.ExpandFinal {
+		indexTokens := _syntax.NewIndexTokens()
+		indexTokens.Parentheses = tokens.Parentheses
+		indexTokens.OpenBracket.LeadingTrivia = tokens.GetOpenParen().LeadingTrivia
+		indexTokens.CloseBracket.LeadingTrivia = tokens.GetCloseParen().LeadingTrivia
+		indexTokens.CloseBracket.TrailingTrivia = tokens.GetCloseParen().TrailingTrivia
+		expr := &IndexExpression{
+			Syntax: &hclsyntax.IndexExpr{
+				Collection:   syntax.Args[0],
+				Key:          syntax.Args[1],
+				SrcRange:     syntax.Range(),
+				OpenRange:    syntax.OpenParenRange,
+				BracketRange: hcl.RangeBetween(syntax.OpenParenRange, syntax.CloseParenRange),
+			},
+			Tokens:                       indexTokens,
+			Collection:                   args[0],
+			Key:                          args[1],
+			StrictCollectionTypechecking: !b.options.skipRangeTypechecking,
+		}
+		expr.Collection.SetLeadingTrivia(
+			slices.Concat(tokens.GetName(syntax.Name).LeadingTrivia, expr.Collection.GetLeadingTrivia()))
+		// The whitespace after the comma has no place in `m[k]`.
+		expr.Key.SetLeadingTrivia(expr.Key.GetLeadingTrivia().CollapseWhitespace())
+		typecheckDiags := expr.Typecheck(false)
+		return expr, append(diagnostics, typecheckDiags...)
 	}
 
 	// Attempt to bind the name of the function to its definition.
@@ -419,20 +503,24 @@ func (b *expressionBinder) bindFunctionCallExpression(
 				VarargsParameter: &Parameter{Name: "args", Type: DynamicType},
 				ReturnType:       DynamicType,
 			},
-			Args: args,
+			Args:        args,
+			ExpandFinal: syntax.ExpandFinal,
 		}, diagnostics
 	}
 
-	// Compute the function's signature.
-	signature, sigDiags := function.GetSignature(args)
+	// Compute the function's signature. If the call uses `...` to expand its final argument, resolve
+	// the signature against the per-element types of the expanded collection so that signatures
+	// derived from argument types match the call's effective arity.
+	signature, sigDiags := function.GetSignature(expandFinalArg(args, syntax.ExpandFinal))
 	diagnostics = append(diagnostics, sigDiags...)
 
 	expr := &FunctionCallExpression{
-		Syntax:    syntax,
-		Tokens:    tokens,
-		Name:      syntax.Name,
-		Signature: signature,
-		Args:      args,
+		Syntax:      syntax,
+		Tokens:      tokens,
+		Name:        syntax.Name,
+		Signature:   signature,
+		Args:        args,
+		ExpandFinal: syntax.ExpandFinal,
 	}
 	typecheckDiags := expr.Typecheck(false)
 	diagnostics = append(diagnostics, typecheckDiags...)
@@ -442,34 +530,32 @@ func (b *expressionBinder) bindFunctionCallExpression(
 
 // bindIndexExpression binds an index expression. The value being indexed must be an list, map, or object.
 //
-// - If the value is an list, the result type is the type of the list's elements, and the index must be assignable to
-//   number (TODO(pdg): require integer indices?)
-// - If the value is a map, the result type is the type of the map's values, and the index must be assignable to
-//   string
-// - If the value is an object, the result type is any, and the index must be assignable to a string
+//   - If the value is an list, the result type is the type of the list's elements, and the index must be assignable to
+//     number (TODO(pdg): require integer indices?)
+//   - If the value is a map, the result type is the type of the map's values, and the index must be assignable to
+//     string
+//   - If the value is an object, the result type is any, and the index must be assignable to a string
 //
 // If either the value being indexed or the index is eventual, result is eventual.
 func (b *expressionBinder) bindIndexExpression(syntax *hclsyntax.IndexExpr) (Expression, hcl.Diagnostics) {
-	var diagnostics hcl.Diagnostics
-
 	collection, collectionDiags := b.bindExpression(syntax.Collection)
-	diagnostics = append(diagnostics, collectionDiags...)
 
 	key, keyDiags := b.bindExpression(syntax.Key)
-	diagnostics = append(diagnostics, keyDiags...)
 
 	tokens, _ := b.tokens.ForNode(syntax).(*_syntax.IndexTokens)
 	if tokens == nil {
 		tokens = _syntax.NewIndexTokens()
 	}
 	expr := &IndexExpression{
-		Syntax:     syntax,
-		Tokens:     tokens,
-		Collection: collection,
-		Key:        key,
+		Syntax:                       syntax,
+		Tokens:                       tokens,
+		Collection:                   collection,
+		Key:                          key,
+		StrictCollectionTypechecking: !b.options.skipRangeTypechecking,
 	}
 	typecheckDiags := expr.Typecheck(false)
-	diagnostics = append(diagnostics, typecheckDiags...)
+
+	diagnostics := slices.Concat(collectionDiags, keyDiags, typecheckDiags)
 
 	return expr, diagnostics
 }
@@ -477,10 +563,8 @@ func (b *expressionBinder) bindIndexExpression(syntax *hclsyntax.IndexExpr) (Exp
 // bindLiteralValueExpression binds a literal value expression. The value must be a boolean, integer, number, or
 // string.
 func (b *expressionBinder) bindLiteralValueExpression(
-	syntax *hclsyntax.LiteralValueExpr) (Expression, hcl.Diagnostics) {
-
-	var diagnostics hcl.Diagnostics
-
+	syntax *hclsyntax.LiteralValueExpr,
+) (Expression, hcl.Diagnostics) {
 	tokens, _ := b.tokens.ForNode(syntax).(*_syntax.LiteralValueTokens)
 	if tokens == nil {
 		tokens = _syntax.NewLiteralValueTokens(syntax.Val)
@@ -491,7 +575,8 @@ func (b *expressionBinder) bindLiteralValueExpression(
 		Value:  syntax.Val,
 	}
 	typecheckDiags := expr.Typecheck(false)
-	diagnostics = append(diagnostics, typecheckDiags...)
+
+	diagnostics := slices.Concat(typecheckDiags)
 
 	return expr, diagnostics
 }
@@ -551,8 +636,8 @@ func (b *expressionBinder) bindObjectConsKeyExpr(syntax *hclsyntax.ObjectConsKey
 // bindRelativeTraversalExpression binds a relative traversal expression. Each step of the traversal must be a legal
 // step with respect to its receiver. The root receiver is the type of the source expression.
 func (b *expressionBinder) bindRelativeTraversalExpression(
-	syntax *hclsyntax.RelativeTraversalExpr) (Expression, hcl.Diagnostics) {
-
+	syntax *hclsyntax.RelativeTraversalExpr,
+) (Expression, hcl.Diagnostics) {
 	source, diagnostics := b.bindExpression(syntax.Source)
 
 	tokens, _ := b.tokens.ForNode(syntax).(*_syntax.RelativeTraversalTokens)
@@ -586,10 +671,8 @@ func (b *expressionBinder) bindRelativeTraversalExpression(
 // step with respect to its receiver. The root receiver is the definition in the current scope referred to by the root
 // name.
 func (b *expressionBinder) bindScopeTraversalExpression(
-	syntax *hclsyntax.ScopeTraversalExpr) (Expression, hcl.Diagnostics) {
-
-	var diagnostics hcl.Diagnostics
-
+	syntax *hclsyntax.ScopeTraversalExpr,
+) (Expression, hcl.Diagnostics) {
 	tokens, _ := b.tokens.ForNode(syntax).(*_syntax.ScopeTraversalTokens)
 	if tokens == nil {
 		tokens = _syntax.NewScopeTraversalTokens(syntax.Traversal)
@@ -603,10 +686,9 @@ func (b *expressionBinder) bindScopeTraversalExpression(
 			parts[i] = DynamicType
 		}
 
-		if !b.options.allowMissingVariables {
-			diagnostics = hcl.Diagnostics{
-				undefinedVariable(rootName, syntax.Traversal.SimpleSplit().Abs.SourceRange()),
-			}
+		diagnostics := hcl.Diagnostics{
+			undefinedVariable(rootName, syntax.Traversal.SimpleSplit().Abs.SourceRange(),
+				b.options.allowMissingVariables),
 		}
 		return &ScopeTraversalExpression{
 			Syntax:    syntax,
@@ -625,7 +707,8 @@ func (b *expressionBinder) bindScopeTraversalExpression(
 		Traversal: syntax.Traversal,
 	}
 	typecheckDiags := expr.typecheck(false, b.options.allowMissingVariables)
-	diagnostics = append(diagnostics, typecheckDiags...)
+
+	diagnostics := slices.Concat(typecheckDiags)
 
 	return expr, diagnostics
 }
@@ -636,10 +719,7 @@ func (b *expressionBinder) bindScopeTraversalExpression(
 // tuple. The type of the result is an list whose elements have the type of the each expression. If the value being
 // splatted is eventual or optional, the result type is eventual or optional.
 func (b *expressionBinder) bindSplatExpression(syntax *hclsyntax.SplatExpr) (Expression, hcl.Diagnostics) {
-	var diagnostics hcl.Diagnostics
-
 	source, sourceDiags := b.bindExpression(syntax.Source)
-	diagnostics = append(diagnostics, sourceDiags...)
 
 	item := &SplatVariable{}
 	b.anonSymbols[syntax.Item] = item
@@ -647,7 +727,6 @@ func (b *expressionBinder) bindSplatExpression(syntax *hclsyntax.SplatExpr) (Exp
 	source, item.VariableType = splatItemType(source, syntax)
 
 	each, eachDiags := b.bindExpression(syntax.Each)
-	diagnostics = append(diagnostics, eachDiags...)
 
 	tokens, _ := b.tokens.ForNode(syntax).(*_syntax.SplatTokens)
 	if tokens == nil {
@@ -661,7 +740,8 @@ func (b *expressionBinder) bindSplatExpression(syntax *hclsyntax.SplatExpr) (Exp
 		Item:   item,
 	}
 	typecheckDiags := expr.typecheck(false, false)
-	diagnostics = append(diagnostics, typecheckDiags...)
+
+	diagnostics := slices.Concat(sourceDiags, eachDiags, typecheckDiags)
 
 	return expr, diagnostics
 }
@@ -694,8 +774,8 @@ func (b *expressionBinder) bindTemplateExpression(syntax *hclsyntax.TemplateExpr
 // bindTemplateJoinExpression binds a template join expression. If any of the parts of the expression are eventual,
 // the result is eventual.
 func (b *expressionBinder) bindTemplateJoinExpression(
-	syntax *hclsyntax.TemplateJoinExpr) (Expression, hcl.Diagnostics) {
-
+	syntax *hclsyntax.TemplateJoinExpr,
+) (Expression, hcl.Diagnostics) {
 	tuple, diagnostics := b.bindExpression(syntax.Tuple)
 
 	expr := &TemplateJoinExpression{
@@ -710,8 +790,8 @@ func (b *expressionBinder) bindTemplateJoinExpression(
 
 // bindTemplateWrapExpression binds a template wrap expression.
 func (b *expressionBinder) bindTemplateWrapExpression(
-	syntax *hclsyntax.TemplateWrapExpr) (Expression, hcl.Diagnostics) {
-
+	syntax *hclsyntax.TemplateWrapExpr,
+) (Expression, hcl.Diagnostics) {
 	wrapped, diagnostics := b.bindExpression(syntax.Wrapped)
 	if tokens, hasTokens := b.tokens.ForNode(syntax).(*_syntax.TemplateTokens); hasTokens {
 		wrapped.SetLeadingTrivia(append(wrapped.GetLeadingTrivia(), tokens.Open.LeadingTrivia...))
@@ -748,16 +828,14 @@ func (b *expressionBinder) bindTupleConsExpression(syntax *hclsyntax.TupleConsEx
 // bindUnaryOpExpression binds a unary operator expression. If the operand to the unary operator contains eventuals,
 // the result of the unary operator is eventual.
 func (b *expressionBinder) bindUnaryOpExpression(syntax *hclsyntax.UnaryOpExpr) (Expression, hcl.Diagnostics) {
-	var diagnostics hcl.Diagnostics
-
 	// Bind the operand.
 	operand, operandDiags := b.bindExpression(syntax.Val)
-	diagnostics = append(diagnostics, operandDiags...)
 
 	tokens, _ := b.tokens.ForNode(syntax).(*_syntax.UnaryOpTokens)
 	if tokens == nil {
 		tokens = _syntax.NewUnaryOpTokens(syntax.Op)
 	}
+
 	expr := &UnaryOpExpression{
 		Syntax:    syntax,
 		Tokens:    tokens,
@@ -765,7 +843,27 @@ func (b *expressionBinder) bindUnaryOpExpression(syntax *hclsyntax.UnaryOpExpr) 
 		Operand:   operand,
 	}
 	typecheckDiags := expr.Typecheck(false)
-	diagnostics = append(diagnostics, typecheckDiags...)
+
+	diagnostics := slices.Concat(operandDiags, typecheckDiags)
+
+	// simplify UnaryOperation(Negate, Number(N)) into Number(-N)
+	if syntax.Op == hclsyntax.OpNegate {
+		if lit, ok := operand.(*LiteralValueExpression); ok && lit.Value.Type().Equals(cty.Number) {
+			newVal := lit.Value.Negate()
+
+			lit.Tokens = &_syntax.LiteralValueTokens{
+				Parentheses: tokens.Parentheses,
+				Value:       append([]_syntax.Token{tokens.Operator}, lit.Tokens.Value...),
+			}
+			lit.Syntax = &hclsyntax.LiteralValueExpr{
+				SrcRange: syntax.SrcRange,
+				Val:      newVal,
+			}
+			lit.Value = newVal
+			lit.exprType = NewConstType(literalValueType(newVal), newVal)
+			return lit, diagnostics
+		}
+	}
 
 	return expr, diagnostics
 }

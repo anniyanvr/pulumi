@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,38 +17,39 @@ package deploy
 import (
 	"context"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
-// NullSource is a singleton source that never returns any resources.  This may be used in scenarios where the "new"
+// NullSource is a source that never returns any resources.  This may be used in scenarios where the "new"
 // version of the world is meant to be empty, either for testing purposes, or removal of an existing stack.
-var NullSource Source = &nullSource{}
+func NewNullSource(project tokens.PackageName) Source {
+	return &nullSource{project: project}
+}
 
 // A nullSource never returns any resources.
 type nullSource struct {
+	project tokens.PackageName
 }
 
+// Deprecated: A NullSource with no project name.
+var NullSource Source = &nullSource{}
+
 func (src *nullSource) Close() error                { return nil }
-func (src *nullSource) Project() tokens.PackageName { return "" }
-func (src *nullSource) Info() interface{}           { return nil }
+func (src *nullSource) Project() tokens.PackageName { return src.project }
 
-func (src *nullSource) Iterate(
-	ctx context.Context, opts Options, providers ProviderSource) (SourceIterator, result.Result) {
-
+func (src *nullSource) Iterate(ctx context.Context, providers ProviderSource) (SourceIterator, error) {
 	contract.Ignore(ctx)
 	return &nullSourceIterator{}, nil
 }
 
 // nullSourceIterator always returns nil, nil in response to Next, indicating that it is done.
-type nullSourceIterator struct {
-}
+type nullSourceIterator struct{}
 
-func (iter *nullSourceIterator) Close() error {
+func (iter *nullSourceIterator) Cancel(context.Context) error {
 	return nil // nothing to do.
 }
 
-func (iter *nullSourceIterator) Next() (SourceEvent, result.Result) {
+func (iter *nullSourceIterator) Next() (SourceEvent, error) {
 	return nil, nil // means "done"
 }

@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,26 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//+build !windows
+//go:build !windows
 
 package main
 
 import (
 	"io"
-	"io/ioutil"
 	"os"
 	"path"
 	"syscall"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
 )
 
 // Unix specific pipe implementation. Fairly simple as it sits on top of a pair of standard fifo
 // files that we can communicate over.  Slightly complex as this involves extra cleanup steps to
 // ensure they're cleaned up when we're done.
 func createPipes() (pipes, error) {
-	dir, err := ioutil.TempDir("", "pulumi-node-pipes")
+	dir, err := os.MkdirTemp("", "pulumi-node-pipes")
 	if err != nil {
 		return nil, err
 	}
@@ -63,12 +62,12 @@ func (p *unixPipes) writer() io.Writer {
 }
 
 func (p *unixPipes) connect() error {
-	if err := syscall.Mkfifo(path.Join(p.dir, "invoke_req"), 0600); err != nil {
+	if err := syscall.Mkfifo(path.Join(p.dir, "invoke_req"), 0o600); err != nil {
 		logging.V(10).Infof("createPipes: Received error opening request pipe: %s\n", err)
 		return err
 	}
 
-	if err := syscall.Mkfifo(path.Join(p.dir, "invoke_res"), 0600); err != nil {
+	if err := syscall.Mkfifo(path.Join(p.dir, "invoke_res"), 0o600); err != nil {
 		logging.V(10).Infof("createPipes: Received error opening result pipe: %s\n", err)
 		return err
 	}
@@ -91,13 +90,11 @@ func (p *unixPipes) connect() error {
 func (p *unixPipes) shutdown() {
 	if p.reqPipe != nil {
 		contract.IgnoreClose(p.reqPipe)
-		contract.IgnoreError(os.Remove(p.reqPath))
 	}
 
 	if p.resPipe != nil {
 		contract.IgnoreClose(p.resPipe)
-		contract.IgnoreError(os.Remove(p.resPath))
 	}
 
-	contract.IgnoreError(os.Remove(p.dir))
+	contract.IgnoreError(os.RemoveAll(p.dir))
 }

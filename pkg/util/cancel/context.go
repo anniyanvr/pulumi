@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package cancel
 import (
 	"context"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // Context provides the ability to observe cancellation and termination requests from a Source. A termination request
@@ -41,7 +41,7 @@ type Source struct {
 // NewContext creates a new cancellation context and source parented to the given context. The returned cancellation
 // context will be terminated when the supplied root context is canceled.
 func NewContext(ctx context.Context) (*Context, *Source) {
-	contract.Require(ctx != nil, "ctx")
+	contract.Requiref(ctx != nil, "ctx", "must not be nil")
 
 	// Set up two new cancellable contexts: one for termination and one for cancellation. The cancellation context is a
 	// child context of the termination context and will therefore be automatically cancelled when termination is
@@ -59,6 +59,10 @@ func NewContext(ctx context.Context) (*Context, *Source) {
 		cancel:    cancel,
 	}
 	return c, s
+}
+
+func (c *Context) Base() context.Context {
+	return c.cancel
 }
 
 // Canceled returns a channel that will be closed when the context is canceled or terminated.

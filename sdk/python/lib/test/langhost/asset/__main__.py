@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,12 +17,12 @@ from pulumi import CustomResource
 from pulumi.asset import FileAsset, StringAsset, RemoteAsset
 
 
-
 class MyResource(CustomResource):
     def __init__(self, name, asset):
-        CustomResource.__init__(self, "test:index:MyResource", name, props={
-            "asset": asset
-        })
+        CustomResource.__init__(
+            self, "test:index:MyResource", name, props={"asset": asset}
+        )
+
 
 MyResource("file", FileAsset("./testfile.txt"))
 MyResource("file", FileAsset(Path(".") / "testfile.txt"))

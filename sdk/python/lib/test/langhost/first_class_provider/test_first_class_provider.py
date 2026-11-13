@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,27 +20,45 @@ class FirstClassProviderTest(LanghostTest):
     Tests that resources created with their 'provider' ResourceOption set pass a provider reference
     to the Pulumi engine.
     """
+
     prov_urn = None
     prov_id = None
 
     def test_first_class_provider(self):
         self.run_test(
             program=path.join(self.base_path(), "first_class_provider"),
-            expected_resource_count=2)
+            expected_resource_count=2,
+        )
 
-    def register_resource(self, _ctx, _dry_run, ty, name, _resource,
-                          _dependencies, _parent, _custom, _protect, provider, _property_deps, _delete_before_replace,
-                          _ignore_changes, _version):
+    def register_resource(
+        self,
+        _ctx,
+        _dry_run,
+        ty,
+        name,
+        _resource,
+        _dependencies,
+        _parent,
+        _custom,
+        protect,
+        _provider,
+        _property_deps,
+        _delete_before_replace,
+        _ignore_changes,
+        _version,
+        _import,
+        _replace_on_changes,
+        _providers,
+        source_position,
+        stack_trace,
+    ):
         if name == "testprov":
             # Provider resource.
             self.assertEqual("pulumi:providers:test", ty)
-            self.assertEqual("", provider)
+            self.assertEqual("", _provider)
             self.prov_urn = self.make_urn(ty, name)
             self.prov_id = "testid"
-            return {
-                "urn": self.prov_urn,
-                "id": self.prov_id
-            }
+            return {"urn": self.prov_urn, "id": self.prov_id}
 
         if name == "testres":
             # Test resource using the provider.
@@ -50,10 +68,7 @@ class FirstClassProviderTest(LanghostTest):
 
             # The provider reference is created by concatenating the URN and ID of the referenced provider.
             # The language host is responsible for doing this, since the engine will parse this identifier.
-            self.assertEqual(f"{self.prov_urn}::{self.prov_id}", provider)
-            return {
-                "urn": self.make_urn(ty, name)
-            }
+            self.assertEqual(f"{self.prov_urn}::{self.prov_id}", _provider)
+            return {"urn": self.make_urn(ty, name)}
 
         self.fail(f"unexpected resource: {name} ({ty})")
-        return None

@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,22 +19,20 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/pkg/errors"
-
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // Decoder is a func that knows how to decode into particular type.
-type Decoder func(m Mapper, obj map[string]interface{}) (interface{}, error)
+type Decoder func(m Mapper, obj map[string]any) (any, error)
 
 // Decoders is a map from type to a decoder func that understands how to decode that type.
 type Decoders map[reflect.Type]Decoder
 
 // Decode decodes an entire map into a target object, using tag-directed mappings.
-func (md *mapper) Decode(obj map[string]interface{}, target interface{}) MappingError {
+func (md *mapper) Decode(obj map[string]any, target any) MappingError {
 	// Fetch the destination types and validate that we can store into the target (i.e., a valid lval).
 	vdst := reflect.ValueOf(target)
-	contract.Assertf(vdst.Kind() == reflect.Ptr && !vdst.IsNil() && vdst.Elem().CanSet(),
+	contract.Assertf(vdst.Kind() == reflect.Pointer && !vdst.IsNil() && vdst.Elem().CanSet(),
 		"Target %v must be a non-nil, settable pointer", vdst.Type())
 	vdstType := vdst.Type().Elem()
 	contract.Assertf(vdstType.Kind() == reflect.Struct && !vdst.IsNil(),
@@ -80,27 +78,35 @@ func (md *mapper) Decode(obj map[string]interface{}, target interface{}) Mapping
 }
 
 // DecodeValue decodes primitive type fields.  For fields of complex types, we use custom deserialization.
-func (md *mapper) DecodeValue(obj map[string]interface{}, ty reflect.Type, key string,
-	target interface{}, optional bool) FieldError {
+func (md *mapper) DecodeValue(obj map[string]any, ty reflect.Type, key string,
+	target any, optional bool,
+) FieldError {
 	vdst := reflect.ValueOf(target)
-	contract.Assertf(vdst.Kind() == reflect.Ptr && !vdst.IsNil() && vdst.Elem().CanSet(),
+	contract.Assertf(vdst.Kind() == reflect.Pointer && !vdst.IsNil() && vdst.Elem().CanSet(),
 		"Target %v must be a non-nil, settable pointer", vdst.Type())
 	if v, has := obj[key]; has {
 		// The field exists; okay, try to map it to the right type.
 		vsrc := reflect.ValueOf(v)
+
+		// If the source is a ptr, dereference it as necessary to get the underlying
+		// value.
+		for vsrc.IsValid() && vsrc.Type().Kind() == reflect.Pointer && !vsrc.IsNil() {
+			vsrc = vsrc.Elem()
+		}
+
 		// Ensure the source is valid; this is false if the value reflects the zero value.
 		if vsrc.IsValid() {
 			vdstType := vdst.Type().Elem()
 
 			// So long as the target element is a pointer, we have a pointer to pointer; dig through until we bottom out
 			// on the non-pointer type that matches the source.  This assumes the source isn't itself a pointer!
-			contract.Assert(vsrc.Type().Kind() != reflect.Ptr)
-			for vdstType.Kind() == reflect.Ptr {
+			contract.Assertf(vsrc.Type().Kind() != reflect.Pointer, "source is a null pointer")
+			for vdstType.Kind() == reflect.Pointer {
 				vdst = vdst.Elem()
 				vdstType = vdstType.Elem()
 				if !vdst.Elem().CanSet() {
 					// If the pointer is nil, initialize it so we can set it below.
-					contract.Assert(vdst.IsNil())
+					contract.Assertf(vdst.IsNil(), "destination pointer must be nil")
 					vdst.Set(reflect.New(vdstType))
 				}
 			}
@@ -129,33 +135,34 @@ func (md *mapper) DecodeValue(obj map[string]interface{}, ty reflect.Type, key s
 	return nil
 }
 
-var (
-	emptyObject         = map[string]interface{}{}
-	textUnmarshalerType = reflect.TypeOf(new(encoding.TextUnmarshaler)).Elem()
-)
+var textUnmarshalerType = reflect.TypeFor[encoding.TextUnmarshaler]()
 
 // adjustValueForAssignment converts if possible to produce the target type.
 func (md *mapper) adjustValueForAssignment(val reflect.Value,
-	to reflect.Type, ty reflect.Type, key string) (reflect.Value, FieldError) {
+	to reflect.Type, ty reflect.Type, key string,
+) (reflect.Value, FieldError) {
 	for !val.Type().AssignableTo(to) {
 		// The source cannot be assigned directly to the destination.  Go through all known conversions.
 
 		if val.Type().ConvertibleTo(to) {
 			// A simple conversion exists to make this right.
 			val = val.Convert(to)
-		} else if to.Kind() == reflect.Ptr && val.Type().AssignableTo(to.Elem()) {
-			// If the target is a pointer, turn the target into a pointer.  If it's not addressable, make a copy.
-			if val.CanAddr() {
-				val = val.Addr()
+		} else if to.Kind() == reflect.Pointer && val.Type().AssignableTo(to.Elem()) {
+			// Here the destination type (to) is a pointer to a type that accepts val.
+			var adjusted reflect.Value // var adjusted *toElem
+			if val.CanAddr() && val.Addr().Type().AssignableTo(to) {
+				// If taking the address of val makes this right, do it.
+				adjusted = val.Addr() // adjusted = &val
 			} else {
-				slot := reflect.New(val.Type().Elem())
-				copy := reflect.ValueOf(val.Interface())
-				contract.Assert(copy.CanAddr())
-				slot.Set(copy)
-				val = slot
+				// Otherwise create a fresh pointer of the desired type and point it to val.
+				adjusted = reflect.New(to.Elem()) // adjusted = new(toElem)
+				adjusted.Elem().Set(val)          // *adjusted = val
 			}
+			// In either case, the loop condition should be sastisfied at this point.
+			contract.Assertf(adjusted.Type().AssignableTo(to), "type %v is not assignable to %v", adjusted.Type(), to)
+			return adjusted, nil
 		} else if val.Kind() == reflect.Interface {
-			// It could be that the source is an interface{} with the right element type (or the right element type
+			// It could be that the source is an any with the right element type (or the right element type
 			// through a series of successive conversions); go ahead and give it a try.
 			val = val.Elem()
 		} else if val.Type().Kind() == reflect.Slice && to.Kind() == reflect.Slice {
@@ -204,9 +211,9 @@ func (md *mapper) adjustValueForAssignment(val reflect.Value,
 				m.SetMapIndex(k, entry)
 			}
 			val = m
-		} else if val.Type() == reflect.TypeOf(emptyObject) {
+		} else if val.Type() == reflect.TypeFor[map[string]any]() {
 			// The value is an object and needs to be decoded into a value.
-			obj := val.Interface().(map[string]interface{})
+			obj := val.Interface().(map[string]any)
 			if decode, has := md.opts.CustomDecoders[to]; has {
 				// A custom decoder exists; use it to unmarshal the type.
 				target, err := decode(md, obj)
@@ -214,10 +221,10 @@ func (md *mapper) adjustValueForAssignment(val reflect.Value,
 					return val, NewTypeFieldError(ty, key, err)
 				}
 				val = reflect.ValueOf(target)
-			} else if to.Kind() == reflect.Struct || (to.Kind() == reflect.Ptr && to.Elem().Kind() == reflect.Struct) {
+			} else if to.Kind() == reflect.Struct || (to.Kind() == reflect.Pointer && to.Elem().Kind() == reflect.Struct) {
 				// If the target is a struct, we can use the built-in decoding logic.
-				var target interface{}
-				if to.Kind() == reflect.Ptr {
+				var target any
+				if to.Kind() == reflect.Pointer {
 					target = reflect.New(to.Elem()).Interface()
 				} else {
 					target = reflect.New(to).Interface()
@@ -228,7 +235,7 @@ func (md *mapper) adjustValueForAssignment(val reflect.Value,
 				val = reflect.ValueOf(target).Elem()
 			} else {
 				return val, NewTypeFieldError(ty, key,
-					errors.Errorf(
+					fmt.Errorf(
 						"Cannot decode Object{} to type %v; it isn't a struct, and no custom decoder exists", to))
 			}
 		} else if val.Type().Kind() == reflect.String {

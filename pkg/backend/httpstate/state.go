@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,156 +16,52 @@ package httpstate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
+	"github.com/jonboulle/clockwork"
+	"go.opentelemetry.io/otel"
 
-	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/v2/backend"
-	"github.com/pulumi/pulumi/pkg/v2/backend/display"
-	"github.com/pulumi/pulumi/pkg/v2/backend/httpstate/client"
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/pkg/v2/resource/stack"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/config"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/pkg/v3/channel"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/property"
+
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	"github.com/pulumi/pulumi/pkg/v3/backend/display"
+	"github.com/pulumi/pulumi/pkg/v3/backend/httpstate/client"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/pkg/v3/resource/stack"
+	"github.com/pulumi/pulumi/pkg/v3/resource/stack/snapshot"
+	"github.com/pulumi/pulumi/pkg/v3/secrets"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
 )
-
-type tokenRequest chan<- tokenResponse
-
-type tokenResponse struct {
-	token string
-	err   error
-}
-
-// tokenSource is a helper type that manages the renewal of the lease token for a managed update.
-type tokenSource struct {
-	requests chan tokenRequest
-	done     chan bool
-}
-
-func newTokenSource(ctx context.Context, token string, backend *cloudBackend, update client.UpdateIdentifier,
-	duration time.Duration) (*tokenSource, error) {
-
-	// Perform an initial lease renewal.
-	newToken, err := backend.client.RenewUpdateLease(ctx, update, token, duration)
-	if err != nil {
-		return nil, err
-	}
-
-	requests, done := make(chan tokenRequest), make(chan bool)
-	go func() {
-		// We will renew the lease after 50% of the duration has elapsed to allow more time for retries.
-		ticker := time.NewTicker(duration / 2)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ticker.C:
-				newToken, err = backend.client.RenewUpdateLease(ctx, update, token, duration)
-				if err != nil {
-					ticker.Stop()
-				} else {
-					token = newToken
-				}
-
-			case c, ok := <-requests:
-				if !ok {
-					close(done)
-					return
-				}
-
-				resp := tokenResponse{err: err}
-				if err == nil {
-					resp.token = token
-				}
-				c <- resp
-			}
-		}
-	}()
-
-	return &tokenSource{requests: requests, done: done}, nil
-}
-
-func (ts *tokenSource) Close() {
-	close(ts.requests)
-	<-ts.done
-}
-
-func (ts *tokenSource) GetToken() (string, error) {
-	ch := make(chan tokenResponse)
-	ts.requests <- ch
-	resp := <-ch
-	return resp.token, resp.err
-}
-
-type cloudQuery struct {
-	root string
-	proj *workspace.Project
-}
-
-func (q *cloudQuery) GetRoot() string {
-	return q.root
-}
-
-func (q *cloudQuery) GetProject() *workspace.Project {
-	return q.proj
-}
-
-// cloudUpdate is an implementation of engine.Update backed by remote state and a local program.
-type cloudUpdate struct {
-	context context.Context
-	backend *cloudBackend
-
-	update      client.UpdateIdentifier
-	tokenSource *tokenSource
-
-	root   string
-	proj   *workspace.Project
-	target *deploy.Target
-}
-
-func (u *cloudUpdate) GetRoot() string {
-	return u.root
-}
-
-func (u *cloudUpdate) GetProject() *workspace.Project {
-	return u.proj
-}
-
-func (u *cloudUpdate) GetTarget() *deploy.Target {
-	return u.target
-}
-
-func (u *cloudUpdate) Complete(status apitype.UpdateStatus) error {
-	defer u.tokenSource.Close()
-
-	token, err := u.tokenSource.GetToken()
-	if err != nil {
-		return err
-	}
-	return u.backend.client.CompleteUpdate(u.context, u.update, status, token)
-}
 
 // recordEngineEvents will record the events with the Pulumi Service, enabling things like viewing
 // the update logs or drilling into the timeline of an update.
-func (u *cloudUpdate) recordEngineEvents(startingSeqNumber int, events []engine.Event) error {
-	contract.Assert(u.tokenSource != nil)
-	token, err := u.tokenSource.GetToken()
-	if err != nil {
-		return err
-	}
+func (b *cloudBackend) recordEngineEvents(
+	ctx context.Context,
+	tokenSource *tokenSource,
+	update client.UpdateIdentifier,
+	startingSeqNumber int,
+	events []engine.Event,
+) error {
+	contract.Assertf(tokenSource != nil, "cloud update requires a token source")
 
 	var apiEvents apitype.EngineEventBatch
 	for idx, event := range events {
-		apiEvent, convErr := display.ConvertEngineEvent(event)
+		apiEvent, convErr := display.ConvertEngineEvent(event, false /* showSecrets */)
 		if convErr != nil {
-			return errors.Wrap(convErr, "converting engine event")
+			return fmt.Errorf("converting engine event: %w", convErr)
 		}
 
 		// Each event within an update must have a unique sequence number. Any request to
@@ -177,19 +73,22 @@ func (u *cloudUpdate) recordEngineEvents(startingSeqNumber int, events []engine.
 		apiEvents.Events = append(apiEvents.Events, apiEvent)
 	}
 
-	return u.backend.client.RecordEngineEvents(u.context, u.update, apiEvents, token)
+	return b.client.RecordEngineEvents(ctx, update, apiEvents, tokenSource)
 }
 
 // RecordAndDisplayEvents inspects engine events from the given channel, and prints them to the CLI as well as
 // posting them to the Pulumi service.
-func (u *cloudUpdate) RecordAndDisplayEvents(
+func (b *cloudBackend) recordAndDisplayEvents(
+	ctx context.Context, tokenSource *tokenSource, update client.UpdateIdentifier,
 	label string, action apitype.UpdateKind, stackRef backend.StackReference, op backend.UpdateOperation,
-	events <-chan engine.Event, done chan<- bool, opts display.Options, isPreview bool) {
+	permalink string, events <-chan engine.Event, done chan<- bool, opts display.Options, isPreview bool,
+) {
 	// We take the channel of engine events and pass them to separate components that will display
 	// them to the console or persist them on the Pulumi Service. Both should terminate as soon as
 	// they see a CancelEvent, and when finished, close the "done" channel.
 	displayEvents := make(chan engine.Event) // Note: unbuffered, but we assume it won't matter in practice.
 	displayEventsDone := make(chan bool)
+	stopHelperDiagnostics := b.routeHelperDiagnostics(displayEvents, displayEventsDone, opts)
 
 	persistEvents := make(chan engine.Event, 100)
 	persistEventsDone := make(chan bool)
@@ -197,16 +96,18 @@ func (u *cloudUpdate) RecordAndDisplayEvents(
 	// We close our own done channel when both of the dependent components have finished.
 	defer func() {
 		<-displayEventsDone
+		stopHelperDiagnostics()
 		<-persistEventsDone
 		close(done)
 	}()
 
 	// Start the Go-routines for displaying and persisting events.
 	go display.ShowEvents(
-		label, action, stackRef.Name(), op.Proj.Name,
+		label, action, stackRef.Name(), op.Proj.Name, permalink,
 		displayEvents, displayEventsDone, opts, isPreview)
-	go persistEngineEvents(
-		u, opts.Debug, /* persist debug events */
+	go b.persistEngineEvents(
+		ctx, tokenSource, update,
+		opts.Debug, /* persist debug events */
 		persistEvents, persistEventsDone)
 
 	for e := range events {
@@ -224,84 +125,214 @@ func (u *cloudUpdate) RecordAndDisplayEvents(
 	// the display and persistence go-routines are finished processing events.
 }
 
-func (b *cloudBackend) newQuery(ctx context.Context,
-	op backend.QueryOperation) (engine.QueryInfo, error) {
-
-	return &cloudQuery{root: op.Root, proj: op.Proj}, nil
+func RenewLeaseFunc(
+	client *client.Client, update client.UpdateIdentifier, assumedExpires func() time.Time,
+) func(ctx context.Context, duration time.Duration, currentToken string) (string, time.Time, error) {
+	return func(ctx context.Context, duration time.Duration, currentToken string) (string, time.Time, error) {
+		tok, err := client.RenewUpdateLease(
+			ctx, update, currentToken, duration)
+		if err != nil {
+			// Translate 403 status codes to expired token errors to stop the token refresh loop.
+			if apierr, ok := errors.AsType[*apitype.ErrorResponse](err); ok && apierr.Code == 403 {
+				return "", time.Time{}, expiredTokenError{err}
+			}
+			return "", time.Time{}, err
+		}
+		return tok, assumedExpires(), err
+	}
 }
 
 func (b *cloudBackend) newUpdate(ctx context.Context, stackRef backend.StackReference, op backend.UpdateOperation,
-	update client.UpdateIdentifier, token string) (*cloudUpdate, error) {
-
+	update client.UpdateIdentifier, token string,
+) (engine.UpdateInfo, *tokenSource, error) {
 	// Create a token source for this update if necessary.
 	var tokenSource *tokenSource
 	if token != "" {
-		ts, err := newTokenSource(ctx, token, b, update, 5*time.Minute)
+		// TODO[pulumi/pulumi#10482] instead of assuming
+		// expiration, consider expiration times returned by
+		// the backend, if any.
+		duration := 5 * time.Minute
+		assumedExpires := func() time.Time {
+			return time.Now().Add(duration)
+		}
+
+		renewLease := RenewLeaseFunc(b.Client(), update, assumedExpires)
+
+		ts, err := newTokenSource(ctx, clockwork.NewRealClock(), token, assumedExpires(), duration, renewLease)
 		if err != nil {
-			return nil, err
+			return engine.UpdateInfo{}, nil, err
 		}
 		tokenSource = ts
 	}
 
 	// Construct the deployment target.
-	target, err := b.getTarget(ctx, stackRef, op.StackConfiguration.Config, op.StackConfiguration.Decrypter)
+	target, err := b.getTarget(ctx, op.SecretsProvider, stackRef,
+		op.StackConfiguration.Config, op.StackConfiguration.Decrypter)
 	if err != nil {
-		return nil, err
+		return engine.UpdateInfo{}, nil, err
 	}
 
-	// Construct and return a new update.
-	return &cloudUpdate{
-		context:     ctx,
-		backend:     b,
-		update:      update,
-		tokenSource: tokenSource,
-		root:        op.Root,
-		proj:        op.Proj,
-		target:      target,
-	}, nil
+	info := engine.UpdateInfo{
+		Root:    op.Root,
+		Project: op.Proj,
+		Target:  target,
+	}
+
+	return info, tokenSource, nil
 }
 
-func (b *cloudBackend) getSnapshot(ctx context.Context, stackRef backend.StackReference) (*deploy.Snapshot, error) {
+func (b *cloudBackend) completeUpdate(
+	ctx context.Context,
+	tokenSource *tokenSource,
+	update client.UpdateIdentifier,
+	status apitype.UpdateStatus,
+	outputs *apitype.StackOutputsResponse,
+) error {
+	defer tokenSource.Close()
+
+	return b.client.CompleteUpdate(ctx, update, status, tokenSource, outputs)
+}
+
+func (b *cloudBackend) getSnapshot(ctx context.Context,
+	secretsProvider secrets.Provider, stackRef backend.StackReference,
+) (*deploy.Snapshot, error) {
+	tracer := otel.Tracer("pulumi-cli")
+	ctx, span := cmdutil.StartSpan(ctx, tracer, "cloudBackend.getSnapshot")
+	defer span.End()
+
 	untypedDeployment, err := b.exportDeployment(ctx, stackRef, nil /* get latest */)
 	if err != nil {
 		return nil, err
 	}
 
-	snapshot, err := stack.DeserializeUntypedDeployment(untypedDeployment, stack.DefaultSecretsProvider)
+	snap, err := stack.DeserializeUntypedDeployment(ctx, untypedDeployment, secretsProvider)
 	if err != nil {
 		return nil, err
 	}
 
-	return snapshot, nil
-}
+	// Ensure the snapshot passes verification before returning it, to catch bugs early.
+	if !backend.DisableIntegrityChecking {
+		if err := snap.VerifyIntegrity(); err != nil {
+			if sie, ok := snapshot.AsSnapshotIntegrityError(err); ok {
+				var metadata *apitype.SnapshotIntegrityErrorMetadataV1
+				if snap.Metadata.IntegrityErrorMetadata != nil {
+					metadata = &apitype.SnapshotIntegrityErrorMetadataV1{
+						Version: snap.Metadata.IntegrityErrorMetadata.Version,
+						Command: snap.Metadata.IntegrityErrorMetadata.Command,
+						Error:   snap.Metadata.IntegrityErrorMetadata.Error,
+					}
+				}
+				return nil, fmt.Errorf("snapshot integrity failure; refusing to use it: %w", sie.ForReadWithMetadata(metadata))
+			}
 
-func (b *cloudBackend) getTarget(ctx context.Context, stackRef backend.StackReference,
-	cfg config.Map, dec config.Decrypter) (*deploy.Target, error) {
-
-	snapshot, err := b.getSnapshot(ctx, stackRef)
-	if err != nil {
-		switch err {
-		case stack.ErrDeploymentSchemaVersionTooOld:
-			return nil, fmt.Errorf("the stack '%s' is too old to be used by this version of the Pulumi CLI",
-				stackRef.Name())
-		case stack.ErrDeploymentSchemaVersionTooNew:
-			return nil, fmt.Errorf("the stack '%s' is newer than what this version of the Pulumi CLI understands. "+
-				"Please update your version of the Pulumi CLI", stackRef.Name())
-		default:
-			return nil, errors.Wrap(err, "could not deserialize deployment")
+			return nil, fmt.Errorf("snapshot integrity failure; refusing to use it: %w", err)
 		}
 	}
 
+	return snap, nil
+}
+
+func (b *cloudBackend) getSnapshotStackOutputs(ctx context.Context,
+	secretsProvider secrets.Provider, stackRef backend.StackReference,
+) (property.Map, error) {
+	tracer := otel.Tracer("pulumi-cli")
+	ctx, span := cmdutil.StartSpan(ctx, tracer, "cloudBackend.getSnapshotStackOutputs")
+	defer span.End()
+
+	if b.Capabilities(ctx).StackOutputs {
+		stackID, err := b.getCloudStackIdentifier(stackRef)
+		if err != nil {
+			return property.Map{}, err
+		}
+		resp, err := b.awaitStackOutputs(ctx, stackID)
+		if err != nil {
+			return property.Map{}, err
+		}
+		outputs, err := stack.DecryptStackOutputs(ctx, resp.Outputs, resp.SecretsProviders, secretsProvider)
+		if err != nil {
+			return property.Map{}, err
+		}
+		if resp.Unknown {
+			for name, value := range outputs {
+				unknown := resource.MakeComputed(resource.NewProperty(""))
+				if value.IsSecret() {
+					unknown = resource.MakeSecret(unknown)
+				}
+				outputs[name] = unknown
+			}
+		}
+		return resource.FromResourcePropertyMap(outputs), nil
+	}
+
+	untypedDeployment, err := b.exportDeployment(ctx, stackRef, nil /* get latest */)
+	if err != nil {
+		return property.Map{}, err
+	}
+
+	deployment, err := stack.UnmarshalUntypedDeployment(ctx, untypedDeployment)
+	if err != nil {
+		return property.Map{}, err
+	}
+
+	outputs, err := stack.DeserializeStackOutputs(ctx, *deployment, secretsProvider)
+	if err != nil {
+		return property.Map{}, err
+	}
+
+	return resource.FromResourcePropertyMap(outputs), nil
+}
+
+func (b *cloudBackend) getTarget(ctx context.Context, secretsProvider secrets.Provider, stackRef backend.StackReference,
+	cfg config.Map, dec config.Decrypter,
+) (*deploy.Target, error) {
+	stackID, err := b.getCloudStackIdentifier(stackRef)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot, err := b.getSnapshot(ctx, secretsProvider, stackRef)
+	if err != nil {
+		return nil, stack.FormatDeploymentDeserializationError(err, stackRef.Name().String())
+	}
+
+	var tags map[apitype.StackTagName]string
+	if b.cachedUpdateData != nil && b.cachedUpdateData.stackRef.String() == stackRef.String() {
+		logging.V(7).Infof("Using cached stack tags from begin-update for %s", stackRef)
+		tags = b.cachedUpdateData.stackTags
+	} else {
+		stk, err := b.client.GetStack(ctx, stackID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get stack tags for %s: %w", stackRef.Name().String(), err)
+		}
+		tags = stk.Tags
+	}
+
 	return &deploy.Target{
-		Name:      stackRef.Name(),
-		Config:    cfg,
-		Decrypter: dec,
-		Snapshot:  snapshot,
+		Name:         stackID.Stack,
+		Organization: tokens.Name(stackID.Owner),
+		Config:       cfg,
+		Decrypter:    dec,
+		Snapshot:     snapshot,
+		Tags:         tags,
 	}, nil
 }
 
 func isDebugDiagEvent(e engine.Event) bool {
-	return e.Type == engine.DiagEvent && (e.Payload().(engine.DiagEventPayload)).Severity == diag.Debug
+	return e.Type == engine.DiagEvent && e.Payload().(engine.DiagEventPayload).Severity == diag.Debug
+}
+
+// isUntargetedEvent reports if a resource that was not included in a target-constrained operation.
+// Such resources are untouched by the operation, so their same-step events carry no information
+// beyond the summary counts and need not be persisted.
+func isUntargetedEvent(e engine.Event) bool {
+	switch p := e.Payload().(type) {
+	case engine.ResourcePreEventPayload:
+		return p.Metadata.Untargeted
+	case engine.ResourceOutputsEventPayload:
+		return p.Metadata.Untargeted
+	default:
+		return false
+	}
 }
 
 type engineEventBatch struct {
@@ -311,9 +342,14 @@ type engineEventBatch struct {
 
 // persistEngineEvents reads from a channel of engine events and persists them on the
 // Pulumi Service. This is the data that powers the logs display.
-func persistEngineEvents(
-	update *cloudUpdate, persistDebugEvents bool,
-	events <-chan engine.Event, done chan<- bool) {
+func (b *cloudBackend) persistEngineEvents(
+	ctx context.Context,
+	tokenSource *tokenSource,
+	update client.UpdateIdentifier,
+	persistDebugEvents bool,
+	events <-chan engine.Event,
+	done chan<- bool,
+) {
 	// A single update can emit hundreds, if not thousands, or tens of thousands of
 	// engine events. We transmit engine events in large batches to reduce the overhead
 	// associated with each HTTP request to the service. We also send multiple HTTP
@@ -337,11 +373,17 @@ func persistEngineEvents(
 		close(done)
 	}()
 
+	// We need to filter the engine events here to exclude any internal and
+	// ephemeral events, since these by definition should not be persisted.
+	events = channel.FilterRead(events, func(e engine.Event) bool {
+		return !e.Internal() && !e.Ephemeral() && !isUntargetedEvent(e)
+	})
+
 	var eventBatch []engine.Event
 	maxDelayTicker := time.NewTicker(maxTransmissionDelay)
 
 	// We maintain a sequence counter for each event to ensure that the Pulumi Service can
-	// ensure events can be reconstructured in the same order they were emitted. (And not
+	// ensure events can be reconstructed in the same order they were emitted. (And not
 	// out of order from parallel writes and/or network delays.)
 	eventIdx := 0
 
@@ -354,11 +396,10 @@ func persistEngineEvents(
 	batchesToTransmit := make(chan engineEventBatch)
 
 	transmitBatchLoop := func() {
-		wg.Add(1)
 		defer wg.Done()
 
 		for eventBatch := range batchesToTransmit {
-			err := update.recordEngineEvents(eventBatch.sequenceStart, eventBatch.events)
+			err := b.recordEngineEvents(ctx, tokenSource, update, eventBatch.sequenceStart, eventBatch.events)
 			if err != nil {
 				logging.V(3).Infof("error recording engine events: %s", err)
 			}
@@ -366,7 +407,8 @@ func persistEngineEvents(
 	}
 	// Start N different go-routines which will all pull from the batchesToTransmit channel
 	// and persist those engine events until the channel is closed.
-	for i := 0; i < maxConcurrentRequests; i++ {
+	for range maxConcurrentRequests {
+		wg.Add(1)
 		go transmitBatchLoop()
 	}
 
@@ -430,4 +472,32 @@ func persistEngineEvents(
 	// finally close the `done` channel so the caller knows we are finished processing the
 	// engine event stream.
 	close(batchesToTransmit)
+}
+
+func (b *cloudBackend) routeHelperDiagnostics(
+	events chan<- engine.Event, done <-chan bool, opts display.Options,
+) func() {
+	if b.helper == nil || b.helper.Helper == nil || !opts.IsInteractive || opts.JSONDisplay ||
+		opts.SummaryJSON || opts.Type != display.DisplayProgress {
+		return func() {}
+	}
+	messages := make(chan string)
+	finished := make(chan struct{})
+	go func() {
+		defer close(finished)
+		// Keep receiving after display shutdown so in-flight sends can finish before detachment.
+		for message := range messages {
+			event := engine.NewEvent(engine.StdoutEventPayload{Message: message + "\n", Color: colors.Never})
+			select {
+			case events <- event:
+			case <-done:
+			}
+		}
+	}()
+	detach := b.helper.DisplayDiagnostics(messages)
+	return sync.OnceFunc(func() {
+		detach()
+		close(messages)
+		<-finished
+	})
 }

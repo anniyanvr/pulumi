@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,57 +19,64 @@ import (
 	"testing"
 
 	"github.com/hashicorp/hcl/v2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
 )
 
+func assertConvertibleFrom(t *testing.T, to, from Type) {
+	assert.NotEqual(t, NoConversion, to.ConversionFrom(from))
+}
+
 func TestBindLiteral(t *testing.T) {
+	t.Parallel()
+
 	expr, diags := BindExpressionText("false", nil, hcl.Pos{})
-	assert.Len(t, diags, 0)
-	assert.Equal(t, BoolType, expr.Type())
+	require.Len(t, diags, 0)
+	assertConvertibleFrom(t, BoolType, expr.Type())
 	lit, ok := expr.(*LiteralValueExpression)
 	assert.True(t, ok)
 	assert.Equal(t, cty.False, lit.Value)
 	assert.Equal(t, "false", fmt.Sprintf("%v", expr))
 
 	expr, diags = BindExpressionText("true", nil, hcl.Pos{})
-	assert.Len(t, diags, 0)
-	assert.Equal(t, BoolType, expr.Type())
+	require.Len(t, diags, 0)
+	assertConvertibleFrom(t, BoolType, expr.Type())
 	lit, ok = expr.(*LiteralValueExpression)
 	assert.True(t, ok)
 	assert.Equal(t, cty.True, lit.Value)
 	assert.Equal(t, "true", fmt.Sprintf("%v", expr))
 
 	expr, diags = BindExpressionText("0", nil, hcl.Pos{})
-	assert.Len(t, diags, 0)
-	assert.Equal(t, NumberType, expr.Type())
+	require.Len(t, diags, 0)
+	assertConvertibleFrom(t, NumberType, expr.Type())
 	lit, ok = expr.(*LiteralValueExpression)
 	assert.True(t, ok)
 	assert.True(t, cty.NumberIntVal(0).RawEquals(lit.Value))
 	assert.Equal(t, "0", fmt.Sprintf("%v", expr))
 
 	expr, diags = BindExpressionText("3.14", nil, hcl.Pos{})
-	assert.Len(t, diags, 0)
-	assert.Equal(t, NumberType, expr.Type())
+	require.Len(t, diags, 0)
+	assertConvertibleFrom(t, NumberType, expr.Type())
 	lit, ok = expr.(*LiteralValueExpression)
 	assert.True(t, ok)
 	assert.True(t, cty.MustParseNumberVal("3.14").RawEquals(lit.Value))
 	assert.Equal(t, "3.14", fmt.Sprintf("%v", expr))
 
 	expr, diags = BindExpressionText(`"foo"`, nil, hcl.Pos{})
-	assert.Len(t, diags, 0)
-	assert.Equal(t, StringType, expr.Type())
+	require.Len(t, diags, 0)
+	assertConvertibleFrom(t, StringType, expr.Type())
 	template, ok := expr.(*TemplateExpression)
 	assert.True(t, ok)
-	assert.Len(t, template.Parts, 1)
+	require.Len(t, template.Parts, 1)
 	lit, ok = template.Parts[0].(*LiteralValueExpression)
 	assert.True(t, ok)
 	assert.Equal(t, cty.StringVal("foo"), lit.Value)
 	assert.Equal(t, "\"foo\"", fmt.Sprintf("%v", expr))
 }
 
-type environment map[string]interface{}
+type environment map[string]any
 
 func (e environment) scope() *Scope {
 	s := NewRootScope(syntax.None)
@@ -91,7 +98,9 @@ type exprTestCase struct {
 }
 
 func TestBindBinaryOp(t *testing.T) {
-	env := environment(map[string]interface{}{
+	t.Parallel()
+
+	env := environment(map[string]any{
 		"a": NewOutputType(BoolType),
 		"b": NewPromiseType(BoolType),
 		"c": NewOutputType(NumberType),
@@ -129,9 +138,10 @@ func TestBindBinaryOp(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*BinaryOpExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))
@@ -140,7 +150,9 @@ func TestBindBinaryOp(t *testing.T) {
 }
 
 func TestBindConditional(t *testing.T) {
-	env := environment(map[string]interface{}{
+	t.Parallel()
+
+	env := environment(map[string]any{
 		"a": NewOutputType(BoolType),
 		"b": NewPromiseType(BoolType),
 	})
@@ -161,9 +173,10 @@ func TestBindConditional(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*ConditionalExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))
@@ -172,9 +185,11 @@ func TestBindConditional(t *testing.T) {
 }
 
 func TestBindFor(t *testing.T) {
+	t.Parallel()
+
 	// TODO: union collection types
 
-	env := environment(map[string]interface{}{
+	env := environment(map[string]any{
 		"a":  NewMapType(StringType),
 		"aa": NewMapType(NewOutputType(StringType)),
 		"b":  NewOutputType(NewMapType(StringType)),
@@ -222,9 +237,10 @@ func TestBindFor(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*ForExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))
@@ -233,7 +249,9 @@ func TestBindFor(t *testing.T) {
 }
 
 func TestBindFunctionCall(t *testing.T) {
-	env := environment(map[string]interface{}{
+	t.Parallel()
+
+	env := environment(map[string]any{
 		"f0": NewFunction(StaticFunctionSignature{
 			Parameters: []Parameter{
 				{Name: "foo", Type: StringType},
@@ -278,9 +296,10 @@ func TestBindFunctionCall(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*FunctionCallExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))
@@ -288,8 +307,122 @@ func TestBindFunctionCall(t *testing.T) {
 	}
 }
 
+func TestBindFunctionCallExpandFinal(t *testing.T) {
+	t.Parallel()
+
+	// `fSL` takes a string and a list(int): list is intentionally not implicitly convertible from
+	// a primitive (and vice versa), so element-type mismatches on `...` produce diagnostics.
+	// `fSV` is the varargs variant.
+	env := environment(map[string]any{
+		"fSL": NewFunction(StaticFunctionSignature{
+			Parameters: []Parameter{
+				{Name: "foo", Type: StringType},
+				{Name: "bar", Type: NewListType(IntType)},
+			},
+			ReturnType: BoolType,
+		}),
+		"fSV": NewFunction(StaticFunctionSignature{
+			Parameters: []Parameter{
+				{Name: "foo", Type: StringType},
+			},
+			VarargsParameter: &Parameter{
+				Name: "bar", Type: NewListType(IntType),
+			},
+			ReturnType: BoolType,
+		}),
+		"listOfListOfInt":   NewListType(NewListType(IntType)),
+		"setOfListOfInt":    NewSetType(NewListType(IntType)),
+		"stringAndListInt":  NewTupleType(StringType, NewListType(IntType)),
+		"stringAndListInts": NewTupleType(StringType, NewListType(IntType), NewListType(IntType)),
+		"listOfStrings":     NewListType(StringType),
+		"stringAndString":   NewTupleType(StringType, StringType),
+		"emptyTuple":        NewTupleType(),
+	})
+	scope := env.scope()
+
+	t.Run("valid expansions", func(t *testing.T) {
+		t.Parallel()
+		cases := []exprTestCase{
+			// Expand a list(list(int)) into the varargs parameter of fSV.
+			{x: `fSV("foo", listOfListOfInt...)`, t: BoolType},
+			// Expand a set(list(int)) into the varargs parameter of fSV.
+			{x: `fSV("foo", setOfListOfInt...)`, t: BoolType},
+			// Expand a tuple whose element types line up with fSL's positional parameters.
+			{x: `fSL(stringAndListInt...)`, t: BoolType},
+			// Expand a tuple whose element types line up with fSV's positional + varargs.
+			{x: `fSV(stringAndListInts...)`, t: BoolType},
+		}
+		for _, c := range cases {
+			t.Run(c.x, func(t *testing.T) {
+				t.Parallel()
+				expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
+				require.Len(t, diags, 0)
+				assertConvertibleFrom(t, c.t, expr.Type())
+				call, ok := expr.(*FunctionCallExpression)
+				require.True(t, ok)
+				assert.True(t, call.ExpandFinal, "expected ExpandFinal to be set on the bound expression")
+			})
+		}
+	})
+
+	t.Run("type mismatches", func(t *testing.T) {
+		t.Parallel()
+		// The summary "cannot assign expression of type %s to location of type %s: " uses the
+		// InputType wrapper for the destination, which lifts list(int) into the verbose union form.
+		elementMismatch := "cannot assign expression of type string to location of type " +
+			"list(int | output(int)) | output(list(int)): "
+		cases := []struct {
+			x         string
+			summaries []string
+		}{
+			// Expanding a list(string) into fSL's list(int) parameter should report that the
+			// element type string is not convertible to list(int).
+			{
+				x:         `fSL("foo", listOfStrings...)`,
+				summaries: []string{elementMismatch},
+			},
+			// Expanding a list(string) where fSV's varargs parameter expects list(int).
+			{
+				x:         `fSV("foo", listOfStrings...)`,
+				summaries: []string{elementMismatch},
+			},
+			// Expanding a tuple(string, string) into fSL(string, list(int)): second element wrong.
+			{
+				x:         `fSL(stringAndString...)`,
+				summaries: []string{elementMismatch},
+			},
+			// Expanding an empty tuple omits both required positional parameters.
+			{
+				x: `fSL(emptyTuple...)`,
+				summaries: []string{
+					"missing required parameter 'foo'",
+					"missing required parameter 'bar'",
+				},
+			},
+			// Expanding a tuple with more elements than fSL accepts (and no varargs).
+			{
+				x:         `fSL(stringAndListInts...)`,
+				summaries: []string{"too many arguments to call: expected 2, got 3"},
+			},
+		}
+		for _, c := range cases {
+			t.Run(c.x, func(t *testing.T) {
+				t.Parallel()
+				_, diags := BindExpressionText(c.x, scope, hcl.Pos{})
+				summaries := make([]string, len(diags))
+				for i, d := range diags {
+					summaries[i] = d.Summary
+				}
+				assert.Equal(t, c.summaries, summaries)
+			})
+		}
+	})
+}
+
 func TestBindIndex(t *testing.T) {
-	env := environment(map[string]interface{}{
+	t.Parallel()
+
+	env := environment(map[string]any{
 		"a": StringType,
 		"b": IntType,
 		"c": NewOutputType(StringType),
@@ -345,9 +478,11 @@ func TestBindIndex(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
+
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*IndexExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))
@@ -355,8 +490,48 @@ func TestBindIndex(t *testing.T) {
 	}
 }
 
+func TestBindLookup(t *testing.T) {
+	t.Parallel()
+
+	env := environment(map[string]any{
+		"key": StringType,
+		"m":   NewMapType(BoolType),
+		"o":   NewObjectType(map[string]Type{"foo": BoolType, "bar": IntType}),
+		"om":  NewOutputType(NewMapType(BoolType)),
+	})
+	scope := env.scope()
+
+	cases := []struct {
+		x       string
+		t       Type
+		printed string
+	}{
+		{x: `lookup(m, key)`, t: BoolType, printed: "m[key]"},
+		{x: `lookup(o, "foo")`, t: BoolType, printed: `o["foo"]`},
+		{x: `lookup(o, "bar")`, t: IntType, printed: `o["bar"]`},
+		{x: `lookup(o, key)`, t: NewUnionType(BoolType, IntType), printed: `o[key]`},
+		{x: `lookup(om, key)`, t: NewOutputType(BoolType), printed: "om[key]"},
+		{x: `lookup( m , key )`, t: BoolType, printed: " m[key ]"},
+		{x: "lookup(m, /* c */ key)", t: BoolType, printed: "m[/* c */ key]"},
+	}
+	for _, c := range cases {
+		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
+
+			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
+			require.Len(t, diags, 0)
+			assert.Equal(t, c.t, expr.Type())
+			_, ok := expr.(*IndexExpression)
+			assert.True(t, ok)
+			assert.Equal(t, c.printed, fmt.Sprintf("%v", expr))
+		})
+	}
+}
+
 func TestBindObjectCons(t *testing.T) {
-	env := environment(map[string]interface{}{
+	t.Parallel()
+
+	env := environment(map[string]any{
 		"a": StringType,
 		"b": NumberType,
 		"c": BoolType,
@@ -386,9 +561,11 @@ func TestBindObjectCons(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
+
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*ObjectConsExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))
@@ -397,7 +574,9 @@ func TestBindObjectCons(t *testing.T) {
 }
 
 func TestBindRelativeTraversal(t *testing.T) {
-	env := environment(map[string]interface{}{
+	t.Parallel()
+
+	env := environment(map[string]any{
 		"a":  NewMapType(StringType),
 		"aa": NewMapType(NewOutputType(StringType)),
 		"b":  NewOutputType(NewMapType(StringType)),
@@ -439,9 +618,11 @@ func TestBindRelativeTraversal(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
+
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*RelativeTraversalExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))
@@ -450,13 +631,15 @@ func TestBindRelativeTraversal(t *testing.T) {
 }
 
 func TestBindScopeTraversal(t *testing.T) {
+	t.Parallel()
+
 	ot := NewObjectType(map[string]Type{
 		"foo": NewListType(StringType),
 		"bar": NewObjectType(map[string]Type{
 			"baz": StringType,
 		}),
 	})
-	env := environment(map[string]interface{}{
+	env := environment(map[string]any{
 		"a": StringType,
 		"b": IntType,
 		"c": NewListType(BoolType),
@@ -509,9 +692,11 @@ func TestBindScopeTraversal(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
+
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*ScopeTraversalExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))
@@ -520,13 +705,15 @@ func TestBindScopeTraversal(t *testing.T) {
 }
 
 func TestBindSplat(t *testing.T) {
+	t.Parallel()
+
 	ot := NewObjectType(map[string]Type{
 		"foo": NewListType(StringType),
 		"bar": NewObjectType(map[string]Type{
 			"baz": StringType,
 		}),
 	})
-	env := environment(map[string]interface{}{
+	env := environment(map[string]any{
 		"a": NewListType(NewListType(StringType)),
 		"b": NewListType(ot),
 		"c": NewSetType(NewListType(StringType)),
@@ -576,9 +763,11 @@ func TestBindSplat(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
+
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*SplatExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))
@@ -587,7 +776,9 @@ func TestBindSplat(t *testing.T) {
 }
 
 func TestBindTemplate(t *testing.T) {
-	env := environment(map[string]interface{}{
+	t.Parallel()
+
+	env := environment(map[string]any{
 		"a": StringType,
 		"b": NumberType,
 		"c": BoolType,
@@ -637,9 +828,11 @@ func TestBindTemplate(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
+
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 
 			var ok bool
 			switch c.xt.(type) {
@@ -657,7 +850,9 @@ func TestBindTemplate(t *testing.T) {
 }
 
 func TestBindTupleCons(t *testing.T) {
-	env := environment(map[string]interface{}{
+	t.Parallel()
+
+	env := environment(map[string]any{
 		"a": NewOutputType(StringType),
 		"b": NewPromiseType(StringType),
 		"c": NewUnionType(StringType, BoolType),
@@ -672,9 +867,11 @@ func TestBindTupleCons(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
+
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*TupleConsExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))
@@ -683,7 +880,9 @@ func TestBindTupleCons(t *testing.T) {
 }
 
 func TestBindUnaryOp(t *testing.T) {
-	env := environment(map[string]interface{}{
+	t.Parallel()
+
+	env := environment(map[string]any{
 		"a": NumberType,
 		"b": BoolType,
 		"c": NewOutputType(NumberType),
@@ -706,9 +905,11 @@ func TestBindUnaryOp(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.x, func(t *testing.T) {
+			t.Parallel()
+
 			expr, diags := BindExpressionText(c.x, scope, hcl.Pos{})
-			assert.Len(t, diags, 0)
-			assert.Equal(t, c.t, expr.Type())
+			require.Len(t, diags, 0)
+			assertConvertibleFrom(t, c.t, expr.Type())
 			_, ok := expr.(*UnaryOpExpression)
 			assert.True(t, ok)
 			assert.Equal(t, c.x, fmt.Sprintf("%v", expr))

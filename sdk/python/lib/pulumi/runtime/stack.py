@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,27 +15,147 @@
 """
 Support for automatic stack components.
 """
-import asyncio
-import collections
-from inspect import isawaitable
-from typing import Callable, Any, Dict, List, TYPE_CHECKING
 
-from ..resource import ComponentResource, Resource, ResourceTransformation
-from .settings import get_project, get_stack, get_root_resource, is_dry_run, set_root_resource
-from .rpc_manager import RPC_MANAGER
-from .sync_await import _all_tasks, _get_current_task
-from .. import log
+import asyncio
+from collections.abc import Awaitable, Callable
+from inspect import isawaitable
+from typing import TYPE_CHECKING, Any, Optional
+
+from google.protobuf import empty_pb2
+import grpc
+
+
+from . import settings
+from ._context import wrap_with_context
+from ._state_migration_context import _ensure_not_in_state_migration
+from .proto import resource_pb2
+from .. import _types, log
+from ..resource import (
+    ComponentResource,
+    Resource,
+    ResourceTransformation,
+    ResourceTransform,
+    export,
+)
+from ..invoke import (
+    InvokeTransform,
+)
+from .settings import (
+    SETTINGS,
+    _get_callbacks,
+    _get_rpc_manager,
+    _load_monitor_feature_support,
+    _shutdown_callbacks,
+    monitor_supports_feature,
+    get_monitor,
+    get_project,
+    get_root_resource,
+    get_stack,
+    is_dry_run,
+    set_root_resource,
+)
+from .sync_await import _sync_await
 
 if TYPE_CHECKING:
-    from .. import Output
+    from ..output import Inputs
 
 
-async def run_pulumi_func(func: Callable):
+_AsyncProgram = Callable[[], Awaitable[Optional["Inputs"]]]
+
+
+def run(program: _AsyncProgram) -> None:
+    """Register an asynchronous entrypoint for the current Pulumi program.
+
+    The entrypoint is invoked and awaited after the program's top-level module
+    code has finished running. Each entry in a mapping returned by the entrypoint
+    is exported as if :func:`pulumi.export` had been called with its key and
+    value. This means returned entries merge with existing exports, overwriting
+    any existing export with the same name. The entrypoint may instead return
+    ``None`` and use :func:`pulumi.export` directly.
+
+    ``pulumi.run`` may only be called once per Pulumi program.
+
+    Example::
+
+        import pulumi
+
+        async def main() -> pulumi.Inputs:
+            value = await some_async_operation()
+            return {"value": value}
+
+        pulumi.run(main)
+
+    :param program: A zero-argument callable that returns an awaitable.
+    """
+    if not callable(program):
+        raise TypeError("pulumi.run expects a callable")
+
+    root = get_root_resource()
+    if not isinstance(root, Stack):
+        from ..errors import RunError
+
+        raise RunError(
+            "pulumi.run may only be called while a Pulumi program is running"
+        )
+
+    root._register_async_program(program)
+
+
+async def _wait_for_shutdown() -> None:
     try:
-        func()
-    finally:
-        log.debug("Waiting for outstanding RPCs to complete")
+        monitor = get_monitor()
+        if monitor is None:
+            return
+        await asyncio.get_running_loop().run_in_executor(
+            None,
+            wrap_with_context(
+                lambda: monitor.SignalAndWaitForShutdown(empty_pb2.Empty())
+            ),
+        )
+    except grpc.RpcError as exn:
+        # If we are running against an older version of the CLI,
+        # SignalAndWaitForShutdown might not be implemented. This is mostly
+        # fine, but means that delete hooks do not work. Since we check if the
+        # CLI supports the `resourceHook` feature when registering hooks, it's
+        # fine to ignore the `UNIMPLEMENTED` error here.
+        if exn.code() == grpc.StatusCode.UNIMPLEMENTED:
+            log.debug("Monitor does not implement `SignalAndWaitForShutdown`")
 
+
+async def run_pulumi_func(
+    func: Callable[[], Optional[Awaitable[None]]],
+) -> None:
+    # Run the function and grab any exception it generates
+    ex: Optional[BaseException] = None
+    try:
+        result = func()
+        if isawaitable(result):
+            await result
+    except BaseException as e:  # noqa: BLE001 re-raised after runtime cleanup
+        ex = e
+
+    # Wait for RPCs to complete, then signal and wait for shutdown.
+    try:
+        await wait_for_rpcs()
+        # If func succeeded, let the monitor decide when we should shutdown.
+        if ex is None:
+            await _wait_for_shutdown()
+    finally:
+        # Finally, we must always shutdown the callbacks server when we're done.
+        await _shutdown_callbacks()
+
+    # By now, all tasks have exited and we're good to go.
+    log.debug("run_pulumi_func completed")
+    if ex is not None:
+        # Re-raise ex so the language runtime can report the error.
+        raise ex
+
+
+async def wait_for_rpcs(await_all_outstanding_tasks=True) -> None:
+    log.debug("Waiting for outstanding RPCs to complete")
+
+    rpc_manager = _get_rpc_manager()
+    while True:
         # Pump the event loop, giving all of the RPCs that we just queued up time to fully execute.
         # The asyncio scheduler does not expose a "yield" primitive, so this will have to do.
         #
@@ -43,44 +163,95 @@ async def run_pulumi_func(func: Callable):
         # https://github.com/python/asyncio/issues/284#issuecomment-154180935
         #
         # We await each RPC in turn so that this loop will actually block rather than busy-wait.
-        while True:
+        while len(rpc_manager.rpcs) > 0:
             await asyncio.sleep(0)
-            if len(RPC_MANAGER.rpcs) == 0:
-                break
-            log.debug(f"waiting for quiescence; {len(RPC_MANAGER.rpcs)} RPCs outstanding")
-            await RPC_MANAGER.rpcs.pop()
+            if settings.excessive_debug_output:
+                log.debug(
+                    f"waiting for quiescence; {len(rpc_manager.rpcs)} RPCs outstanding"
+                )
+            try:
+                await rpc_manager.rpcs.pop()
+            except Exception as exn:
+                # If the RPC failed, re-raise the original traceback
+                # instead of the await above.
+                if rpc_manager.unhandled_exception is not None:
+                    cause = rpc_manager.unhandled_exception.with_traceback(
+                        rpc_manager.exception_traceback,
+                    )
+                    raise exn from cause
 
-        # Asyncio event loops require that all outstanding tasks be completed by the time that the
-        # event loop closes. If we're at this point and there are no outstanding RPCs, we should
-        # just cancel all outstanding tasks.
-        #
-        # We will occasionally start tasks deliberately that we know will never complete. We must
-        # cancel them before shutting down the event loop.
-        log.debug("Canceling all outstanding tasks")
-        for task in _all_tasks():
-            # Don't kill ourselves, that would be silly.
-            if task == _get_current_task():
-                continue
-            task.cancel()
+                raise
 
-        # Pump the event loop again. Task.cancel is delivered asynchronously to all running tasks
-        # and each task needs to get scheduled in order to acknowledge the cancel and exit.
-        await asyncio.sleep(0)
+        if rpc_manager.unhandled_exception is not None:
+            raise rpc_manager.unhandled_exception.with_traceback(
+                rpc_manager.exception_traceback
+            )
 
-        # Once we get scheduled again, all tasks have exited and we're good to go.
-        log.debug("run_pulumi_func completed")
+        log.debug("RPCs successfully completed")
 
-    if RPC_MANAGER.unhandled_exception is not None:
-        raise RPC_MANAGER.unhandled_exception.with_traceback(RPC_MANAGER.exception_traceback)
+        # If the RPCs have successfully completed, now await all remaining outstanding tasks.
+        if await_all_outstanding_tasks:
+            while True:
+                with SETTINGS.lock:
+                    # the task may have been removed from the queue by the time we get to it, so we need to re-check if
+                    # its empty.
+                    if len(SETTINGS.outputs) == 0:
+                        break
+                    # Copy the outputs and clear so new outputs added while we wait are picked up on the next iteration.
+                    pending_outputs: list[asyncio.Task] = list(SETTINGS.outputs)
+                    SETTINGS.outputs.clear()
+
+                # Wait for a task to complete or be cancelled
+                done, not_done = await asyncio.wait(
+                    pending_outputs, return_when=asyncio.FIRST_COMPLETED
+                )
+
+                # Await the completed task so any exception is re-raised here.
+                for task in done:
+                    await task
+
+                # Put unfinished tasks back for the next iteration.
+                if not_done:
+                    with SETTINGS.lock:
+                        for task in not_done:
+                            SETTINGS.outputs.add(task)
+
+            log.debug("All outstanding outputs completed.")
+
+        # Check to see if any more RPCs or outputs have been scheduled, and repeat the cycle if so.
+        # Break if no RPCs remain.
+        if len(rpc_manager.rpcs) == 0:
+            break
 
 
-async def run_in_stack(func: Callable):
+async def run_in_stack(func: Callable[[], Optional[Awaitable[None]]]):
     """
     Run the given function inside of a new stack resource.  This ensures that any stack export calls
     will end up as output properties on the resulting stack component in the checkpoint file.  This
     is meant for internal runtime use only and is used by the Python SDK entrypoint program.
     """
-    await run_pulumi_func(lambda: Stack(func))
+
+    async def run() -> None:
+        stack = Stack()
+        try:
+            result = func()
+            if isawaitable(result):
+                await result
+
+            program = stack._take_async_program()
+            if program is not None:
+                outputs = program()
+                if not isawaitable(outputs):
+                    raise TypeError(
+                        "The function passed to pulumi.run must return an awaitable"
+                    )
+
+                stack._add_program_outputs(await outputs)
+        finally:
+            stack._finish()
+
+    await _load_monitor_feature_support()
+    await run_pulumi_func(run)
 
 
 class Stack(ComponentResource):
@@ -88,25 +259,73 @@ class Stack(ComponentResource):
     A synthetic stack component that automatically parents resources as the program runs.
     """
 
-    outputs: Dict[str, Any]
+    outputs: dict[str, Any]
 
-    def __init__(self, func: Callable) -> None:
+    def __init__(
+        self,
+        func: Optional[Callable[[], Optional[Awaitable[None]]]] = None,
+    ) -> None:
         # Ensure we don't already have a stack registered.
         if get_root_resource() is not None:
-            raise Exception('Only one root Pulumi Stack may be active at once')
+            raise Exception("Only one root Pulumi Stack may be active at once")
 
         # Now invoke the registration to begin creating this resource.
-        name = '%s-%s' % (get_project(), get_stack())
-        super(Stack, self).__init__('pulumi:pulumi:Stack', name, None, None)
+        name = f"{get_project()}-{get_stack()}"
+        super().__init__("pulumi:pulumi:Stack", name, None, None)
 
-        # Invoke the function while this stack is active and then register its outputs.
-        self.outputs = dict()
+        self.outputs = {}
+        self._async_program: Optional[_AsyncProgram] = None
+        self._async_program_registration_closed = False
+        self._outputs_registered = False
         set_root_resource(self)
+
+        # Stack historically invoked the program callback and finalized outputs
+        # in its constructor. Keep Stack(func) working for direct callers of this
+        # importable internal class. run_in_stack now creates Stack() and awaits
+        # user code itself.
+        if func is not None:
+            self._run_legacy_callback(func)
+
+    def _run_legacy_callback(
+        self, func: Callable[[], Optional[Awaitable[None]]]
+    ) -> None:
         try:
-            func()
+            awaitable = func()
+            # This _should_ be an awaitable but old pulumi executors returned modules here, so we need to handle that
+            # with a type check rather than just `is not None`.
+            if isawaitable(awaitable):
+                _sync_await(awaitable)
         finally:
-            self.register_outputs(massage(self.outputs, []))
+            self._finish()
             # Intentionally leave this resource installed in case subsequent async work uses it.
+
+    def _register_async_program(self, program: _AsyncProgram) -> None:
+        from ..errors import RunError
+
+        if self._async_program is not None or self._async_program_registration_closed:
+            raise RunError("pulumi.run may only be called once")
+
+        self._async_program = program
+
+    def _take_async_program(self) -> Optional[_AsyncProgram]:
+        self._async_program_registration_closed = True
+        return self._async_program
+
+    def _add_program_outputs(self, outputs: Optional["Inputs"]) -> None:
+        if outputs is None:
+            return
+        for name, value in outputs.items():
+            export(name, value)
+
+    def _finish(self) -> None:
+        """Register this stack's outputs exactly once."""
+        if self._outputs_registered:
+            return
+
+        self._async_program_registration_closed = True
+        outputs = massage(self.outputs, [])
+        self._outputs_registered = True
+        self.register_outputs(outputs)
 
     def output(self, name: str, value: Any):
         """
@@ -117,7 +336,7 @@ class Stack(ComponentResource):
 
 # Note: we use a List here instead of a set as many objects are unhashable.  This is inefficient,
 # but python seems to offer no alternative.
-def massage(attr: Any, seen: List[Any]):
+def massage(attr: Any, seen: list[Any]):
     """
     massage takes an arbitrary python value and attempts to *deeply* convert it into
     plain-old-python-value that can registered as an output.  In general, this means leaving alone
@@ -125,35 +344,11 @@ def massage(attr: Any, seen: List[Any]):
     lists or dictionaries as appropriate.  In general, iterable things are turned into lists, and
     dictionary-like things are turned into dictionaries.
     """
-    from .. import Output  # pylint: disable=import-outside-toplevel
+    from .. import Output
 
     # Basic primitive types (numbers, booleans, strings, etc.) don't need any special handling.
     if is_primitive(attr):
         return attr
-
-    # from this point on, we have complex objects.  If we see them again, we don't want to emit them
-    # again fully or else we'd loop infinitely.
-    if reference_contains(attr, seen):
-        # Note: for Resources we hit again, emit their urn so cycles can be easily understood in
-        # the popo objects.
-        if isinstance(attr, Resource):
-            return attr.urn
-
-        # otherwise just emit as nothing to stop the looping.
-        return None
-
-    seen.append(attr)
-
-    # first check if the value is an actual dictionary.  If so, massage the values of it to deeply
-    # make sure this is a popo.
-    if isinstance(attr, dict):
-        result = {}
-        for key, value in attr.items():
-            # ignore private keys
-            if not key.startswith("_"):
-                result[key] = massage(value, seen)
-
-        return result
 
     if isinstance(attr, Output):
         return attr.apply(lambda v: massage(v, seen))
@@ -161,26 +356,80 @@ def massage(attr: Any, seen: List[Any]):
     if isawaitable(attr):
         return Output.from_input(attr).apply(lambda v: massage(v, seen))
 
+    # from this point on, we have complex objects.  If we see them again, we don't want to emit them
+    # again fully or else we'd loop infinitely.
+    if reference_contains(attr, seen):
+        # Note: for Resources we hit again, emit their urn so cycles can be easily understood in
+        # the popo objects.
+        if isinstance(attr, Resource):
+            return massage(attr.urn, seen)
+        # otherwise just emit as nothing to stop the looping.
+        return None
+
+    try:
+        seen.append(attr)
+        return massage_complex(attr, seen)
+    finally:
+        popped = seen.pop()
+        if popped is not attr:
+            raise Exception("Invariant broken when processing stack outputs")
+
+
+def massage_complex(attr: Any, seen: list[Any]) -> Any:
+    from .. import Asset, Archive
+
+    def is_public_key(key: str) -> bool:
+        return not key.startswith("_")
+
+    def serialize_all_keys(include: Callable[[str], bool]):
+        plain_object: dict[str, Any] = {}
+        for key in attr.__dict__.keys():
+            if include(key):
+                plain_object[key] = massage(attr.__dict__[key], seen)
+        return plain_object
+
+    # Preserve Asset / Archive instances so subsequent gRPC serialization
+    # tags them with the special signature key; without that, the engine
+    # deserializes them as weakly-typed dicts and assets in stack outputs
+    # lose their identity. See pulumi/pulumi#16384.
+    if isinstance(attr, (Asset, Archive)):
+        return attr
+
     if isinstance(attr, Resource):
-        result = massage(attr.__dict__, seen)
+        serialized_attr = serialize_all_keys(is_public_key)
 
         # In preview only, we mark the result with "@isPulumiResource" to indicate that it is derived
         # from a resource. This allows the engine to perform resource-specific filtering of unknowns
         # from output diffs during a preview. This filtering is not necessary during an update because
         # all property values are known.
-        if is_dry_run():
-            result["@isPulumiResource"] = True
-        return result
+        return (
+            serialized_attr
+            if not is_dry_run()
+            else {**serialized_attr, "@isPulumiResource": True}
+        )
 
-    if hasattr(attr, "__dict__"):
-        # recurse on the dictionary itself.  It will be handled above.
-        return massage(attr.__dict__, seen)
+    # Output types store their values under Python (snake_case) names; convert them to
+    # dicts keyed by their Pulumi (wire-format) names so stack outputs match the names
+    # other languages serialize.
+    if _types.is_output_type(type(attr)):
+        return {
+            key: massage(value, seen)
+            for key, value in _types.output_type_to_dict(attr).items()
+        }
 
-    # finally, recurse through iterables, converting into a list of massaged values.
-    return [massage(a, seen) for a in attr]
+    # first check if the value is an actual dictionary.  If so, massage the values of it to deeply
+    # make sure this is a popo.
+    if isinstance(attr, dict):
+        # Don't use attr.items() here, as it will error in the case of outputs with an `items` property.
+        return {key: massage(attr[key], seen) for key in attr}
+
+    if hasattr(attr, "__iter__"):
+        return [massage(item, seen) for item in attr]
+
+    return serialize_all_keys(is_public_key)
 
 
-def reference_contains(val1: Any, seen: List[Any]) -> bool:
+def reference_contains(val1: Any, seen: list[Any]) -> bool:
     for val2 in seen:
         if val1 is val2:
             return True
@@ -215,10 +464,77 @@ def register_stack_transformation(t: ResourceTransformation):
     """
     Add a transformation to all future resources constructed in this Pulumi stack.
     """
+    _ensure_not_in_state_migration("register stack transformation")
+
     root_resource = get_root_resource()
     if root_resource is None:
-        raise Exception("The root stack resource was referenced before it was initialized.")
+        raise Exception(
+            "The root stack resource was referenced before it was initialized."
+        )
     if root_resource._transformations is None:
         root_resource._transformations = [t]
     else:
         root_resource._transformations = root_resource._transformations + [t]
+
+
+def _wait_for_pending_rpcs() -> None:
+    pending = asyncio.all_tasks()
+    rpcs = {task for task in pending if task.get_coro().__name__ == "rpc_wrapper"}  # type: ignore
+    if rpcs:
+        _sync_await(asyncio.gather(*rpcs))
+
+
+def register_resource_transform(t: ResourceTransform) -> None:
+    """
+    Add a transform to all future resources constructed in this Pulumi stack.
+    """
+    _ensure_not_in_state_migration("register resource transform")
+
+    if not monitor_supports_feature(resource_pb2.RESOURCE_MONITOR_FEATURE_TRANSFORMS):
+        raise Exception(
+            "The Pulumi CLI does not support transforms. Please update the Pulumi CLI."
+        )
+
+    # We need to make sure all the current resource registrations are finished before
+    # registering the transforms.  Do so by waiting for all RPCs to complete, before
+    # we go ahead and register the transform.
+    _wait_for_pending_rpcs()
+
+    callbacks = _sync_await(_get_callbacks())
+    if callbacks is None:
+        raise Exception("No callback server registered.")
+    callbacks.register_stack_transform(t)
+
+
+def register_stack_transform(t: ResourceTransform):
+    """
+    Add a transform to all future resources constructed in this Pulumi stack.
+
+    Deprecated: use `register_resource_transform` instead.
+    """
+    register_resource_transform(t)
+
+
+def register_invoke_transform(t: InvokeTransform) -> None:
+    """
+    Add a transforms to all future invokes called in this Pulumi stack.
+    """
+
+    _ensure_not_in_state_migration("register invoke transform")
+
+    if not monitor_supports_feature(
+        resource_pb2.RESOURCE_MONITOR_FEATURE_INVOKE_TRANSFORMS
+    ):
+        raise Exception(
+            "The Pulumi CLI does not support invoke transforms. Please update the Pulumi CLI."
+        )
+
+    # We need to make sure all the current invokes are finished before
+    # registering the transforms.  Do so by waiting for all RPCs to
+    # complete, before we go ahead and register the transform.
+    _wait_for_pending_rpcs()
+
+    callbacks = _sync_await(_get_callbacks())
+    if callbacks is None:
+        raise Exception("No callback server registered.")
+    callbacks.register_invoke_transform(t)

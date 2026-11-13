@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
 )
 
 // Block represents an HCL2 block.
@@ -114,8 +114,8 @@ func (*Block) isBodyItem() {}
 
 // BindBlock binds an HCL2 block using the given scopes and token map.
 func BindBlock(block *hclsyntax.Block, scopes Scopes, tokens syntax.TokenMap,
-	opts ...BindOption) (*Block, hcl.Diagnostics) {
-
+	opts ...BindOption,
+) (*Block, hcl.Diagnostics) {
 	body, diagnostics := BindBody(block.Body, scopes, tokens, opts...)
 	blockTokens, _ := tokens.ForNode(block).(*syntax.BlockTokens)
 	return &Block{

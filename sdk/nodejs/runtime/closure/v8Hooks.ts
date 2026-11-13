@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,16 +20,15 @@
 import * as v8 from "v8";
 v8.setFlagsFromString("--allow-natives-syntax");
 
-import * as semver from "semver";
+let session: Promise<import("inspector").Session | undefined> | undefined = undefined;
 
-// On node11 and above, create an 'inspector session' that can be used to keep track of what is
-// happening through a supported API.  Pre-11 we can just call into % intrinsics for the same data.
-/** @internal */
-export const isNodeAtLeastV11 = semver.gte(process.version, "11.0.0");
-
-const session = isNodeAtLeastV11
-    ? createInspectorSessionAsync()
-    : Promise.resolve<import("inspector").Session>(<any>undefined);
+function getSession() {
+    if (session !== undefined) {
+        return session;
+    }
+    session = createInspectorSessionAsync();
+    return session;
+}
 
 const scriptIdToUrlMap = new Map<string, string>();
 
@@ -43,10 +42,10 @@ async function createInspectorSessionAsync(): Promise<import("inspector").Sessio
     // Enable debugging support so we can hear about the Debugger.scriptParsed event. We need that
     // event to know how to map from scriptId's to file-urls.
     await new Promise<import("inspector").Debugger.EnableReturnType>((resolve, reject) => {
-        inspectorSession.post("Debugger.enable", (err, res) => err ? reject(err) : resolve(res));
+        inspectorSession.post("Debugger.enable", (err, res) => (err ? reject(err) : resolve(res)));
     });
 
-    inspectorSession.addListener("Debugger.scriptParsed", event => {
+    inspectorSession.addListener("Debugger.scriptParsed", (event) => {
         const { scriptId, url } = event.params;
         scriptIdToUrlMap.set(scriptId, url);
     });
@@ -55,29 +54,29 @@ async function createInspectorSessionAsync(): Promise<import("inspector").Sessio
 }
 
 /**
- * Returns the inspector session that can be used to query the state of this running Node instance.
- * Must only be called on Node11 and above. On Node10 and below, this will throw.
+ * Returns the inspector session that can be used to query the state of this
+ * running Node instance. Must only be called on Node11 and above. On Node10 and
+ * below, this will throw.
+ *
  * @internal
  */
 export async function getSessionAsync() {
-    if (!isNodeAtLeastV11) {
-        throw new Error("Should not call getSessionAsync unless on Node11 or above.");
-    }
-
-    return session;
+    return getSession();
 }
 
 /**
- * Returns a promise that can be used to determine when the v8hooks have been injected properly and
- * code that depends on them can continue executing.
+ * Returns a promise that can be used to determine when the v8hooks have been
+ * injected properly and code that depends on them can continue executing.
+ *
  * @internal
  */
 export async function isInitializedAsync() {
-    await session;
+    await getSession();
 }
 
 /**
  * Maps from a script-id to the local file url it corresponds to.
+ *
  * @internal
  */
 export function getScriptUrl(id: import("inspector").Runtime.ScriptId) {

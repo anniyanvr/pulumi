@@ -1,82 +1,140 @@
 # Contributing to Pulumi
 
-First, thanks for contributing to Pulumi and helping make it better. We appreciate the help! If you're looking for an issue to start with, we've tagged some issues with the [help-wanted](https://github.com/pulumi/pulumi/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22) tag but feel free to pick up any issue that looks interesting to you or fix a bug you stumble across in the course of using Pulumi. No matter the size, we welcome all improvements.
+First, thanks for contributing to Pulumi and helping make it better. We appreciate the help!
+This repository is one of many across the Pulumi ecosystem and we welcome contributions to them all.
 
-For larger features, we'd appreciate it if you open a [new issue](https://github.com/pulumi/pulumi/issues/new) before doing a ton of work to discuss the feature before you start writing a lot of code.
+## Code of Conduct
 
-## Hacking on Pulumi
+Please make sure to read and observe our [Contributor Code of Conduct](./CODE-OF-CONDUCT.md).
 
-To hack on Pulumi, you'll need to get a development environment set up. You'll want to install the following on your machine:
+## Communications
 
-- Go 1.15
-- NodeJS 10.X.X or later
-- Python 3.6 or later
-- [.NET Core](https://dotnet.microsoft.com/download)
-- [pipenv](https://github.com/pypa/pipenv)
-- [Golangci-lint](https://github.com/golangci/golangci-lint)
-- [Yarn](https://yarnpkg.com/)
+You are welcome to join the [Pulumi Community Slack](https://slack.pulumi.com/) for questions and a community of like-minded folks.
+We discuss features and file bugs on GitHub via [Issues](https://github.com/pulumi/pulumi/issues) as well as [Discussions](https://github.com/pulumi/pulumi/discussions).
+You can read about our [public roadmap](https://github.com/orgs/pulumi/projects/44) on the [Pulumi blog](https://www.pulumi.com/blog/relaunching-pulumis-public-roadmap/).
 
-## Getting dependencies on macOS
+### Issues
 
-You can easily get all required dependencies with brew and npm
+Feel free to pick up any existing issue that looks interesting to you or fix a bug you stumble across while using Pulumi. No matter the size, we welcome all improvements.
 
-```bash
-brew install node pipenv python@3 typescript yarn go@1.13 golangci/tap/golangci-lint pulumi/tap/pulumictl
-brew cask install dotnet dotnet-sdk
-```
+### Feature Work
 
-## Make build system
+For larger features, we'd appreciate it if you open a [new issue](https://github.com/pulumi/pulumi/issues/new) before investing a lot of time so we can discuss the feature together.
+Please also be sure to browse [current issues](https://github.com/pulumi/pulumi/issues) to make sure your issue is unique, to lighten the triage burden on our maintainers.
+Finally, please limit your pull requests to contain only one feature at a time. Separating feature work into individual pull requests helps speed up code review and reduces the barrier to merge.
 
-We use `make` as our build system, so you'll want to install that as well, if you don't have it already. We have extremely limited support for doing development on Windows (the bare minimum for us to get Windows validation of `pulumi`) so if you're on windows, we recommend that you use the [Windows Subsystem for Linux](https://docs.microsoft.com/en-us/windows/wsl/install-win10). We'd like to [make this better](https://github.com/pulumi/pulumi/issues/208) so feel free to pitch in if you can.
+## Developing
 
-For historical reasons (which we'd [like to address](https://github.com/pulumi/pulumi/issues/1515)) our build system requires that the folder `/opt/pulumi` exists and is writable by the current user. If you'd like, you can override this location by setting `PULUMI_ROOT` in your environment. The build is known to fail if this doesn't exist, so you'll need to create it first.
+### Setting up your Pulumi development environment
 
-```bash
-mkdir /opt/pulumi
-sudo chown <your_user_name>: /opt/pulumi
-export PATH=/opt/pulumi:/opt/pulumi/bin:$PATH
-```
-
-You'll also need to make sure your maximum open file descriptor limit is set to 5000 at a minimum.
-
-```bash
-ulimit -n # to test
-ulimit -n 5000
-```
-
-Across our projects, we try to use a regular set of make targets. The ones you'll care most about are:
-
-0. `make ensure`, which restores/installs any build dependencies
-1. `make`, which builds Pulumi and runs a quick set of tests
-2. `make all` which builds Pulumi and runs the quick tests and a larger set of tests.
-
-We make heavy use of integration level testing where we invoke `pulumi` to create and then delete cloud resources. This requires you to have a Pulumi account (so [sign up for free](https://pulumi.com) today if you haven't already) and login with `pulumi login`.
-
-This repository does not actually create any real cloud resources as part of testing, but still uses Pulumi.com to store information abot some synthetic resources it creates during testing. Other repositories may require additional setup before running tests (most often this is just setting a few environment variables that tell the tests some information about how to use the cloud provider we are testing). Please see the `CONTRIBUTING.md` file in the repository, which will explain what additional configuration needs to be done before running tests.
-
-## Debugging
-
-The Pulumi tools have extensive logging built in.  In fact, we encourage liberal logging in new code, and adding new logging when debugging problems.  This helps to ensure future debugging endeavors benefit from your sleuthing.
-
-All logging is done using a fork of Google's [Glog library](https://github.com/pulumi/glog).  It is relatively bare-bones, and adds basic leveled logging, stack dumping, and other capabilities beyond what Go's built-in logging routines offer.
-
-The `pulumi` command line has two flags that control this logging and that can come in handy when debugging problems. The `--logtostderr` flag spews directly to stderr, rather than the default of logging to files in your temp directory. And the `--verbose=n` flag (`-v=n` for short) sets the logging level to `n`.  Anything greater than 3 is reserved for debug-level logging, greater than 5 is going to be quite verbose, and anything beyond 7 is extremely noisy.
-
-For example, the command
-
-```sh
-$ pulumi preview --logtostderr -v=5
-```
-
-is a pretty standard starting point during debugging that will show a fairly comprehensive trace log of a compilation.
+Please see the [developer docs](https://pulumi-developer-docs.readthedocs.io/latest/docs/contributing/development.html) for instructions.
 
 ## Submitting a Pull Request
 
-For contributors we use the standard fork based workflow. Fork this repository, create a topic branch, and start hacking away.  When you're ready, make sure you've run the tests (`make travis_pull_request` will run the exact flow we run in CI) and open your PR.
+For contributors we use the [standard fork based workflow](https://gist.github.com/Chaser324/ce0505fbed06b947d962): Fork this repository, create a topic branch, and when ready, open a pull request from your fork.
 
+Before you open a pull request, make sure all lint checks pass:
+
+```bash
+make lint
+```
+
+If you see formatting failures, fix them with `make format`. To format a single file or directory directly:
+
+```bash
+golangci-lint fmt path/to/file.go
+# or
+golangci-lint fmt path/to/dir
+```
+
+We require a changelog entry for all PRs that aren't labeled `impact/no-changelog-required`. To generate a new changelog entry, run…
+
+```bash
+make changelog
+```
+…and follow the prompts on screen. This requires [changie](https://changie.dev/guide/installation/) to be installed. If you use [mise](https://mise.jdx.dev/), it is included in `.mise.toml` and will be installed automatically. Otherwise, install it manually (`brew install changie` on macOS, or `go install github.com/miniscruff/changie@v1.21` otherwise).
+
+### Pull Request Descriptions
+
+Write clear, informative PR descriptions that help reviewers understand your changes and provide effective feedback. A good PR description serves as documentation for your changes and helps maintainers understand the impact and context.
+
+**Important**: We use squash merge, so your PR description will become the git commit message. Write it accordingly.
+
+The PR description should include:
+
+- What: A clear summary of what changes are being made (often the PR title is sufficient)
+- **Why: The motivation, context, or problem being solved. This is the most important part of the description.**
+- How: Optionally a brief explanation of the approach taken (if not obvious). For detailed implementation explanations, consider adding comments in the code instead.
+- References: Links to related issues, RFCs, or previous PRs
+
+For PR titles, follow the same guidelines as [changelog messages](#changelog-messages). Use the active imperative form and be descriptive about what the change accomplishes.
+
+### Changelog messages
+
+Changelog notes are written in the active imperative form.  They should not end with a period.  The simple rule is to pretend the message starts with "This change will ..."
+
+Good examples for changelog entries are:
+- Exit immediately from state edit when no change was made
+- Fix root and program paths to always be absolute
+
+Here are some examples of what we're trying to avoid:
+- Fixes a bug
+- Adds a feature
+- Feature now does something
+
+Keep changelog messages short and to the point, one sentence is usually enough. Don't overdescribe a feature in the changelog, to keep the whole log scannable quickly by end users.
+
+### Downloading Pulumi from contributed pull requests
+
+Artifacts built during pull request workflows can be downloaded by running the following command (note that the artifacts expire 7 days after CI has been run):
+
+```sh
+curl -fsSL https://get.pulumi.com | sh -s -- --version pr#<number>
+```
+
+### Pulumi employees
+
+Pulumi employees have write access to Pulumi repositories and should push directly to branches rather than forking the repository. Tests can run directly without approval for PRs based on branches rather than forks.
+
+Please ensure that you nest your branches under a unique identifier such as your name (e.g. `refs/heads/pulumipus/cool_feature`).
+
+## Understanding Pulumi
+
+The Pulumi system is robust and offers many features that might seem overwhelming at first. To assist you in getting
+started, our team has put together the [Pulumi Developer
+Documentation](https://pulumi-developer-docs.readthedocs.io/latest/docs/README.html). This resource provides valuable
+insights into how the system is structured and can be incredibly helpful for both new contributors and maintainers
+alike. We encourage you to explore it and reach out if you have any questions!
 ## Getting Help
 
-We're sure there are rough edges and we appreciate you helping out. If you want
-to talk with other folks hacking on Pulumi (or members of the Pulumi team!)
-come hang out `#contribute` channel in the
-[Pulumi Community Slack](https://slack.pulumi.com/).
+We're sure there are rough edges and we appreciate you helping out. If you want to talk with other folks in the Pulumi community (including members of the Pulumi team) come hang out in the `#contribute` channel on the [Pulumi Community Slack](https://slack.pulumi.com/).
+
+## AI-Assisted Contributions
+
+If you're using an AI coding assistant to contribute:
+
+1. Read `AGENTS.md` at the repo root for the full command canon and invariants.
+2. Understand the existing code before proposing changes — read relevant files first.
+3. Make minimal, scoped changes. Don't refactor unrelated code or add unnecessary abstractions.
+4. Run `make format && make lint && make test_fast` and fix all failures before submitting.
+5. Include actual test output in your PR description (copy-paste, don't paraphrase).
+6. Don't forget the changelog entry (`make changelog`).
+
+**Note that we expect contributors using AI to remain in the loop.** This means that any content generated with AI (whether code or text) must have been reviewed and edited by a human before submission, and that the human involved retains responsibility for their output. You are expected to be able to explain your changes and how they interact with the system at large.
+
+## Releasing
+
+Whenever a new PR is merged in this repository, the latest draft release on the [GitHub Releases page](https://github.com/pulumi/pulumi/releases) is updated with the latest binaries.  To release one of those draft releases a few steps are necessary:
+
+A weekly job runs every Wednesday.  It bumps `sdk/.version` to the next minor version and opens a PR containing the changelog the release is expected to publish, which is approved and queued to merge automatically.  Merging that PR "freezes" the draft release for the previous version, which is the one we are about to publish.
+
+To cut a patch release instead, bump `sdk/.version` to the next patch version by hand using `scripts/set-version.py <next-patch-version>`, and merge that.
+
+The next step, to gain some additional confidence in the release is to run the [Test examples](https://github.com/pulumi/examples/actions/workflows/test-examples.yml), and [Test templates](https://github.com/pulumi/templates/actions/workflows/test-templates.yml) test suites.  These run the tests in the `pulumi/examples` and `pulumi/templates` repositories using the latest `pulumi/pulumi` dev version, thus including all the latest changes.
+
+Finally to create the release, navigate to the [GitHub Releases page](https://github.com/pulumi/pulumi/releases) and edit the release of the version we froze just before.  Untick "Set as a pre-release", and tick both "Set as the latest release" and "Create a discussion for this release" in the "Releases" category at the bottom of the page, before clicking "Publish release".
+
+> [!CAUTION]
+> Double-check the version number of the release. The most recent release in [the releases list](https://github.com/pulumi/pulumi/releases) tracks changes to `master`, and might not be the one you want to release if PRs have been merged since the freeze. For this reason, the version you want to release may be the second one in the list. The version should be the one that was in `sdk/.version` *before* the freeze PR was merged.
+
+Publishing the release tags `sdk/vX` and `pkg/vX` at the release commit.  `pulumi-bot` then creates a PR that moves the released changelog entries into `CHANGELOG.md` on `master`.  This PR is approved and queued to merge automatically. The next freeze PR can't merge until this one has, so a release never goes out with a stale changelog.

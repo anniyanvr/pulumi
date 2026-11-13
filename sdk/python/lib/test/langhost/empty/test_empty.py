@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,11 +18,5 @@ from ..util import LanghostTest
 class EmptyTests(LanghostTest):
     def test_empty(self):
         self.run_test(
-            program=path.join(self.base_path(), "empty"),
-            expected_resource_count=0)
-
-    def test_empty_pwd(self):
-        self.run_test(
-            pwd=path.join(self.base_path(), "empty"),
-            expected_resource_count=0,
-            program="./")
+            program=path.join(self.base_path(), "empty"), expected_resource_count=0
+        )

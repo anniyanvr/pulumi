@@ -1,0 +1,55 @@
+// Copyright 2016, Pulumi Corporation.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package policy
+
+import (
+	cmdBackend "github.com/pulumi/pulumi/pkg/v3/cmd/pulumi/backend"
+	"github.com/pulumi/pulumi/pkg/v3/cmd/pulumi/constrictor"
+	pkgWorkspace "github.com/pulumi/pulumi/pkg/v3/workspace"
+	"github.com/spf13/cobra"
+)
+
+func NewPolicyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "policy",
+		Short: "Manage policies, including policy packs, groups and issues",
+		Long: "Manage policies, including policy packs, groups and issues.\n" +
+			"\n" +
+			"Policy packs define the policies your resources are checked against. Policy groups control\n" +
+			"which packs are enforced on which stacks and cloud accounts. Policy issues are the violations\n" +
+			"those packs report.",
+	}
+
+	constrictor.AttachArguments(cmd, constrictor.NoArgs)
+
+	cmd.AddCommand(newPolicyAnalyzeCmd(
+		pkgWorkspace.Instance, cmdBackend.DefaultLoginManager,
+		cmdBackend.SecretsProvider(cmdBackend.DefaultLoginManager), nil))
+	cmd.AddCommand(newPolicyDisableCmd(pkgWorkspace.Instance, cmdBackend.DefaultLoginManager))
+	cmd.AddCommand(newPolicyEnableCmd(pkgWorkspace.Instance, cmdBackend.DefaultLoginManager))
+	cmd.AddCommand(newPolicyGetCmd(pkgWorkspace.Instance, cmdBackend.DefaultLoginManager))
+	cmd.AddCommand(newPolicyGroupCmd())
+	cmd.AddCommand(newPolicyInstallCmd())
+	cmd.AddCommand(newPolicyListCmd(pkgWorkspace.Instance, cmdBackend.DefaultLoginManager))
+	cmd.AddCommand(newPolicyNewCmd())
+	cmd.AddCommand(newPolicyPublishCmd(pkgWorkspace.Instance, cmdBackend.DefaultLoginManager))
+	cmd.AddCommand(newPolicyRemoveCmd(pkgWorkspace.Instance, cmdBackend.DefaultLoginManager))
+	cmd.AddCommand(newPolicyValidateCmd(pkgWorkspace.Instance, cmdBackend.DefaultLoginManager))
+	cmd.AddCommand(newPolicyComplianceCmd())
+	cmd.AddCommand(newPolicyIssueCmd())
+	cmd.AddCommand(newPolicyExceptionCmd(pkgWorkspace.Instance, cmdBackend.DefaultLoginManager))
+
+	return cmd
+}

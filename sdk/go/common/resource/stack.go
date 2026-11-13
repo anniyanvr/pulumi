@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,13 +15,13 @@
 package resource
 
 import (
-	"github.com/pulumi/pulumi/sdk/v2/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 )
 
 // RootStackType is the type name that will be used for the root component in the Pulumi resource tree.
-const RootStackType tokens.Type = "pulumi:pulumi:Stack"
+const RootStackType tokens.Type = tokens.RootStackType
 
 // DefaultRootStackURN constructs a default root stack URN for the given stack and project.
 func DefaultRootStackURN(stack tokens.QName, proj tokens.PackageName) URN {
-	return NewURN(stack, proj, "", RootStackType, tokens.QName(string(proj)+"-"+string(stack)))
+	return NewURN(stack, proj, "", RootStackType, string(proj)+"-"+string(stack))
 }

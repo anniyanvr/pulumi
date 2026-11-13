@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+// Enable source map support so we get good stack traces.
+import "source-map-support/register";
 
 // The very first thing we do is set up unhandled exception and rejection hooks to ensure that these
 // events cause us to exit with a non-zero code. It is critically important that we do this early:
@@ -33,7 +36,7 @@ let programRunning = false;
 const uncaughtHandler = (err: Error) => {
     uncaughtErrors.add(err);
     if (!programRunning) {
-        console.error(err.stack || err.message || ("" + err));
+        console.error(err.stack || err.message || "" + err);
     }
 };
 
@@ -43,7 +46,7 @@ const uncaughtHandler = (err: Error) => {
 //
 // 32 was picked so as to be very unlikely to collide with any of the error codes documented by
 // nodejs here:
-// https://github.com/nodejs/node-v0.x-archive/blob/master/doc/api/process.markdown#exit-codes
+// https://nodejs.org/api/process.html#process_exit_codes
 const nodeJSProcessExitedAfterLoggingUserActionableMessage = 32;
 
 process.on("uncaughtException", uncaughtHandler);
@@ -70,22 +73,14 @@ process.on("exit", (code: number) => {
     }
 });
 
-// As the second thing we do, ensure that we're connected to v8's inspector API.  We need to do
-// this as some information is only sent out as events, without any way to query for it after the
-// fact.  For example, we want to keep track of ScriptId->FileNames so that we can appropriately
-// report errors for Functions we cannot serialize.  This can only be done (up to Node11 at least)
-// by register to hear about scripts being parsed.
-import * as v8Hooks from "../../runtime/closure/v8Hooks";
-
 // This is the entrypoint for running a Node.js program with minimal scaffolding.
-import * as minimist from "minimist";
+import minimist from "minimist";
 
 function usage(): void {
-    console.error(`usage: RUN <engine-address> <program>`);
+    console.error("usage: RUN <engine-address> <program>");
 }
 
-function printErrorUsageAndExit(message: string): never {
-    console.error(message);
+function printUsageAndExit(): never {
     usage();
     return process.exit(-1);
 }
@@ -96,20 +91,33 @@ function main(args: string[]): void {
 
     // Finally, ensure we have a program to run.
     if (argv._.length < 2) {
-        return printErrorUsageAndExit("error: Usage: RUN <engine-address> <program>");
+        return printUsageAndExit();
     }
 
     // Remove <engine-address> so we simply execute the program.
     argv._.shift();
 
     // Ensure that our v8 hooks have been initialized.  Then actually load and run the user program.
-    v8Hooks.isInitializedAsync().then(() => {
+    const initializeHooks = async (): Promise<void> => {
+        if (process.versions.bun) {
+            return;
+        }
+        // Ensure that we're connected to v8's inspector API. We need to do this as some information is only sent out as
+        // events, without any way to query for it after the fact. For example, we want to keep track of
+        // ScriptId->FileNames so that we can appropriately report errors for Functions we cannot serialize. This can
+        // only be done (up to Node11 at least) by registering to hear about scripts being parsed.
+        const v8Hooks = require("../../runtime/closure/v8Hooks");
+        return v8Hooks.isInitializedAsync();
+    };
+
+    initializeHooks().then(() => {
         const promise: Promise<void> = require("./run").run({
             argv,
-            programStarted: () => (programRunning = true),
+            programStarted: () => {
+                programRunning = true;
+            },
             reportLoggedError: (err: Error) => loggedErrors.add(err),
-            runInStack: false,
-            typeScript: true, // Should have no deleterious impact on JS codebases.
+            typeScript: !process.versions.bun, // bun handles TypeScript natively
         });
 
         // when the user's program completes successfully, set programRunning back to false.  That

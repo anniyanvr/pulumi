@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,16 +15,17 @@ import pulumi
 
 
 config = pulumi.Config("test")
+assert pulumi.get_organization() == "myorg"
 assert pulumi.get_project() == "myproject"
 assert pulumi.get_stack() == "mystack"
 assert config.get("known") == "knownkey"
 assert config.get("unknown") is None
-assert config.get_bool('lowercase_true')
-assert config.get_bool('uppercase_true')
-assert not config.get_bool('lowercase_false')
-assert not config.get_bool('uppercase_false')
+assert config.get_bool("lowercase_true")
+assert config.get_bool("uppercase_true")
+assert not config.get_bool("lowercase_false")
+assert not config.get_bool("uppercase_false")
 try:
-    config.get_bool('not_a_bool')
+    config.get_bool("not_a_bool")
 except pulumi.ConfigTypeError as exn:
-    assert exn.key == 'test:not_a_bool'
-    assert exn.expect_type == 'bool'
+    assert exn.key == "test:not_a_bool"
+    assert exn.expect_type == "bool"

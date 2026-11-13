@@ -1,4 +1,4 @@
-// Copyright 2016-2019, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package ciutil
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 )
@@ -74,7 +73,7 @@ func (t githubActionsCI) DetectVars() Vars {
 	return v
 }
 
-// TryGetEvent returns the GitHub webhook payload found in the GitHub Actions environment.
+// GetPREvent returns the GitHub webhook payload found in the GitHub Actions environment.
 // GitHub stores the JSON payload of the webhook that triggered the workflow in a path.
 // The path is set as the value of the env var GITHUB_EVENT_PATH. Returns nil if an error
 // is encountered or the GITHUB_EVENT_PATH is not set.
@@ -84,7 +83,7 @@ func (t githubActionsCI) GetPREvent() *githubActionsPullRequestEvent {
 		return nil
 	}
 
-	b, err := ioutil.ReadFile(eventPath)
+	b, err := os.ReadFile(eventPath)
 	if err != nil {
 		return nil
 	}

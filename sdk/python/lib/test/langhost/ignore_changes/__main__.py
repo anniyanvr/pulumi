@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,8 +22,11 @@ class MyResource(CustomResource):
     def translate_input_property(self, prop: str) -> str:
         if prop == "ignored_property":
             return "ignoredProperty"
-        
+
         return prop
 
 
-res = MyResource("testResource", opts=ResourceOptions(ignore_changes=["ignored_property", "ignored_property_other"]))
+res = MyResource(
+    "testResource",
+    opts=ResourceOptions(ignore_changes=["ignored_property", "ignored_property_other"]),
+)

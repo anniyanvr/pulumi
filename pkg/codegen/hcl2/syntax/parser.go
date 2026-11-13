@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,6 @@ package syntax
 
 import (
 	"io"
-	"io/ioutil"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
@@ -45,7 +44,7 @@ func NewParser() *Parser {
 // ParseFile attempts to parse the contents of the given io.Reader as HCL2. If parsing fails, any diagnostics generated
 // will be added to the parser's diagnostics.
 func (p *Parser) ParseFile(r io.Reader, filename string) error {
-	src, err := ioutil.ReadAll(r)
+	src, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}

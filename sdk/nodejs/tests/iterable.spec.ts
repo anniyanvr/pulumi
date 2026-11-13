@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,10 +15,9 @@
 import * as assert from "assert";
 import * as iterable from "../iterable";
 import { Output } from "../output";
-import { asyncTest } from "./util";
 
 describe("iterable", () => {
-    it("toMap does its job", asyncTest(async () => {
+    it("toMap does its job", async () => {
         interface Instance {
             id: Output<string>;
             privateIp: Output<string>;
@@ -29,13 +28,13 @@ describe("iterable", () => {
             { id: Output.create("i-5678"), privateIp: Output.create("192.168.1.5") },
         ];
 
-        const result = iterable.toObject(instances, i => [i.id, i.privateIp]);
+        const result = iterable.toObject(instances, (i) => [i.id, i.privateIp]);
         const isKnown = await result.isKnown;
         assert.strictEqual(isKnown, true);
         const value = await result.promise();
         assert.deepStrictEqual(value, { "i-1234": "192.168.1.2", "i-5678": "192.168.1.5" });
-    }));
-    it("groupBy does its job", asyncTest(async () => {
+    });
+    it("groupBy does its job", async () => {
         interface Instance {
             id: Output<string>;
             availabilityZone: Output<string>;
@@ -47,10 +46,10 @@ describe("iterable", () => {
             { id: Output.create("i-5678"), availabilityZone: Output.create("us-east-1a") },
         ];
 
-        const result = iterable.groupBy(instances, i => [i.availabilityZone, i.id]);
+        const result = iterable.groupBy(instances, (i) => [i.availabilityZone, i.id]);
         const isKnown = await result.isKnown;
         assert.strictEqual(isKnown, true);
         const value = await result.promise();
         assert.deepStrictEqual(value, { "us-east-1a": ["i-1234", "i-5678"], "us-west-2c": ["i-1538"] });
-    }));
+    });
 });

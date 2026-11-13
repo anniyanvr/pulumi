@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,49 +19,14 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model/pretty"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // OpaqueType represents a type that is named by a string.
-type OpaqueType struct {
-	// Name is the type's name.
-	Name string
-	// Annotations records any annotations associated with the object type.
-	Annotations []interface{}
-
-	s string
-}
-
-// The set of opaque types, indexed by name.
-var opaqueTypes = map[string]*OpaqueType{}
-
-// GetOpaqueType fetches the opaque type for the given name.
-func GetOpaqueType(name string) (*OpaqueType, bool) {
-	t, ok := opaqueTypes[name]
-	return t, ok
-}
-
-// MustNewOpaqueType creates a new opaque type with the given name.
-func MustNewOpaqueType(name string, annotations ...interface{}) *OpaqueType {
-	t, err := NewOpaqueType(name, annotations...)
-	if err != nil {
-		panic(err)
-	}
-	return t
-}
-
-// NewOpaqueType creates a new opaque type with the given name.
-func NewOpaqueType(name string, annotations ...interface{}) (*OpaqueType, error) {
-	if _, ok := opaqueTypes[name]; ok {
-		return nil, errors.Errorf("opaque type %s is already defined", name)
-	}
-
-	t := &OpaqueType{Name: name, Annotations: annotations}
-	opaqueTypes[name] = t
-	return t, nil
-}
+type OpaqueType string
 
 // SyntaxNode returns the syntax node for the type. This is always syntax.None.
 func (*OpaqueType) SyntaxNode() hclsyntax.Node {
@@ -83,61 +48,96 @@ func (t *OpaqueType) Equals(other Type) bool {
 	return t.equals(other, nil)
 }
 
-func (t *OpaqueType) equals(other Type, seen map[Type]struct{}) bool {
+func (t *OpaqueType) equals(other Type, seen comparePairs) bool {
+	if o, ok := other.(*OpaqueType); ok {
+		return *o == *t
+	}
 	return t == other
 }
 
 // AssignableFrom returns true if this type is assignable from the indicated source type. A token(name) is assignable
 // from token(name).
 func (t *OpaqueType) AssignableFrom(src Type) bool {
-	return assignableFrom(t, src, func() bool {
+	return t.assignableFrom(src, nil)
+}
+
+func (t *OpaqueType) assignableFrom(src Type, seen *cycleSet) bool {
+	return assignableFrom(t, src, seen, func(seen *cycleSet) bool {
 		return false
 	})
 }
 
-func (t *OpaqueType) conversionFromImpl(src Type, unifying, checkUnsafe bool) ConversionKind {
-	return conversionFrom(t, src, unifying, func() ConversionKind {
-		switch {
-		case t == NumberType:
-			// src == NumberType is handled by t == src above
-			contract.Assert(src != NumberType)
+func (t *OpaqueType) conversionFromImpl(
+	src Type, unifying, checkUnsafe bool, seen *cycleSet,
+) (ConversionKind, lazyDiagnostics) {
+	return conversionFrom(
+		t, src, unifying, seen, &typeCache{}, func() (ConversionKind, lazyDiagnostics) {
+			if constType, ok := src.(*ConstType); ok {
+				return t.conversionFrom(constType.Type, unifying, seen)
+			}
 
-			cki := IntType.conversionFromImpl(src, unifying, false)
-			if cki == SafeConversion {
-				return SafeConversion
+			noConversionDiag := func() hcl.Diagnostics { return hcl.Diagnostics{typeNotConvertible(t, src)} }
+
+			switch t {
+			case NumberType:
+				// src == NumberType is handled by t == src above
+				contract.Assertf(src != NumberType, "unexpected number-to-number conversion")
+
+				cki, _ := IntType.conversionFromImpl(src, unifying, false, seen)
+				switch cki {
+				case SafeConversion:
+					return SafeConversion, nil
+				case UnsafeConversion:
+					return UnsafeConversion, nil
+				case NoConversion:
+					if checkUnsafe {
+						if kind, _ := StringType.conversionFromImpl(src, unifying, false, seen); kind.Exists() {
+							return UnsafeConversion, nil
+						}
+					}
+				}
+				return NoConversion, noConversionDiag
+			case IntType:
+				if checkUnsafe {
+					if kind, _ := NumberType.conversionFromImpl(src, unifying, true, seen); kind.Exists() {
+						return UnsafeConversion, nil
+					}
+				}
+				return NoConversion, noConversionDiag
+			case BoolType:
+				if checkUnsafe {
+					if kind, _ := StringType.conversionFromImpl(src, unifying, false, seen); kind.Exists() {
+						return UnsafeConversion, nil
+					}
+				}
+				return NoConversion, noConversionDiag
+			case StringType:
+				if src == IDType {
+					return SafeConversion, nil
+				}
+				ckb, _ := BoolType.conversionFromImpl(src, unifying, false, seen)
+				ckn, _ := NumberType.conversionFromImpl(src, unifying, false, seen)
+				if ckb == SafeConversion || ckn == SafeConversion {
+					return SafeConversion, nil
+				}
+				if ckb == UnsafeConversion || ckn == UnsafeConversion {
+					return UnsafeConversion, nil
+				}
+				return NoConversion, noConversionDiag
+			case IDType:
+				kind, _ := StringType.conversionFromImpl(src, unifying, checkUnsafe, seen)
+				if kind.Exists() {
+					return kind, nil
+				}
+				return NoConversion, noConversionDiag
+			default:
+				return NoConversion, noConversionDiag
 			}
-			if cki == UnsafeConversion || checkUnsafe && StringType.conversionFromImpl(src, unifying, false).Exists() {
-				return UnsafeConversion
-			}
-			return NoConversion
-		case t == IntType:
-			if checkUnsafe && NumberType.conversionFromImpl(src, unifying, true).Exists() {
-				return UnsafeConversion
-			}
-			return NoConversion
-		case t == BoolType:
-			if checkUnsafe && StringType.conversionFromImpl(src, unifying, false).Exists() {
-				return UnsafeConversion
-			}
-			return NoConversion
-		case t == StringType:
-			ckb := BoolType.conversionFromImpl(src, unifying, false)
-			ckn := NumberType.conversionFromImpl(src, unifying, false)
-			if ckb == SafeConversion || ckn == SafeConversion {
-				return SafeConversion
-			}
-			if ckb == UnsafeConversion || ckn == UnsafeConversion {
-				return UnsafeConversion
-			}
-			return NoConversion
-		default:
-			return NoConversion
-		}
-	})
+		})
 }
 
-func (t *OpaqueType) conversionFrom(src Type, unifying bool) ConversionKind {
-	return t.conversionFromImpl(src, unifying, true)
+func (t *OpaqueType) conversionFrom(src Type, unifying bool, seen *cycleSet) (ConversionKind, lazyDiagnostics) {
+	return t.conversionFromImpl(src, unifying, true, seen)
 }
 
 // ConversionFrom returns the kind of conversion (if any) that is possible from the source type to this type.
@@ -147,40 +147,57 @@ func (t *OpaqueType) conversionFrom(src Type, unifying bool) ConversionKind {
 //
 // - The dynamic type is safely convertible from any other type, and is unsafely convertible _to_ any other type
 // - The string type is safely convertible from bool, number, and int
+// - The id type is safely convertible to and from string, and otherwise behaves like string
 // - The number type is safely convertible from int and unsafely convertible from string
 // - The int type is unsafely convertible from string
 // - The bool type is unsafely convertible from string
-//
 func (t *OpaqueType) ConversionFrom(src Type) ConversionKind {
-	return t.conversionFrom(src, false)
+	kind, _ := t.conversionFrom(src, false, nil)
+	return kind
 }
 
 func (t *OpaqueType) String() string {
-	if t.s == "" {
-		switch t {
-		case NumberType:
-			t.s = "number"
-		case IntType:
-			t.s = "int"
-		case BoolType:
-			t.s = "bool"
-		case StringType:
-			t.s = "string"
-		default:
-			if hclsyntax.ValidIdentifier(t.Name) {
-				t.s = t.Name
-			} else {
-				t.s = fmt.Sprintf("type(%s)", t.Name)
-			}
+	switch t {
+	case NumberType:
+		return "number"
+	case IntType:
+		return "int"
+	case BoolType:
+		return "bool"
+	case StringType:
+		return "string"
+	case IDType:
+		return "id"
+	default:
+		if hclsyntax.ValidIdentifier(string(*t)) {
+			return string(*t)
 		}
+
+		return fmt.Sprintf("type(%s)", string(*t))
 	}
-	return t.s
 }
 
-var opaquePrecedence = []*OpaqueType{StringType, NumberType, IntType, BoolType}
+func NewOpaqueType(name string) *OpaqueType {
+	return new(OpaqueType(name))
+}
 
-func (t *OpaqueType) unify(other Type) (Type, ConversionKind) {
-	return unify(t, other, func() (Type, ConversionKind) {
+func (t *OpaqueType) pretty(seenFormatters map[Type]pretty.Formatter) pretty.Formatter {
+	return pretty.FromStringer(t)
+}
+
+func (t *OpaqueType) Pretty() pretty.Formatter {
+	seenFormatters := map[Type]pretty.Formatter{}
+	return t.pretty(seenFormatters)
+}
+
+func (t *OpaqueType) string(_ map[Type]struct{}) string {
+	return t.String()
+}
+
+var opaquePrecedence = []Type{StringType, NumberType, IntType, BoolType, IDType}
+
+func (t *OpaqueType) unify(other Type, seen *cycleSet) (Type, ConversionKind) {
+	return unify(t, other, seen, func() (Type, ConversionKind) {
 		if t == DynamicType || other == DynamicType {
 			// These should have been handled by unify.
 			contract.Failf("unexpected type %v in OpaqueType.unify", t)
@@ -189,10 +206,12 @@ func (t *OpaqueType) unify(other Type) (Type, ConversionKind) {
 
 		for _, goal := range opaquePrecedence {
 			if t == goal {
-				return goal, goal.conversionFrom(other, true)
+				kind, _ := goal.conversionFrom(other, true, seen)
+				return goal, kind
 			}
 			if other == goal {
-				return goal, goal.conversionFrom(t, true)
+				kind, _ := goal.conversionFrom(t, true, seen)
+				return goal, kind
 			}
 		}
 

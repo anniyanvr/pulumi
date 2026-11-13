@@ -1,4 +1,4 @@
-# Copyright 2016-2020, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,41 +21,46 @@ import pulumi
 class Resource1(pulumi.Resource):
     pass
 
+
 class Resource2(pulumi.Resource):
     foo: pulumi.Output[str]
 
+
 class Resource3(pulumi.Resource):
-    nested: pulumi.Output['Nested']
+    nested: pulumi.Output["Nested"]
+
 
 class Resource4(pulumi.Resource):
-    nested_value: pulumi.Output['Nested'] = pulumi.property("nestedValue")
+    nested_value: pulumi.Output["Nested"] = pulumi.property("nestedValue")
+
 
 class Resource5(pulumi.Resource):
     @property
     @pulumi.getter
-    def foo(self) -> pulumi.Output[str]:
-        ...
+    def foo(self) -> pulumi.Output[str]: ...  # type: ignore
+
 
 class Resource6(pulumi.Resource):
     @property
     @pulumi.getter
-    def nested(self) -> pulumi.Output['Nested']:
-        ...
+    def nested(self) -> pulumi.Output["Nested"]: ...  # type: ignore
+
 
 class Resource7(pulumi.Resource):
     @property
     @pulumi.getter(name="nestedValue")
-    def nested_value(self) -> pulumi.Output['Nested']:
-        ...
+    def nested_value(self) -> pulumi.Output["Nested"]: ...  # type: ignore
+
 
 class Resource8(pulumi.Resource):
     foo: pulumi.Output
 
+
 class Resource9(pulumi.Resource):
     @property
     @pulumi.getter
-    def foo(self) -> pulumi.Output:
-        ...
+    def foo(self) -> pulumi.Output: ...  # type: ignore
+
 
 class Resource10(pulumi.Resource):
     foo: str
@@ -64,14 +69,13 @@ class Resource10(pulumi.Resource):
 class Resource11(pulumi.Resource):
     @property
     @pulumi.getter
-    def foo(self) -> str:
-        ...
+    def foo(self) -> str: ...  # type: ignore
+
 
 class Resource12(pulumi.Resource):
     @property
     @pulumi.getter
-    def foo(self):
-        ...
+    def foo(self): ...  # type: ignore
 
 
 @pulumi.output_type

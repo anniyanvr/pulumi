@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,11 +22,14 @@ import (
 	"strings"
 
 	"github.com/dustin/go-humanize/english"
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag/colors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
+	"github.com/pulumi/pulumi/pkg/v3/display"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/slice"
 )
 
 type Row interface {
@@ -54,12 +57,16 @@ type ResourceRow interface {
 	IsDone() bool
 
 	SetFailed()
+	SetAwaited()
+	Awaited() bool
 
 	DiagInfo() *DiagInfo
 	PolicyPayloads() []engine.PolicyViolationEventPayload
+	PolicyRemediationPayloads() []engine.PolicyRemediationEventPayload
 
 	RecordDiagEvent(diagEvent engine.Event)
 	RecordPolicyViolationEvent(diagEvent engine.Event)
+	RecordPolicyRemediationEvent(diagEvent engine.Event)
 }
 
 // Implementation of a Row, used for the header of the grid.
@@ -96,7 +103,11 @@ func (data *headerRowData) ColorizedColumns() []string {
 		} else {
 			statusColumn = header("Status")
 		}
-		data.columns = []string{"", header("Type"), header("Name"), statusColumn, header("Info")}
+		if data.display.opts.ShowURNs {
+			data.columns = []string{"", header("URN"), statusColumn, header("Info")}
+		} else {
+			data.columns = []string{"", header("Type"), header("Name"), statusColumn, header("Info")}
+		}
 	}
 
 	return data.columns
@@ -123,12 +134,21 @@ type resourceRowData struct {
 	// If we failed this operation for any reason.
 	failed bool
 
-	diagInfo       *DiagInfo
-	policyPayloads []engine.PolicyViolationEventPayload
+	// If the failure was because a provider returned AwaitError (operation had to be awaited). Rendered distinctly from
+	// a regular failure ("awaiting" in amber vs "failed" in red).
+	awaited bool
+
+	diagInfo                  *DiagInfo
+	policyPayloads            []engine.PolicyViolationEventPayload
+	policyRemediationPayloads []engine.PolicyRemediationEventPayload
 
 	// If this row should be hidden by default.  We will hide unless we have any child nodes
 	// we need to show.
 	hideRowIfUnnecessary bool
+
+	// True for the placeholder stack row synthesized by ensureHeaderAndStackRows before any
+	// stack event arrives.
+	syntheticStackRow bool
 }
 
 func (data *resourceRowData) DisplayOrderIndex() int {
@@ -175,6 +195,14 @@ func (data *resourceRowData) SetFailed() {
 	data.failed = true
 }
 
+func (data *resourceRowData) Awaited() bool {
+	return data.awaited
+}
+
+func (data *resourceRowData) SetAwaited() {
+	data.awaited = true
+}
+
 func (data *resourceRowData) DiagInfo() *DiagInfo {
 	return data.diagInfo
 }
@@ -216,7 +244,7 @@ func (data *resourceRowData) recordDiagEventPayload(payload engine.DiagEventPayl
 	}
 }
 
-// PolicyInfo returns the PolicyInfo object associated with the resourceRowData.
+// PolicyPayloads returns the PolicyViolationEventPayload object associated with the resourceRowData.
 func (data *resourceRowData) PolicyPayloads() []engine.PolicyViolationEventPayload {
 	return data.policyPayloads
 }
@@ -225,6 +253,17 @@ func (data *resourceRowData) PolicyPayloads() []engine.PolicyViolationEventPaylo
 func (data *resourceRowData) RecordPolicyViolationEvent(event engine.Event) {
 	pePayload := event.Payload().(engine.PolicyViolationEventPayload)
 	data.policyPayloads = append(data.policyPayloads, pePayload)
+}
+
+// PolicyRemediationPayloads returns all policy remediation event payloads that have been registered.
+func (data *resourceRowData) PolicyRemediationPayloads() []engine.PolicyRemediationEventPayload {
+	return data.policyRemediationPayloads
+}
+
+// RecordPolicyRemediationEvent records a policy remediation with the resourceRowData.
+func (data *resourceRowData) RecordPolicyRemediationEvent(event engine.Event) {
+	tPayload := event.Payload().(engine.PolicyRemediationEventPayload)
+	data.policyRemediationPayloads = append(data.policyRemediationPayloads, tPayload)
 }
 
 type column int
@@ -237,13 +276,21 @@ const (
 	infoColumn   column = 4
 )
 
+// When ShowURNs is enabled, Type and Name are collapsed into a single URN
+// column, so the total column count drops from 5 to 4.
+const (
+	urnColumn       column = 1
+	urnStatusColumn column = 2
+	urnInfoColumn   column = 3
+)
+
 func (data *resourceRowData) IsDone() bool {
 	if data.failed {
 		// consider a failed resource 'done'.
 		return true
 	}
 
-	if data.display.done {
+	if data.display.done.Load() {
 		// if the display is done, then we're definitely done.
 		return true
 	}
@@ -259,13 +306,41 @@ func (data *resourceRowData) IsDone() bool {
 	return data.ContainsOutputsStep(data.step.Op)
 }
 
-func (data *resourceRowData) ContainsOutputsStep(op deploy.StepOp) bool {
+func (data *resourceRowData) ContainsOutputsStep(op display.StepOp) bool {
 	for _, s := range data.outputSteps {
 		if s.Op == op {
 			return true
 		}
 	}
 
+	return false
+}
+
+// isInterrupted reports whether the update was forced to its terminal "done"
+// state while this resource's operation was still in flight (e.g. the user
+// cancelled). We can only detect this for custom resources, which always emit an
+// outputs step on completion; components may legitimately complete without one.
+func (data *resourceRowData) isInterrupted() bool {
+	if !data.display.done.Load() {
+		return false
+	}
+	if !data.stepIsCustom() {
+		return false
+	}
+	switch data.display.getStepOp(data.step) {
+	case deploy.OpSame, deploy.OpRemovePendingReplace:
+		// These ops just change state, not the actual resource, so they don't have an outputs step.
+		return false
+	}
+	return !data.ContainsOutputsStep(data.step.Op)
+}
+
+func (data *resourceRowData) stepIsCustom() bool {
+	for _, s := range []*engine.StepEventStateMetadata{data.step.Res, data.step.New, data.step.Old} {
+		if s != nil {
+			return s.Custom
+		}
+	}
 	return false
 }
 
@@ -276,7 +351,7 @@ func (data *resourceRowData) ColorizedSuffix() string {
 			suffixes := data.display.suffixesArray
 			ellipses := suffixes[(data.tick+data.display.currentTick)%len(suffixes)]
 
-			return op.Color() + ellipses + colors.Reset
+			return deploy.ColorProgress(op) + ellipses + colors.Reset
 		}
 	}
 
@@ -289,25 +364,31 @@ func (data *resourceRowData) ColorizedColumns() []string {
 	urn := data.step.URN
 	if urn == "" {
 		// If we don't have a URN yet, mock parent it to the global stack.
-		urn = resource.DefaultRootStackURN(data.display.stack, data.display.proj)
+		urn = resource.DefaultRootStackURN(data.display.stack.Q(), data.display.proj)
 	}
-	name := string(urn.Name())
-	typ := simplifyTypeName(urn.Type())
-
-	columns := make([]string, 5)
-	columns[opColumn] = data.display.getStepOpLabel(step)
-	columns[typeColumn] = typ
-	columns[nameColumn] = name
+	done := data.IsDone()
 
 	diagInfo := data.diagInfo
+	failed := data.failed || diagInfo.ErrorCount > 0
+	awaited := data.awaited
+	interrupted := !failed && data.isInterrupted()
 
-	if data.IsDone() {
-		failed := data.failed || diagInfo.ErrorCount > 0
-		columns[statusColumn] = data.display.getStepDoneDescription(step, failed)
-	} else {
-		columns[statusColumn] = data.display.getStepInProgressDescription(step)
+	if data.display.opts.ShowURNs {
+		// When showing URNs, collapse Type and Name into a single URN column.
+		// The URN already contains the type, so showing both would be redundant.
+		columns := make([]string, 4)
+		columns[opColumn] = data.display.getStepOpLabel(step, done)
+		columns[urnColumn] = escapeURN(string(urn))
+		columns[urnStatusColumn] = data.display.getStepStatus(step, done, failed, awaited, interrupted)
+		columns[urnInfoColumn] = data.getInfoColumn()
+		return columns
 	}
 
+	columns := make([]string, 5)
+	columns[opColumn] = data.display.getStepOpLabel(step, done)
+	columns[typeColumn] = urn.Type().DisplayName()
+	columns[nameColumn] = escapeURN(urn.Name())
+	columns[statusColumn] = data.display.getStepStatus(step, done, failed, awaited, interrupted)
 	columns[infoColumn] = data.getInfoColumn()
 	return columns
 }
@@ -342,13 +423,13 @@ func (data *resourceRowData) getInfoColumn() string {
 		diagMsg += msg
 	}
 
-	changes := getDiffInfo(step)
+	changes := getDiffInfo(step, data.display.action)
 	if colors.Never.Colorize(changes) != "" {
 		appendDiagMessage("[" + changes + "]")
 	}
 
 	diagInfo := data.diagInfo
-	if data.display.done {
+	if data.display.done.Load() {
 		// If we are done, show a summary of how many messages were printed.
 		if c := diagInfo.ErrorCount; c > 0 {
 			appendDiagMessage(fmt.Sprintf("%d %s%s%s",
@@ -397,19 +478,19 @@ func (data *resourceRowData) getInfoColumn() string {
 	return diagMsg
 }
 
-func getDiffInfo(step engine.StepEventMetadata) string {
-	diffOutputs := step.Op == deploy.OpRefresh
+func getDiffInfo(step engine.StepEventMetadata, action apitype.UpdateKind) string {
 	changesBuf := &bytes.Buffer{}
 	if step.Old != nil && step.New != nil {
 		var diff *resource.ObjectDiff
-		if step.DetailedDiff != nil {
-			diff = translateDetailedDiff(step)
-		} else if diffOutputs {
-			if step.Old.Outputs != nil && step.New.Outputs != nil {
-				diff = step.Old.Outputs.Diff(step.New.Outputs)
+		// An OpSame might have a diff due to metadata changes (e.g. protect) but we should never print a property diff,
+		// even if the properties appear to have changed. See https://github.com/pulumi/pulumi/issues/15944 for context.
+		if step.Op != deploy.OpSame {
+			if step.DetailedDiff != nil {
+				diff, _ = engine.TranslateDetailedDiff(&step, false)
+			} else if step.Old.Inputs != nil && step.New.Inputs != nil {
+				diff = step.Old.Inputs.DiffWithOptions(step.New.Inputs,
+					resource.IgnoreKeyFunc(resource.IsInternalPropertyKey))
 			}
-		} else if step.Old.Inputs != nil && step.New.Inputs != nil {
-			diff = step.Old.Inputs.Diff(step.New.Inputs)
 		}
 
 		// Show a diff if either `provider` or `protect` changed; they might not show a diff via inputs or outputs, but
@@ -430,54 +511,60 @@ func getDiffInfo(step engine.StepEventMetadata) string {
 		}
 
 		recordMetadataDiff("provider",
-			resource.NewStringProperty(step.Old.Provider), resource.NewStringProperty(step.New.Provider))
+			resource.NewProperty(step.Old.Provider), resource.NewProperty(step.New.Provider))
 		recordMetadataDiff("protect",
-			resource.NewBoolProperty(step.Old.Protect), resource.NewBoolProperty(step.New.Protect))
+			resource.NewProperty(step.Old.Protect), resource.NewProperty(step.New.Protect))
+		recordMetadataDiff(colors.Red+"taint"+colors.Reset,
+			resource.NewProperty(step.Old.Taint), resource.NewProperty(step.New.Taint))
 
-		if diff != nil {
-			writeString(changesBuf, "diff: ")
-
-			updates := make(resource.PropertyMap)
-			for k := range diff.Updates {
-				updates[k] = resource.PropertyValue{}
-			}
-
-			filteredKeys := func(m resource.PropertyMap) []string {
-				keys := make([]string, 0, len(m))
-				for k := range m {
-					keys = append(keys, string(k))
-				}
-				return keys
-			}
-			if include := step.Diffs; include != nil {
-				includeSet := make(map[resource.PropertyKey]bool)
-				for _, k := range include {
-					includeSet[k] = true
-				}
-				filteredKeys = func(m resource.PropertyMap) []string {
-					var filteredKeys []string
-					for k := range m {
-						if includeSet[k] {
-							filteredKeys = append(filteredKeys, string(k))
-						}
-					}
-					return filteredKeys
-				}
-			}
-
-			writePropertyKeys(changesBuf, filteredKeys(diff.Adds), deploy.OpCreate)
-			writePropertyKeys(changesBuf, filteredKeys(diff.Deletes), deploy.OpDelete)
-			writePropertyKeys(changesBuf, filteredKeys(updates), deploy.OpUpdate)
-		}
+		writeShortDiff(changesBuf, diff, step.Diffs)
 	}
 
 	fprintIgnoreError(changesBuf, colors.Reset)
 	return changesBuf.String()
 }
 
-func writePropertyKeys(b io.StringWriter, keys []string, op deploy.StepOp) {
+func writeShortDiff(changesBuf io.StringWriter, diff *resource.ObjectDiff, include []resource.PropertyKey) {
+	if diff != nil {
+		writeString(changesBuf, "diff: ")
+
+		updates := make(resource.PropertyMap)
+		for k := range diff.Updates {
+			updates[k] = resource.PropertyValue{}
+		}
+
+		filteredKeys := func(m resource.PropertyMap) []string {
+			keys := slice.Prealloc[string](len(m))
+			for k := range m {
+				keys = append(keys, string(k))
+			}
+			return keys
+		}
+		if len(include) > 0 {
+			includeSet := make(map[resource.PropertyKey]bool)
+			for _, k := range include {
+				includeSet[k] = true
+			}
+			filteredKeys = func(m resource.PropertyMap) []string {
+				var filteredKeys []string
+				for k := range m {
+					if includeSet[k] {
+						filteredKeys = append(filteredKeys, string(k))
+					}
+				}
+				return filteredKeys
+			}
+		}
+
+		writePropertyKeys(changesBuf, filteredKeys(diff.Adds), deploy.OpCreate)
+		writePropertyKeys(changesBuf, filteredKeys(diff.Deletes), deploy.OpDelete)
+		writePropertyKeys(changesBuf, filteredKeys(updates), deploy.OpUpdate)
+	}
+}
+
+func writePropertyKeys(b io.StringWriter, keys []string, op display.StepOp) {
 	if len(keys) > 0 {
-		writeString(b, strings.Trim(op.Prefix(), " "))
+		writeString(b, strings.Trim(deploy.Prefix(op, true /*done*/), " "))
 
 		sort.Strings(keys)
 

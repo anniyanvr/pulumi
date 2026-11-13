@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,13 +15,18 @@
 package nodejs
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
 	"unicode"
 
-	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+
+	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/cgstrings"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 // isReservedWord returns true if s is a reserved word as per ECMA-262.
@@ -62,10 +67,10 @@ func isLegalIdentifierPart(c rune) bool {
 
 // isLegalIdentifier returns true if s is a legal JavaScript identifier as per ECMA-262.
 func isLegalIdentifier(s string) bool {
-	if isReservedWord(s) {
-		return false
-	}
+	return !isReservedWord(s) && isLegalIdentifierName(s)
+}
 
+func isLegalIdentifierName(s string) bool {
 	reader := strings.NewReader(s)
 	c, _, _ := reader.ReadRune()
 	if !isLegalIdentifierStart(c) {
@@ -103,21 +108,95 @@ func makeValidIdentifier(name string) string {
 	return name
 }
 
-func makeSafeEnumName(name string) (string, error) {
+func propertyName(name string) string {
+	if isLegalIdentifierName(name) {
+		return name
+	}
+	return fmt.Sprintf("%q", name)
+}
+
+func propertyAccessor(name string) string {
+	if isLegalIdentifierName(name) {
+		return "." + name
+	}
+	return fmt.Sprintf("[%q]", name)
+}
+
+func optionalPropertyAccessor(name string) string {
+	if isLegalIdentifierName(name) {
+		return "?." + name
+	}
+	return fmt.Sprintf("?.[%q]", name)
+}
+
+// makeValidModuleSegment converts one `/`-separated segment of a module path into the (possibly
+// dotted) name it is referenced by in generated code. Dots are namespace separators (e.g. the
+// Kubernetes module "networking.k8s.io") and are preserved; each dotted part that is not a legal
+// identifier (e.g. containing hyphens) is sanitized.
+func makeValidModuleSegment(segment string) string {
+	parts := strings.Split(segment, ".")
+	for i, part := range parts {
+		parts[i] = makeValidIdentifier(part)
+	}
+	return strings.Join(parts, ".")
+}
+
+func makeSafeEnumName(name, typeName string) (string, error) {
 	// Replace common single character enum names.
 	safeName := codegen.ExpandShortEnumName(name)
 
 	// If the name is one illegal character, return an error.
 	if len(safeName) == 1 && !isLegalIdentifierStart(rune(safeName[0])) {
-		return "", errors.Errorf("enum name %s is not a valid identifier", safeName)
+		return "", fmt.Errorf("enum name %s is not a valid identifier", safeName)
 	}
 
 	// Capitalize and make a valid identifier.
-	safeName = makeValidIdentifier(title(safeName))
+	safeName = makeValidIdentifier(cgstrings.UppercaseFirst(safeName))
 
 	// If there are multiple underscores in a row, replace with one.
 	regex := regexp.MustCompile(`_+`)
 	safeName = regex.ReplaceAllString(safeName, "_")
 
+	// If the enum name starts with an underscore, add the type name as a prefix.
+	if strings.HasPrefix(safeName, "_") {
+		safeName = typeName + safeName
+	}
+
 	return safeName, nil
+}
+
+// escape returns the string escaped for a JS string literal
+func escape(s string) string {
+	// Seems the most fool-proof way of doing this is by using the JSON marshaler and then stripping the surrounding quotes
+	escaped, err := json.Marshal(s)
+	contract.AssertNoErrorf(err, "JSON(%q)", s)
+	contract.Assertf(len(escaped) >= 2, "JSON(%s) expected a quoted string but returned %s", s, escaped)
+	contract.Assertf(
+		escaped[0] == byte('"') && escaped[len(escaped)-1] == byte('"'),
+		"JSON(%s) expected a quoted string but returned %s", s, escaped)
+
+	return string(escaped)[1:(len(escaped) - 1)]
+}
+
+func lookupNodePackageInfo(pkg *schema.Package) NodePackageInfo {
+	nodePackageInfo := NodePackageInfo{}
+	if pkg == nil {
+		return nodePackageInfo
+	}
+	if languageInfo, ok := pkg.Language["nodejs"]; ok {
+		if info, ok2 := languageInfo.(NodePackageInfo); ok2 {
+			nodePackageInfo = info
+		}
+	}
+	return nodePackageInfo
+}
+
+func nonEmptyStrings(candidates []string) []string {
+	res := []string{}
+	for _, c := range candidates {
+		if c != "" {
+			res = append(res, c)
+		}
+	}
+	return res
 }

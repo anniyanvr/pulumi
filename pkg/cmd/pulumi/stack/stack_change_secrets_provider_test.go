@@ -1,0 +1,352 @@
+// Copyright 2016, Pulumi Corporation.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package stack
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"os"
+	"testing"
+
+	pkgresource "github.com/pulumi/pulumi/pkg/v3/resource"
+
+	"github.com/pulumi/pulumi/pkg/v3/backend"
+	cmdBackend "github.com/pulumi/pulumi/pkg/v3/cmd/pulumi/backend"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/pkg/v3/resource/stack"
+	"github.com/pulumi/pulumi/pkg/v3/secrets"
+	"github.com/pulumi/pulumi/pkg/v3/secrets/b64"
+	"github.com/pulumi/pulumi/pkg/v3/secrets/passphrase"
+	"github.com/pulumi/pulumi/pkg/v3/util/testutil"
+	pkgWorkspace "github.com/pulumi/pulumi/pkg/v3/workspace"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/config"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// Test that we validate the secrets provider and return an error
+func TestChangeSecretsProvider_Invalid(t *testing.T) {
+	t.Parallel()
+
+	var stdoutBuff bytes.Buffer
+	cmd := stackChangeSecretsProviderCmd{
+		stdout: &stdoutBuff,
+		stack:  "test",
+	}
+	err := cmd.Run(t.Context(), []string{"not_a_secret"})
+	require.Error(t, err) //nolint:forbidigo // pre-existing
+	assert.ErrorContains(t, err, "unknown secrets provider type 'not_a_secret' "+
+		"(supported values: default,passphrase,awskms,azurekeyvault,gcpkms,hashivault)")
+}
+
+func mockStdin(t *testing.T, input string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	_, err = w.Write([]byte(input))
+	require.NoError(t, err)
+	err = w.Close()
+	require.NoError(t, err)
+	oldStdin := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = oldStdin })
+}
+
+// Test that we can change the secrets provider for a stack, this sets up a mock stack using a mock secret provider and
+// then changes it to the passphrase provider, but without any existing secrets.
+//
+//nolint:paralleltest // mutates global state
+func TestChangeSecretsProvider_NoSecrets(t *testing.T) {
+	var stdoutBuff bytes.Buffer
+	secretsProvider := b64.Base64SecretsProvider.Add("passphrase", func(state json.RawMessage) (secrets.Manager, error) {
+		return passphrase.NewPromptingPassphraseSecretsManagerFromState(state)
+	})
+
+	cmd := stackChangeSecretsProviderCmd{
+		stdout:          &stdoutBuff,
+		secretsProvider: secretsProvider,
+
+		stack: "testStack",
+	}
+
+	// Ideally this would be injected but the cmd functions repeatedly access global state to get the current
+	// backend.
+	snapshot := &deploy.Snapshot{
+		SecretsManager: b64.NewBase64SecretsManager(),
+		Resources: []*pkgresource.State{
+			{
+				URN:     resource.NewURN("testStack", "testProject", "", resource.RootStackType, "testStack"),
+				Type:    resource.RootStackType,
+				Outputs: resource.PropertyMap{},
+			},
+		},
+	}
+
+	var mockStack *backend.MockStack
+	mockBackend := &backend.MockBackend{
+		ExportDeploymentF: func(ctx context.Context, _ backend.Stack) (*apitype.UntypedDeployment, error) {
+			return stack.SerializeUntypedDeployment(ctx, snapshot, &stack.SerializeOptions{
+				Pretty: true,
+			})
+		},
+		ImportDeploymentF: func(ctx context.Context, _ backend.Stack, deployment *apitype.UntypedDeployment) error {
+			snap, err := stack.DeserializeUntypedDeployment(ctx, deployment, secretsProvider)
+			if err != nil {
+				return err
+			}
+			snapshot = snap
+			return nil
+		},
+		GetStackF: func(ctx context.Context, stackRef backend.StackReference) (backend.Stack, error) {
+			return mockStack, nil
+		},
+	}
+
+	mockStack = &backend.MockStack{
+		BackendF: func() backend.Backend {
+			return mockBackend
+		},
+		RefF: func() backend.StackReference {
+			return &backend.MockStackReference{
+				StringV:             "testStack",
+				NameV:               tokens.MustParseStackName("testStack"),
+				FullyQualifiedNameV: "organization/testProject/testStack",
+			}
+		},
+		ConfigLocationF: func() backend.StackConfigLocation { return backend.StackConfigLocation{} },
+		SnapshotF: func(_ context.Context, _ secrets.Provider) (*deploy.Snapshot, error) {
+			return snapshot, nil
+		},
+	}
+
+	testutil.MockLoginManager(t, &cmdBackend.MockLoginManager{
+		CurrentF: func(ctx context.Context, ws pkgWorkspace.Context, sink diag.Sink,
+			url string, project *workspace.Project, setCurrent bool,
+		) (backend.Backend, error) {
+			return mockBackend, nil
+		},
+		LoginF: func(ctx context.Context, ws pkgWorkspace.Context, sink diag.Sink,
+			url string, project *workspace.Project, setCurrent bool, insecure bool, color colors.Colorization,
+			_ ...cmdBackend.LoginOption,
+		) (backend.Backend, error) {
+			return mockBackend, nil
+		},
+	})
+
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	// Setup a dummy project in this directory
+	err := os.WriteFile("Pulumi.yaml", []byte(`
+name: testProject
+runtime: mock
+`), 0o600)
+	require.NoError(t, err)
+
+	// passphrase will read from stdin for the new passphrase
+	mockStdin(t, "password123\npassword123\n")
+	err = cmd.Run(t.Context(), []string{"passphrase"})
+	require.NoError(t, err)
+	require.Equal(t, "Migrating old configuration and state to new secrets provider\n", stdoutBuff.String())
+
+	// Check that the snapshot now has a passphrase secrets manager
+	assert.Equal(t, "passphrase", snapshot.SecretsManager.Type())
+	// Check the config has been updated with the salt
+	project, err := workspace.LoadProject("Pulumi.yaml")
+	require.NoError(t, err)
+	projectStack, err := workspace.LoadProjectStack(nil /*sink*/, project, "Pulumi.testStack.yaml")
+	require.NoError(t, err)
+	assert.NotEmpty(t, projectStack.EncryptionSalt)
+}
+
+// Test that we can change the secrets provider for a stack, this sets up a mock stack using a mock secret provider and
+// then changes it to the passphrase provider, with existing secrets in the state and config.
+//
+//nolint:paralleltest // mutates global state
+func TestChangeSecretsProvider_WithSecrets(t *testing.T) {
+	ctx := t.Context()
+
+	secretsProvider := b64.Base64SecretsProvider.Add("passphrase", func(state json.RawMessage) (secrets.Manager, error) {
+		return passphrase.NewPromptingPassphraseSecretsManagerFromState(state)
+	})
+
+	var stdoutBuff bytes.Buffer
+	cmd := stackChangeSecretsProviderCmd{
+		stdout:          &stdoutBuff,
+		secretsProvider: secretsProvider,
+
+		stack: "testStack",
+	}
+
+	// Ideally this would be injected but the cmd functions repeatedly access global state to get the current
+	// backend.
+	secretsManager := b64.NewBase64SecretsManager()
+	snapshot := &deploy.Snapshot{
+		SecretsManager: secretsManager,
+		Resources: []*pkgresource.State{
+			{
+				URN:  resource.NewURN("testStack", "testProject", "", resource.RootStackType, "testStack"),
+				Type: resource.RootStackType,
+				Outputs: resource.PropertyMap{
+					"foo": resource.MakeSecret(resource.NewProperty("bar")),
+				},
+			},
+		},
+	}
+
+	var mockStack *backend.MockStack
+	mockBackend := &backend.MockBackend{
+		ExportDeploymentF: func(ctx context.Context, _ backend.Stack) (*apitype.UntypedDeployment, error) {
+			return stack.SerializeUntypedDeployment(ctx, snapshot, &stack.SerializeOptions{
+				Pretty: true,
+			})
+		},
+		ImportDeploymentF: func(ctx context.Context, _ backend.Stack, deployment *apitype.UntypedDeployment) error {
+			snap, err := stack.DeserializeUntypedDeployment(ctx, deployment, secretsProvider)
+			if err != nil {
+				return err
+			}
+			snapshot = snap
+			return nil
+		},
+		GetStackF: func(context.Context, backend.StackReference) (backend.Stack, error) {
+			return mockStack, nil
+		},
+	}
+
+	mockStack = &backend.MockStack{
+		BackendF: func() backend.Backend {
+			return mockBackend
+		},
+		RefF: func() backend.StackReference {
+			return &backend.MockStackReference{
+				StringV:             "testStack",
+				NameV:               tokens.MustParseStackName("testStack"),
+				FullyQualifiedNameV: "organization/testProject/testStack",
+			}
+		},
+		ConfigLocationF: func() backend.StackConfigLocation { return backend.StackConfigLocation{} },
+		SnapshotF: func(_ context.Context, _ secrets.Provider) (*deploy.Snapshot, error) {
+			return snapshot, nil
+		},
+		DefaultSecretManagerF: func(_ context.Context, _ *workspace.ProjectStack) (secrets.Manager, error) {
+			return secretsManager, nil
+		},
+	}
+
+	testutil.MockLoginManager(t, &cmdBackend.MockLoginManager{
+		CurrentF: func(ctx context.Context, ws pkgWorkspace.Context, sink diag.Sink,
+			url string, project *workspace.Project, setCurrent bool,
+		) (backend.Backend, error) {
+			return mockBackend, nil
+		},
+		LoginF: func(ctx context.Context, ws pkgWorkspace.Context, sink diag.Sink,
+			url string, project *workspace.Project, setCurrent bool, insecure bool, color colors.Colorization,
+			_ ...cmdBackend.LoginOption,
+		) (backend.Backend, error) {
+			return mockBackend, nil
+		},
+	})
+
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	// Setup a dummy project in this directory
+	err := os.WriteFile("Pulumi.yaml", []byte(`
+name: testProject
+runtime: mock
+`), 0o600)
+	require.NoError(t, err)
+
+	// Write a dummy config file with a secret in it
+	b64Encrypter := secretsManager.Encrypter()
+	secretBar, err := b64Encrypter.EncryptValue(ctx, "bar")
+	require.NoError(t, err)
+	cfgKey := config.MustMakeKey("testStack", "secret")
+	cfg := workspace.ProjectStack{
+		Config: config.Map{
+			cfgKey: config.NewSecureValue(secretBar),
+		},
+	}
+	err = cfg.Save("Pulumi.testStack.yaml")
+	require.NoError(t, err)
+
+	// passphrase will read from stdin for the new passphrase
+	mockStdin(t, "password123\npassword123\n")
+	err = cmd.Run(ctx, []string{"passphrase"})
+	require.NoError(t, err)
+	require.Equal(t, "Migrating old configuration and state to new secrets provider\n", stdoutBuff.String())
+
+	// Check that the snapshot now has a passphrase secrets manager
+	assert.Equal(t, "passphrase", snapshot.SecretsManager.Type())
+	passphraseDecrypter := snapshot.SecretsManager.Decrypter()
+	// Check that the snapshot still records the secret value with the same value
+	foo := snapshot.Resources[0].Outputs["foo"]
+	assert.True(t, foo.IsSecret())
+	assert.Equal(t, resource.NewProperty("bar"), foo.SecretValue().Element)
+	// Check the config has been updated to the new secret
+	project, err := workspace.LoadProject("Pulumi.yaml")
+	require.NoError(t, err)
+	projectStack, err := workspace.LoadProjectStack(nil /*sink*/, project, "Pulumi.testStack.yaml")
+	require.NoError(t, err)
+	cfgValue, ok := projectStack.Config[cfgKey]
+	require.True(t, ok)
+	assert.True(t, cfgValue.Secure())
+	val, err := cfgValue.Value(passphraseDecrypter)
+	require.NoError(t, err)
+	assert.Equal(t, "bar", val)
+}
+
+//nolint:paralleltest // mutates global state
+func TestChangeSecretsProvider_ManagedEnvironment(t *testing.T) {
+	mockStack := &backend.MockStack{
+		RefF: func() backend.StackReference {
+			return &backend.MockStackReference{StringV: "dev", NameV: tokens.MustParseStackName("dev")}
+		},
+		ConfigLocationF: func() backend.StackConfigLocation {
+			return backend.StackConfigLocation{ManagedEnvironment: "proj/renamed"}
+		},
+	}
+	mockBackend := &backend.MockBackend{
+		GetStackF: func(context.Context, backend.StackReference) (backend.Stack, error) { return mockStack, nil },
+	}
+	testutil.MockLoginManager(t, &cmdBackend.MockLoginManager{
+		LoginF: func(context.Context, pkgWorkspace.Context, diag.Sink, string, *workspace.Project, bool, bool,
+			colors.Colorization, ...cmdBackend.LoginOption,
+		) (backend.Backend, error) {
+			return mockBackend, nil
+		},
+	})
+	t.Chdir(t.TempDir())
+	require.NoError(t, os.WriteFile("Pulumi.yaml", []byte("name: proj\nruntime: mock\n"), 0o600))
+	const stackFile = "secretsprovider: awskms://alias/key\nenvironment:\n  values:\n    pulumiConfig: {}\n"
+	require.NoError(t, os.WriteFile("Pulumi.dev.yaml", []byte(stackFile), 0o600))
+
+	cmd := stackChangeSecretsProviderCmd{stdout: &bytes.Buffer{}, stack: "dev"}
+	err := cmd.Run(t.Context(), []string{"passphrase"})
+	require.EqualError(t, err, "`pulumi stack change-secrets-provider` is not supported on stacks with an "+
+		"ESC-managed environment yet; use a customer-managed key (CMK) in Pulumi Cloud to control the encryption key "+
+		"instead")
+	written, err := os.ReadFile("Pulumi.dev.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, stackFile, string(written))
+}

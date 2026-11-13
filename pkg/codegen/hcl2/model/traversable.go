@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/hcl/v2"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/zclconf/go-cty/cty"
 )
 
@@ -64,7 +64,7 @@ func GetTraverserKey(t hcl.Traverser) (cty.Value, Type) {
 		return cty.StringVal(t.Name), StringType
 	case hcl.TraverseIndex:
 		if t.Key.Type().Equals(typeCapsule) {
-			return cty.DynamicVal, *(t.Key.EncapsulatedValue().(*Type))
+			return cty.DynamicVal, *t.Key.EncapsulatedValue().(*Type)
 		}
 		return t.Key, ctyTypeToType(t.Key.Type(), false)
 	default:
@@ -75,8 +75,8 @@ func GetTraverserKey(t hcl.Traverser) (cty.Value, Type) {
 
 // bindTraversalParts computes the type for each element of the given traversal.
 func bindTraversalParts(receiver Traversable, traversal hcl.Traversal,
-	allowMissingVariables bool) ([]Traversable, hcl.Diagnostics) {
-
+	allowMissingVariables bool,
+) ([]Traversable, hcl.Diagnostics) {
 	parts := make([]Traversable, len(traversal)+1)
 	parts[0] = receiver
 
@@ -103,9 +103,8 @@ func bindTraversalParts(receiver Traversable, traversal hcl.Traversal,
 		// OK
 	default:
 		// TODO(pdg): improve this diagnostic
-		if !allowMissingVariables {
-			diagnostics = append(diagnostics, undefinedVariable("", traversal.SourceRange()))
-		}
+		diagnostics = append(diagnostics, undefinedVariable("",
+			traversal.SourceRange(), allowMissingVariables))
 	}
 
 	return parts, diagnostics

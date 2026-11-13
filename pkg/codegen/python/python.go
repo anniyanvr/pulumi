@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,39 +19,31 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
+	mapset "github.com/deckarep/golang-set/v2"
 )
 
-// useLegacyName are names that should return the result of PyNameLegacy from PyName, for compatibility.
-var useLegacyName = codegen.StringSet{
+// useLegacyName are names that should return a legacy result from PyName, for compatibility.
+var useLegacyName = mapset.NewSet(
 	// The following property name of a nested type is a case where the newer algorithm produces an incorrect name
 	// (`open_xjson_ser_de`). It should be the legacy name of `open_x_json_ser_de`.
 	// TODO[pulumi/pulumi#5199]: We should see if we can fix this in the algorithm of PyName so it doesn't need to
 	// be special-cased in this set.
-	"openXJsonSerDe": struct{}{}, // AWS
+	"openXJsonSerDe", // AWS
 
 	// The following function name has already shipped with the legacy name (`get_public_i_ps`).
 	// TODO[pulumi/pulumi#5200]: Consider emitting two functions: one with the correct name (`get_public_ips`)
 	// and another function with the legacy name (`get_public_i_ps`) marked as deprecated.
-	"GetPublicIPs": struct{}{}, // Azure
+	"GetPublicIPs", // Azure
 
 	// The following function name has already shipped with the legacy name (`get_uptime_check_i_ps`).
 	// TODO[pulumi/pulumi#5200]: Consider emitting two functions: one with the correct name (`get_uptime_check_ips`)
 	// and another function with the legacy name (`get_uptime_check_i_ps`) marked as deprecated.
-	"GetUptimeCheckIPs": struct{}{}, // GCP
-}
+	"GetUptimeCheckIPs", // GCP
+)
 
 // PyName turns a variable or function name, normally using camelCase, to an underscore_case name.
 func PyName(name string) string {
-	return pyName(name, useLegacyName.Has(name))
-}
-
-// PyNameLegacy is an uncorrected and deprecated version of the PyName algorithm to maintain compatibility and avoid
-// a breaking change. See the linked issue for more context: https://github.com/pulumi/pulumi-kubernetes/issues/1179
-//
-// Deprecated: Use PyName instead.
-func PyNameLegacy(name string) string {
-	return pyName(name, true /*legacy*/)
+	return pyName(name, useLegacyName.Contains(name))
 }
 
 func pyName(name string, legacy bool) string {
@@ -105,6 +97,12 @@ func pyName(name string, legacy bool) string {
 
 	var result strings.Builder           // The components of the name, joined together with underscores.
 	var currentComponent strings.Builder // The characters composing the current component being built
+
+	// Preallocate enough space for the name + 5 underscores. '5' is based on a wild guess that most names will consist
+	// of 5 or fewer words.
+	result.Grow(len(name) + 5)
+	currentComponent.Grow(len(name) + 5)
+
 	state := stateFirst
 	for _, char := range name {
 		// If this is an illegal character for a Python identifier, replace it.
@@ -205,10 +203,9 @@ func pyName(name string, legacy bool) string {
 // Keywords is a map of reserved keywords used by Python 2 and 3.  We use this to avoid generating unspeakable
 // names in the resulting code.  This map was sourced by merging the following reference material:
 //
-//     * Python 2: https://docs.python.org/2.5/ref/keywords.html
-//     * Python 3: https://docs.python.org/3/reference/lexical_analysis.html#keywords
-//
-var Keywords = codegen.NewStringSet(
+//   - Python 2: https://docs.python.org/2.5/ref/keywords.html
+//   - Python 3: https://docs.python.org/3/reference/lexical_analysis.html#keywords
+var Keywords = mapset.NewSet(
 	"False",
 	"None",
 	"True",
@@ -250,7 +247,7 @@ var Keywords = codegen.NewStringSet(
 // EnsureKeywordSafe adds a trailing underscore if the generated name clashes with a Python 2 or 3 keyword, per
 // PEP 8: https://www.python.org/dev/peps/pep-0008/?#function-and-method-arguments
 func EnsureKeywordSafe(name string) string {
-	if Keywords.Has(name) {
+	if Keywords.Contains(name) {
 		return name + "_"
 	}
 	return name

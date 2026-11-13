@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,12 @@
 
 package model
 
-import "github.com/hashicorp/hcl/v2"
+import (
+	"maps"
+	"slices"
+
+	"github.com/hashicorp/hcl/v2"
+)
 
 // unwrapIterableSourceType removes any eventual types that wrap a type intended for iteration.
 func unwrapIterableSourceType(t Type) Type {
@@ -25,13 +30,23 @@ func unwrapIterableSourceType(t Type) Type {
 			t = tt.ElementType
 		case *PromiseType:
 			t = tt.ElementType
+		case *UnionType:
+			// option(T) is implemented as union(T, None)
+			// so we unwrap the optional type here
+			if len(tt.ElementTypes) == 2 && tt.ElementTypes[0] == NoneType {
+				t = tt.ElementTypes[1]
+			} else if len(tt.ElementTypes) == 2 && tt.ElementTypes[1] == NoneType {
+				t = tt.ElementTypes[0]
+			} else {
+				return t
+			}
 		default:
 			return t
 		}
 	}
 }
 
-// wrapIterableSourceType adds optional or eventual types to a type intended for iteration per the structure of the
+// wrapIterableResultType adds optional or eventual types to a type intended for iteration per the structure of the
 // source type.
 func wrapIterableResultType(sourceType, iterableType Type) Type {
 	// TODO(pdg): unions
@@ -48,29 +63,33 @@ func wrapIterableResultType(sourceType, iterableType Type) Type {
 }
 
 // GetCollectionTypes returns the key and value types of the given type if it is a collection.
-func GetCollectionTypes(collectionType Type, rng hcl.Range) (Type, Type, hcl.Diagnostics) {
+func GetCollectionTypes(collectionType Type, rng hcl.Range, strict bool) (Type, Type, hcl.Diagnostics) {
 	var diagnostics hcl.Diagnostics
 	var keyType, valueType Type
-	switch collectionType := collectionType.(type) {
+	// Poke through any eventual and optional types that may wrap the collection type.
+	unwrappedCollectionType := unwrapIterableSourceType(collectionType)
+	switch collectionType := unwrappedCollectionType.(type) {
 	case *ListType:
-		keyType, valueType = NumberType, collectionType.ElementType
+		keyType, valueType = IntType, collectionType.ElementType
 	case *MapType:
 		keyType, valueType = StringType, collectionType.ElementType
 	case *TupleType:
-		keyType = NumberType
+		keyType = IntType
 		valueType, _ = UnifyTypes(collectionType.ElementTypes...)
 	case *ObjectType:
 		keyType = StringType
 
-		types := make([]Type, 0, len(collectionType.Properties))
-		for _, t := range collectionType.Properties {
-			types = append(types, t)
-		}
-		valueType, _ = UnifyTypes(types...)
+		valueType, _ = UnifyTypes(slices.SortedFunc(maps.Values(collectionType.Properties), Compare)...)
+
 	default:
-		// If the collection is a dynamic type, treat it as an iterable(dynamic, dynamic). Otherwise, issue an error.
+		// If the collection is a dynamic type, treat it as an iterable(dynamic, dynamic).
+		// Otherwise, if we are in strict-mode, issue an error.
 		if collectionType != DynamicType {
-			diagnostics = append(diagnostics, unsupportedCollectionType(collectionType, rng))
+			unsupportedError := unsupportedCollectionType(collectionType, rng)
+			if !strict {
+				unsupportedError.Severity = hcl.DiagWarning
+			}
+			diagnostics = append(diagnostics, unsupportedError)
 		}
 		keyType, valueType = DynamicType, DynamicType
 	}

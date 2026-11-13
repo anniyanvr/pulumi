@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import { ProviderResource, Resource } from "./resource";
+import { Inputs, Input } from "./output";
+import { ProviderResource, Resource, ResourceOptions } from "./resource";
 
-/*
- * InvokeOptions is a bag of options that control the behavior of a call to runtime.invoke.
+/**
+ * {@link InvokeOptions} is a bag of options that control the behavior of a call
+ * to `runtime.invoke`.
  */
 export interface InvokeOptions {
     /**
@@ -30,10 +32,17 @@ export interface InvokeOptions {
     provider?: ProviderResource;
 
     /**
-     * An optional version, corresponding to the version of the provider plugin that should be used when performing this
-     * invoke.
+     * An optional version, corresponding to the version of the provider plugin
+     * that should be used when performing this invoke.
      */
     version?: string;
+
+    /**
+     *  An option to specify the URL from which to download this resources
+     * associated plugin. This version overrides the URL information inferred
+     * from the current package and should rarely be used.
+     */
+    pluginDownloadURL?: string;
 
     /**
      * Invoke this data source function asynchronously.  Defaults to `true` if unspecified.
@@ -44,4 +53,92 @@ export interface InvokeOptions {
      * time.
      */
     async?: boolean;
+}
+
+/**
+ * {@link InvokeOutputOptions} is a bag of options that control the behavior of a call
+ * to `runtime.invokeOutput`.
+ */
+export interface InvokeOutputOptions extends InvokeOptions {
+    /**
+     * An optional set of additional explicit dependencies on other resources.
+     */
+    dependsOn?: Input<Input<Resource>[]> | Input<Resource>;
+}
+
+/**
+ * Creates an {@link InvokeOptions} from the given {@link ResourceOptions},
+ * copying the `parent`, `provider`, `version` and `pluginDownloadURL` options.
+ * All other resource options, including `dependsOn`, have no equivalent for
+ * plain invokes and are dropped; use
+ * {@link invokeOutputOptionsFromResourceOptions} to preserve `dependsOn`.
+ */
+export function invokeOptionsFromResourceOptions(opts: ResourceOptions): InvokeOptions {
+    return {
+        parent: opts.parent,
+        provider: opts.provider,
+        version: opts.version,
+        pluginDownloadURL: opts.pluginDownloadURL,
+    };
+}
+
+/**
+ * Creates an {@link InvokeOutputOptions} from the given {@link ResourceOptions},
+ * copying the `parent`, `provider`, `version`, `pluginDownloadURL` and
+ * `dependsOn` options. All other resource options have no invoke equivalent and
+ * are dropped.
+ */
+export function invokeOutputOptionsFromResourceOptions(opts: ResourceOptions): InvokeOutputOptions {
+    return {
+        ...invokeOptionsFromResourceOptions(opts),
+        dependsOn: opts.dependsOn,
+    };
+}
+
+/**
+ * {@link InvokeTransform} is the callback signature for the `transforms`
+ * resource option for invokes.  A transform is passed the same set of inputs
+ * provided to the {@link Invoke} constructor, and can optionally return back
+ * alternate values for the `args` and/or `opts` prior to the invoke actually
+ * being executed.  The effect will be as though those args and opts were passed
+ * in place of the original call to the {@link Invoke}.  If the transform
+ * returns nil, this indicates
+ * that the Invoke
+ */
+export type InvokeTransform = (
+    args: InvokeTransformArgs,
+) => Promise<InvokeTransformResult | undefined> | InvokeTransformResult | undefined;
+
+/**
+ * {@link InvokeTransformArgs} is the argument bag passed to a invoke transform.
+ */
+export interface InvokeTransformArgs {
+    /**
+     * The token of the Invoke.
+     */
+    token: string;
+    /**
+     * The original args passed to the Invoke constructor.
+     */
+    args: Inputs;
+    /**
+     * The original invoke options passed to the Invoke constructor.
+     */
+    opts: InvokeOptions;
+}
+
+/**
+ * {@link InvokeTransformResult} is the result that must be returned by an invoke
+ * transform callback.  It includes new values to use for the `args` and `opts`
+ * of the `Invoke` in place of the originally provided values.
+ */
+export interface InvokeTransformResult {
+    /**
+     * The new properties to use in place of the original `args`
+     */
+    args: Inputs;
+    /**
+     * The new resource options to use in place of the original `opts`
+     */
+    opts: InvokeOptions;
 }

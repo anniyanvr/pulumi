@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,14 +15,15 @@
 package config
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/pulumi"
+	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 type TestStruct struct {
@@ -32,11 +33,14 @@ type TestStruct struct {
 
 // TestConfig tests the basic config wrapper.
 func TestConfig(t *testing.T) {
-	ctx, err := pulumi.NewContext(context.Background(), pulumi.RunInfo{
+	t.Parallel()
+
+	ctx, err := pulumi.NewContext(t.Context(), pulumi.RunInfo{
 		Config: map[string]string{
 			"testpkg:sss":    "a string value",
 			"testpkg:bbb":    "true",
 			"testpkg:intint": "42",
+			"testpkg:badint": "4d2",
 			"testpkg:fpfpfp": "99.963",
 			"testpkg:obj": `
 				{
@@ -50,7 +54,7 @@ func TestConfig(t *testing.T) {
 			"testpkg:malobj": "not_a_struct",
 		},
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	cfg := New(ctx, "testpkg")
 
@@ -77,23 +81,24 @@ func TestConfig(t *testing.T) {
 	// missing key GetObj
 	err = cfg.GetObject("missing", &testStruct)
 	assert.Equal(t, emptyTestStruct, testStruct)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	testStruct = TestStruct{}
 	// malformed key GetObj
 	err = cfg.GetObject("malobj", &testStruct)
 	assert.Equal(t, emptyTestStruct, testStruct)
-	assert.NotNil(t, err)
+	assert.ErrorContains(t, err, "invalid character 'o' in literal null (expecting 'u')")
 	testStruct = TestStruct{}
 	// GetObj
 	err = cfg.GetObject("obj", &testStruct)
 	assert.Equal(t, expectedTestStruct, testStruct)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	testStruct = TestStruct{}
 
 	// Test Require, which panics for missing entries.
 	assert.Equal(t, "a string value", cfg.Require("sss"))
 	assert.Equal(t, true, cfg.RequireBool("bbb"))
 	assert.Equal(t, 42, cfg.RequireInt("intint"))
+	assert.Panics(t, func() { cfg.RequireInt("badint") })
 	assert.Equal(t, 99.963, cfg.RequireFloat64("fpfpfp"))
 	cfg.RequireObject("obj", &testStruct)
 	assert.Equal(t, expectedTestStruct, testStruct)
@@ -120,40 +125,49 @@ func TestConfig(t *testing.T) {
 		_ = cfg.Require("missing")
 	}()
 
-	// Test Try, which returns an error for missing entries.
+	// Test Try, which returns an error for missing or invalid entries.
 	k1, err := cfg.Try("sss")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "a string value", k1)
 	k2, err := cfg.TryBool("bbb")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, true, k2)
 	k3, err := cfg.TryInt("intint")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 42, k3)
+	invalidInt, err := cfg.TryInt("badint")
+	assert.ErrorContains(t, err, "unable to cast \"4d2\" of type string to int")
+	assert.Zero(t, invalidInt)
 	k4, err := cfg.TryFloat64("fpfpfp")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 99.963, k4)
 	// happy path TryObject
 	err = cfg.TryObject("obj", &testStruct)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, expectedTestStruct, testStruct)
 	testStruct = TestStruct{}
 	// missing TryObject
 	err = cfg.TryObject("missing", &testStruct)
-	assert.NotNil(t, err)
+	assert.EqualError(t, err, "missing required configuration variable 'testpkg:missing'; run `pulumi config` to set")
 	assert.Equal(t, emptyTestStruct, testStruct)
+	assert.True(t, errors.Is(err, ErrMissingVar))
 	testStruct = TestStruct{}
 	// malformed TryObject
 	err = cfg.TryObject("malobj", &testStruct)
-	assert.NotNil(t, err)
+	assert.EqualError(t, err, "invalid character 'o' in literal null (expecting 'u')")
 	assert.Equal(t, emptyTestStruct, testStruct)
+	assert.False(t, errors.Is(err, ErrMissingVar))
 	testStruct = TestStruct{}
 	_, err = cfg.Try("missing")
-	assert.NotNil(t, err)
+	assert.EqualError(t, err,
+		"missing required configuration variable 'testpkg:missing'; run `pulumi config` to set")
+	assert.True(t, errors.Is(err, ErrMissingVar))
 }
 
 func TestSecretConfig(t *testing.T) {
-	ctx, err := pulumi.NewContext(context.Background(), pulumi.RunInfo{
+	t.Parallel()
+
+	ctx, err := pulumi.NewContext(t.Context(), pulumi.RunInfo{
 		Config: map[string]string{
 			"testpkg:sss":    "a string value",
 			"testpkg:bbb":    "true",
@@ -171,7 +185,7 @@ func TestSecretConfig(t *testing.T) {
 			"testpkg:malobj": "not_a_struct",
 		},
 	})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	cfg := New(ctx, "testpkg")
 
@@ -186,31 +200,28 @@ func TestSecretConfig(t *testing.T) {
 	s1, err := cfg.TrySecret("sss")
 	s2 := cfg.RequireSecret("sss")
 	s3 := cfg.GetSecret("sss")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	errChan := make(chan error)
 	result := make(chan string)
 
-	pulumi.All(s1, s2, s3).ApplyT(func(v []interface{}) ([]interface{}, error) {
+	pulumi.All(s1, s2, s3).ApplyT(func(v []any) ([]any, error) {
 		for _, val := range v {
 			if val == "a string value" {
 				result <- val.(string)
 			} else {
-				errChan <- fmt.Errorf("Invalid result: %v", val)
-
+				errChan <- fmt.Errorf("invalid result: %v", val)
 			}
 		}
 		return v, nil
 	})
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case err = <-errChan:
-			assert.Nil(t, err)
-			break
+			require.NoError(t, err)
 		case r := <-result:
 			assert.Equal(t, "a string value", r)
-			break
 		}
 	}
 
@@ -222,93 +233,85 @@ func TestSecretConfig(t *testing.T) {
 	testStruct6 := TestStruct{}
 
 	s4, err := cfg.TrySecretObject("obj", &testStruct4)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	s5 := cfg.RequireSecretObject("obj", &testStruct5)
 	s6, err := cfg.GetSecretObject("obj", &testStruct6)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
-	pulumi.All(s4, s5, s6).ApplyT(func(v []interface{}) ([]interface{}, error) {
+	pulumi.All(s4, s5, s6).ApplyT(func(v []any) ([]any, error) {
 		for _, val := range v {
 			ts := val.(*TestStruct)
 			if reflect.DeepEqual(expectedTestStruct, *ts) {
 				objResult <- *ts
 			} else {
-				errChan <- fmt.Errorf("Invalid result: %v", val)
+				errChan <- fmt.Errorf("invalid result: %v", val)
 			}
 		}
 		return v, nil
 	})
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case err = <-errChan:
-			assert.Nil(t, err)
-			break
+			require.NoError(t, err)
 		case o := <-objResult:
 			assert.Equal(t, expectedTestStruct, o)
-			break
 		}
 	}
 
 	s7, err := cfg.TrySecretBool("bbb")
 	s8 := cfg.RequireSecretBool("bbb")
 	s9 := cfg.GetSecretBool("bbb")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	errChan = make(chan error)
 	resultBool := make(chan bool)
 
-	pulumi.All(s7, s8, s9).ApplyT(func(v []interface{}) ([]interface{}, error) {
+	pulumi.All(s7, s8, s9).ApplyT(func(v []any) ([]any, error) {
 		for _, val := range v {
 			if val == true {
 				resultBool <- val.(bool)
 			} else {
-				errChan <- fmt.Errorf("Invalid result: %v", val)
-
+				errChan <- fmt.Errorf("invalid result: %v", val)
 			}
 		}
 		return v, nil
 	})
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case err = <-errChan:
-			assert.Nil(t, err)
-			break
+			require.NoError(t, err)
 		case r := <-resultBool:
 			assert.Equal(t, true, r)
-			break
 		}
 	}
 
 	s10, err := cfg.TrySecretInt("intint")
 	s11 := cfg.RequireSecretInt("intint")
 	s12 := cfg.GetSecretInt("intint")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	errChan = make(chan error)
 	resultInt := make(chan int)
 
-	pulumi.All(s10, s11, s12).ApplyT(func(v []interface{}) ([]interface{}, error) {
+	pulumi.All(s10, s11, s12).ApplyT(func(v []any) ([]any, error) {
 		for _, val := range v {
 			if val == 42 {
 				resultInt <- val.(int)
 			} else {
-				errChan <- fmt.Errorf("Invalid result: %v", val)
-
+				errChan <- fmt.Errorf("invalid result: %v", val)
 			}
 		}
 		return v, nil
 	})
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case err = <-errChan:
-			assert.Nil(t, err)
-			break
+			require.NoError(t, err)
 		case r := <-resultInt:
 			assert.Equal(t, 42, r)
-			break
 		}
 	}
 }

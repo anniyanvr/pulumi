@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,51 +15,52 @@
 package npm
 
 import (
-	"io/ioutil"
-	"os"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNPMInstall(t *testing.T) {
-	testInstall(t, "npm")
-}
-
-func TestYarnInstall(t *testing.T) {
-	os.Setenv("PULUMI_PREFER_YARN", "true")
-	testInstall(t, "yarn")
-}
-
-func testInstall(t *testing.T, expectedBin string) {
-	// Skip during short test runs since this test involves downloading dependencies.
-	if testing.Short() {
-		t.Skip("Skipped in short test run")
+// This test checks that os.exec call for `npm install` is well constructed.
+func TestNPMInstallCmd(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		production   bool
+		expectedArgs []string
+	}{
+		{
+			production:   true,
+			expectedArgs: []string{"false", "install", "--loglevel=error", "--production"},
+		}, {
+			production:   false,
+			expectedArgs: []string{"false", "install", "--loglevel=error"},
+		},
 	}
 
-	// Create a new empty test directory and change the current working directory to it.
-	tempdir, _ := ioutil.TempDir("", "test-env")
-	defer os.RemoveAll(tempdir)
-	assert.NoError(t, os.Chdir(tempdir))
+	pkgManager := &npmManager{
+		executable: "false", // a fake path for testing.
+	}
+	ctx := t.Context()
 
-	// Create a package directory to install dependencies into.
-	pkgdir := filepath.Join(tempdir, "package")
-	assert.NoError(t, os.Mkdir(pkgdir, 0700))
-
-	// Write out a minimal package.json file that has at least one dependency.
-	packageJSONFilename := filepath.Join(pkgdir, "package.json")
-	packageJSON := []byte(`{
-	    "name": "test-package",
-	    "dependencies": {
-	        "@pulumi/pulumi": "^2.0.0"
-	    }
-	}`)
-	assert.NoError(t, ioutil.WriteFile(packageJSONFilename, packageJSON, 0600))
-
-	// Install dependencies, passing nil for stdout and stderr, which connects
-	// them to the file descriptor for the null device (os.DevNull).
-	bin, err := Install(pkgdir, nil, nil)
-	assert.NoError(t, err)
-	assert.Equal(t, expectedBin, bin)
+	for _, tc := range cases {
+		name := fmt.Sprintf("production=%v", tc.production)
+		t.Run(name, func(tt *testing.T) {
+			tt.Parallel()
+			command := pkgManager.installCmd(ctx, tc.production)
+			// Compare our expectations against observations.
+			expected := tc.expectedArgs
+			observed := command.Args
+			assert.ElementsMatch(t, expected, observed)
+			// Next, we check if the binary name matches our expectations.
+			// Trim the absolute path, since it's system dependent.
+			observedCommand := filepath.Base(command.Path)
+			// Trim the extension, which will appear on Windows systems.
+			if extension := filepath.Ext(observedCommand); extension != "" {
+				observedCommand = strings.TrimSuffix(observedCommand, extension)
+			}
+			assert.Equal(t, "false", observedCommand)
+		})
+	}
 }

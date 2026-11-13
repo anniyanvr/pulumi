@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,21 +16,47 @@ package model
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
+
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model/pretty"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
 )
 
 // MapType represents maps from strings to particular element types.
 type MapType struct {
 	// ElementType is the element type of the map.
 	ElementType Type
+
+	cache *typeCache
 }
 
 // NewMapType creates a new map type with the given element type.
 func NewMapType(elementType Type) *MapType {
-	return &MapType{ElementType: elementType}
+	return &MapType{ElementType: elementType, cache: &typeCache{}}
+}
+
+func (t *MapType) pretty(seenFormatters map[Type]pretty.Formatter) pretty.Formatter {
+	var formatter pretty.Formatter
+	if seenFormatter, ok := seenFormatters[t.ElementType]; ok {
+		formatter = seenFormatter
+	} else {
+		formatter = t.ElementType.pretty(seenFormatters)
+	}
+
+	return &pretty.Wrap{
+		Prefix:  "map(",
+		Postfix: ")",
+		Value:   formatter,
+	}
+}
+
+func (t *MapType) Pretty() pretty.Formatter {
+	seenFormatters := map[Type]pretty.Formatter{}
+	return t.pretty(seenFormatters)
 }
 
 // Traverse attempts to traverse the optional type with the given traverser. The result type of traverse(map(T))
@@ -55,7 +81,7 @@ func (t *MapType) Equals(other Type) bool {
 	return t.equals(other, nil)
 }
 
-func (t *MapType) equals(other Type, seen map[Type]struct{}) bool {
+func (t *MapType) equals(other Type, seen comparePairs) bool {
 	if t == other {
 		return true
 	}
@@ -68,13 +94,17 @@ func (t *MapType) equals(other Type, seen map[Type]struct{}) bool {
 // from values of type map(U) where T is assignable from U or object(K_0=U_0, ..., K_N=U_N) if T is assignable from the
 // unified type of U_0 through U_N.
 func (t *MapType) AssignableFrom(src Type) bool {
-	return assignableFrom(t, src, func() bool {
+	return t.assignableFrom(src, nil)
+}
+
+func (t *MapType) assignableFrom(src Type, seen *cycleSet) bool {
+	return assignableFrom(t, src, seen, func(seen *cycleSet) bool {
 		switch src := src.(type) {
 		case *MapType:
-			return t.ElementType.AssignableFrom(src.ElementType)
+			return t.ElementType.assignableFrom(src.ElementType, seen)
 		case *ObjectType:
 			for _, src := range src.Properties {
-				if !t.ElementType.AssignableFrom(src) {
+				if !t.ElementType.assignableFrom(src, seen) {
 					return false
 				}
 			}
@@ -89,43 +119,52 @@ func (t *MapType) AssignableFrom(src Type) bool {
 // convertible to T. If any element type is unsafely convertible to T and no element type is safely convertible to T,
 // the conversion is unsafe. Otherwise, no conversion exists.
 func (t *MapType) ConversionFrom(src Type) ConversionKind {
-	return t.conversionFrom(src, false)
+	kind, _ := t.conversionFrom(src, false, nil)
+	return kind
 }
 
-func (t *MapType) conversionFrom(src Type, unifying bool) ConversionKind {
-	return conversionFrom(t, src, unifying, func() ConversionKind {
+func (t *MapType) conversionFrom(src Type, unifying bool, seen *cycleSet) (ConversionKind, lazyDiagnostics) {
+	return conversionFrom(t, src, unifying, seen, t.cache, func() (ConversionKind, lazyDiagnostics) {
 		switch src := src.(type) {
 		case *MapType:
-			return t.ElementType.conversionFrom(src.ElementType, unifying)
+			return t.ElementType.conversionFrom(src.ElementType, unifying, seen)
 		case *ObjectType:
 			conversionKind := SafeConversion
+			var diags lazyDiagnostics
 			for _, src := range src.Properties {
-				if ck := t.ElementType.conversionFrom(src, unifying); ck < conversionKind {
-					conversionKind = ck
+				if ck, why := t.ElementType.conversionFrom(src, unifying, seen); ck < conversionKind {
+					conversionKind, diags = ck, why
+					if conversionKind == NoConversion {
+						break
+					}
 				}
 			}
-			return conversionKind
+			return conversionKind, diags
 		}
-		return NoConversion
+		return NoConversion, func() hcl.Diagnostics { return hcl.Diagnostics{typeNotConvertible(t, src)} }
 	})
 }
 
 func (t *MapType) String() string {
-	return fmt.Sprintf("map(%v)", t.ElementType)
+	return t.string(nil)
 }
 
-func (t *MapType) unify(other Type) (Type, ConversionKind) {
-	return unify(t, other, func() (Type, ConversionKind) {
+func (t *MapType) string(seen map[Type]struct{}) string {
+	return fmt.Sprintf("map(%s)", t.ElementType.string(seen))
+}
+
+func (t *MapType) unify(other Type, seen *cycleSet) (Type, ConversionKind) {
+	return unify(t, other, seen, func() (Type, ConversionKind) {
 		switch other := other.(type) {
 		case *MapType:
 			// If the other type is a map type, unify based on the element type.
-			elementType, conversionKind := t.ElementType.unify(other.ElementType)
+			elementType, conversionKind := t.ElementType.unify(other.ElementType, seen)
 			return NewMapType(elementType), conversionKind
 		case *ObjectType:
 			// If the other type is an object type, prefer the map type, but unify the property types.
 			elementType, conversionKind := t.ElementType, SafeConversion
-			for _, other := range other.Properties {
-				element, ck := elementType.unify(other)
+			for _, other := range slices.SortedFunc(maps.Values(other.Properties), Compare) {
+				element, ck := elementType.unify(other, seen)
 				if ck < conversionKind {
 					conversionKind = ck
 				}
@@ -134,7 +173,8 @@ func (t *MapType) unify(other Type) (Type, ConversionKind) {
 			return NewMapType(elementType), conversionKind
 		default:
 			// Prefer the map type.
-			return t, t.conversionFrom(other, true)
+			kind, _ := t.conversionFrom(other, true, seen)
+			return t, kind
 		}
 	})
 }

@@ -1,4 +1,4 @@
-# Copyright 2016-2020, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,11 +22,13 @@ class MyFunctionNestedResult:
     first_value: str = pulumi.property("firstValue")
     second_value: float = pulumi.property("secondValue")
 
+
 @pulumi.output_type
 class MyFunctionResult:
     # Deliberately using a qualified (with `outputs.`) forward reference
     # to mimic our provider codegen, to ensure the type can be resolved.
-    nested: 'outputs.MyFunctionNestedResult'
+    nested: "outputs.MyFunctionNestedResult"
+
 
 @pulumi.output_type
 class MyOtherFunctionNestedResult:
@@ -36,22 +38,20 @@ class MyOtherFunctionNestedResult:
 
     @property
     @pulumi.getter(name="firstValue")
-    def first_value(self) -> str:
-        ...
+    def first_value(self) -> str: ...  # type: ignore
 
     @property
     @pulumi.getter(name="secondValue")
-    def second_value(self) -> float:
-        ...
+    def second_value(self) -> float: ...  # type: ignore
+
 
 @pulumi.output_type
 class MyOtherFunctionResult:
-    def __init__(self, nested: 'outputs.MyOtherFunctionNestedResult'):
+    def __init__(self, nested: "outputs.MyOtherFunctionNestedResult"):
         pulumi.set(self, "nested", nested)
 
     @property
     @pulumi.getter
     # Deliberately using a qualified (with `outputs.`) forward reference
     # to mimic our provider codegen, to ensure the type can be resolved.
-    def nested(self) -> 'outputs.MyOtherFunctionNestedResult':
-        ...
+    def nested(self) -> "outputs.MyOtherFunctionNestedResult": ...

@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,40 +17,35 @@ package engine
 import (
 	"github.com/opentracing/opentracing-go"
 
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy"
-	"github.com/pulumi/pulumi/pkg/v2/util/cancel"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/pkg/v3/resource/deploy"
+	"github.com/pulumi/pulumi/pkg/v3/util/cancel"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 )
 
-// UpdateInfo abstracts away information about an apply, preview, or destroy.
-type UpdateInfo interface {
-	// GetRoot returns the root directory for this update. This defines the scope for any filesystem resources
-	// accessed by this update.
-	GetRoot() string
-	// GetProject returns information about the project associated with this update. This includes information such as
-	// the runtime that will be used to execute the Pulumi program and the program's relative working directory.
-	GetProject() *workspace.Project
-	// GetTarget returns information about the target of this update. This includes the name of the stack being
-	// updated, the configuration values associated with the target and the target's latest snapshot.
-	GetTarget() *deploy.Target
-}
-
-// QueryInfo abstracts away information about a query operation.
-type QueryInfo interface {
-	// GetRoot returns the root directory for this update. This defines the scope for any filesystem resources
-	// accessed by this update.
-	GetRoot() string
-	// GetProject returns information about the project associated with this update. This includes information such as
-	// the runtime that will be used to execute the Pulumi program and the program's relative working directory.
-	GetProject() *workspace.Project
+// UpdateInfo handles information common to resource operations (update, preview, destroy, import, refresh).
+type UpdateInfo struct {
+	// Root is the root directory for this update. This defines the scope for any filesystem resources accessed by this
+	// update.
+	Root string
+	// Project is the project associated with this update. This includes information such as the runtime that will be used
+	// to execute the Pulumi program and the program's relative working directory.
+	Project *workspace.Project
+	// Target is the target of this update. This includes the name of the stack being updated, the configuration values
+	// associated with the target and the target's latest snapshot.
+	Target *deploy.Target
 }
 
 // Context provides cancellation, termination, and eventing options for an engine operation. It also provides
 // a way for the engine to persist snapshots, using the `SnapshotManager`.
 type Context struct {
-	Cancel          *cancel.Context
-	Events          chan<- Event
-	SnapshotManager SnapshotManager
-	BackendClient   deploy.BackendClient
-	ParentSpan      opentracing.SpanContext
+	Cancel                      *cancel.Context
+	Events                      chan<- Event
+	SnapshotManager             SnapshotManager
+	SnapshotManagerCapabilities SnapshotManagerCapabilities
+	BackendClient               deploy.BackendClient
+	ParentSpan                  opentracing.SpanContext
+	PluginManager               PluginManager
+	// FinalizeUpdateFunc is an optional function that is called at the end of an update. It can be used to
+	// perform any finalization steps, including sending engine events.
+	FinalizeUpdateFunc func()
 }

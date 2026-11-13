@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,9 @@
 
 package format
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // Func is a function type that implements the fmt.Formatter interface. This can be used to conveniently
 // implement this interface for types defined in other packages.

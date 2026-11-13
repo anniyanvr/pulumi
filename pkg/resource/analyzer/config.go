@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,20 +16,56 @@ package analyzer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io/ioutil"
+	"maps"
+	"os"
 	"strings"
 
-	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 	"github.com/xeipuuv/gojsonschema"
 )
 
+// PolicyPackConfigFile is the content of a policy pack config file (--policy-pack-config).
+type PolicyPackConfigFile struct {
+	// Config is the policy config: the "policies" key of a version 2 file, or every key that isn't reserved in an
+	// unversioned one.
+	Config map[string]plugin.AnalyzerPolicyConfig
+	// Environments are the ESC environments named by the "environments" key.
+	Environments []string
+	// Exceptions are the policy exceptions of a version 2 file's "exceptions" key.
+	Exceptions PolicyExceptions
+}
+
 // LoadPolicyPackConfigFromFile loads the JSON config from a file.
 func LoadPolicyPackConfigFromFile(file string) (map[string]plugin.AnalyzerPolicyConfig, error) {
-	b, err := ioutil.ReadFile(file)
+	f, err := LoadPolicyPackConfigFile(file)
+	if err != nil {
+		return nil, err
+	}
+	return f.Config, nil
+}
+
+// LoadPolicyPackConfigAndEnvironmentsFromFile loads policy pack config and
+// ESC environment references from a JSON config file. The "environments" key,
+// if present, is extracted and returned separately; the remaining keys are
+// parsed as policy config.
+func LoadPolicyPackConfigAndEnvironmentsFromFile(
+	file string,
+) (map[string]plugin.AnalyzerPolicyConfig, []string, error) {
+	f, err := LoadPolicyPackConfigFile(file)
+	if err != nil {
+		return nil, nil, err
+	}
+	return f.Config, f.Environments, nil
+}
+
+// LoadPolicyPackConfigFile loads a policy pack config file, separating the reserved keys from the policy config and
+// parsing its exceptions.
+func LoadPolicyPackConfigFile(file string) (*PolicyPackConfigFile, error) {
+	b, err := os.ReadFile(file)
 	if err != nil {
 		return nil, err
 	}
@@ -45,16 +81,16 @@ func ParsePolicyPackConfigFromAPI(config map[string]*json.RawMessage) (map[strin
 		}
 
 		var enforcementLevel apitype.EnforcementLevel
-		var properties map[string]interface{}
+		var properties map[string]any
 
-		props := make(map[string]interface{})
+		props := make(map[string]any)
 		if err := json.Unmarshal(*v, &props); err != nil {
 			return nil, err
 		}
 
 		el, err := extractEnforcementLevel(props)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parsing enforcement level for %q", k)
+			return nil, fmt.Errorf("parsing enforcement level for %q: %w", k, err)
 		}
 		enforcementLevel = el
 		if len(props) > 0 {
@@ -74,40 +110,98 @@ func ParsePolicyPackConfigFromAPI(config map[string]*json.RawMessage) (map[strin
 	return result, nil
 }
 
-func parsePolicyPackConfig(b []byte) (map[string]plugin.AnalyzerPolicyConfig, error) {
-	result := make(map[string]plugin.AnalyzerPolicyConfig)
-
+func parsePolicyPackConfig(b []byte) (*PolicyPackConfigFile, error) {
 	// Gracefully allow empty content.
 	if strings.TrimSpace(string(b)) == "" {
-		return nil, nil
+		return &PolicyPackConfigFile{}, nil
 	}
 
-	config := make(map[string]interface{})
+	config := make(map[string]any)
 	if err := json.Unmarshal(b, &config); err != nil {
 		return nil, err
 	}
+	// A numeric "version" marks a versioned file. Otherwise, "version" is the name of a policy.
+	if version, ok := config["version"].(float64); ok {
+		return parsePolicyPackConfigV2(b, version)
+	}
+
+	// Extract ESC environment references if present.
+	var environments []string
+	if envsRaw, ok := config["environments"]; ok {
+		envsSlice, ok := envsRaw.([]any)
+		if !ok {
+			return nil, fmt.Errorf(`"environments" must be an array of strings, got %T`, envsRaw)
+		}
+		environments = make([]string, 0, len(envsSlice))
+		for i, v := range envsSlice {
+			s, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf(`"environments[%d]" must be a string, got %T`, i, v)
+			}
+			environments = append(environments, s)
+		}
+		delete(config, "environments")
+	}
+
+	result, err := parsePolicyConfigs(config)
+	if err != nil {
+		return nil, err
+	}
+	return &PolicyPackConfigFile{Config: result, Environments: environments}, nil
+}
+
+// parsePolicyPackConfigV2 parses a versioned config file, which nests the policy config under "policies".
+func parsePolicyPackConfigV2(b []byte, version float64) (*PolicyPackConfigFile, error) {
+	switch {
+	case version > 2:
+		return nil, fmt.Errorf("policy pack config version %v isn't supported; try upgrading the Pulumi CLI", version)
+	case version != 2:
+		return nil, errors.New(`"version" must be 2`)
+	}
+	var file struct {
+		Environments []string        `json:"environments"`
+		Policies     map[string]any  `json:"policies"`
+		Exceptions   json.RawMessage `json:"exceptions"`
+	}
+	if err := json.Unmarshal(b, &file); err != nil {
+		return nil, fmt.Errorf("parsing policy pack config: %w", err)
+	}
+
+	result, err := parsePolicyConfigs(file.Policies)
+	if err != nil {
+		return nil, err
+	}
+	exceptions, err := parsePolicyExceptionsBlock(file.Exceptions)
+	if err != nil {
+		return nil, err
+	}
+	return &PolicyPackConfigFile{Config: result, Environments: file.Environments, Exceptions: exceptions}, nil
+}
+
+// parsePolicyConfigs parses the config of each policy, keyed by policy name.
+func parsePolicyConfigs(config map[string]any) (map[string]plugin.AnalyzerPolicyConfig, error) {
+	result := make(map[string]plugin.AnalyzerPolicyConfig)
 	for k, v := range config {
 		var enforcementLevel apitype.EnforcementLevel
-		var properties map[string]interface{}
+		var properties map[string]any
 		switch val := v.(type) {
 		case string:
 			el := apitype.EnforcementLevel(val)
 			if !el.IsValid() {
-				return nil, errors.Errorf(
-					"parsing enforcement level for %q: %q is not a valid enforcement level", k, val)
+				return nil, fmt.Errorf("parsing enforcement level for %q: %q is not a valid enforcement level", k, val)
 			}
 			enforcementLevel = el
-		case map[string]interface{}:
+		case map[string]any:
 			el, err := extractEnforcementLevel(val)
 			if err != nil {
-				return nil, errors.Wrapf(err, "parsing enforcement level for %q", k)
+				return nil, fmt.Errorf("parsing enforcement level for %q: %w", k, err)
 			}
 			enforcementLevel = el
 			if len(val) > 0 {
 				properties = val
 			}
 		default:
-			return nil, errors.Errorf("parsing %q: %v is not a valid value; must be a string or object", k, v)
+			return nil, fmt.Errorf("parsing %q: %v is not a valid value; must be a string or object", k, v)
 		}
 
 		// Don't bother including empty configs.
@@ -125,18 +219,18 @@ func parsePolicyPackConfig(b []byte) (map[string]plugin.AnalyzerPolicyConfig, er
 
 // extractEnforcementLevel looks for "enforcementLevel" in the map, and if so, validates that it is a valid value, and
 // if so, deletes it from the map and returns it.
-func extractEnforcementLevel(props map[string]interface{}) (apitype.EnforcementLevel, error) {
+func extractEnforcementLevel(props map[string]any) (apitype.EnforcementLevel, error) {
 	contract.Assertf(props != nil, "props != nil")
 
 	var enforcementLevel apitype.EnforcementLevel
 	if unknown, ok := props["enforcementLevel"]; ok {
 		enforcementLevelStr, isStr := unknown.(string)
 		if !isStr {
-			return "", errors.Errorf("%v is not a valid enforcement level; must be a string", unknown)
+			return "", fmt.Errorf("%v is not a valid enforcement level; must be a string", unknown)
 		}
 		el := apitype.EnforcementLevel(enforcementLevelStr)
 		if !el.IsValid() {
-			return "", errors.Errorf("%q is not a valid enforcement level", enforcementLevelStr)
+			return "", fmt.Errorf("%q is not a valid enforcement level", enforcementLevelStr)
 		}
 		enforcementLevel = el
 		// Remove enforcementLevel from the map.
@@ -147,19 +241,20 @@ func extractEnforcementLevel(props map[string]interface{}) (apitype.EnforcementL
 
 // ValidatePolicyPackConfig validates the policy pack's configuration.
 func validatePolicyPackConfig(
-	policies []plugin.AnalyzerPolicyInfo, config map[string]plugin.AnalyzerPolicyConfig) ([]string, error) {
+	policies []plugin.AnalyzerPolicyInfo, config map[string]plugin.AnalyzerPolicyConfig,
+) ([]string, error) {
 	contract.Assertf(config != nil, "contract != nil")
 	var errors []string
 	for _, policy := range policies {
 		if policy.ConfigSchema == nil {
 			continue
 		}
-		var props map[string]interface{}
+		var props map[string]any
 		if c, ok := config[policy.Name]; ok {
 			props = c.Properties
 		}
 		if props == nil {
-			props = make(map[string]interface{})
+			props = make(map[string]any)
 		}
 		validationErrors, err := validatePolicyConfig(*policy.ConfigSchema, props)
 		if err != nil {
@@ -173,7 +268,7 @@ func validatePolicyPackConfig(
 }
 
 // validatePolicyConfig validates an individual policy's configuration.
-func validatePolicyConfig(schema plugin.AnalyzerPolicyConfigSchema, config map[string]interface{}) ([]string, error) {
+func validatePolicyConfig(schema plugin.AnalyzerPolicyConfigSchema, config map[string]any) ([]string, error) {
 	var errors []string
 	schemaLoader := gojsonschema.NewGoLoader(convertSchema(schema))
 	documentLoader := gojsonschema.NewGoLoader(config)
@@ -194,7 +289,8 @@ func validatePolicyConfig(schema plugin.AnalyzerPolicyConfigSchema, config map[s
 
 // ValidatePolicyPackConfig validates a policy pack configuration against the specified config schema.
 func ValidatePolicyPackConfig(schemaMap map[string]apitype.PolicyConfigSchema,
-	config map[string]*json.RawMessage) (err error) {
+	config map[string]*json.RawMessage,
+) (err error) {
 	for property, schema := range schemaMap {
 		schemaLoader := gojsonschema.NewGoLoader(schema)
 
@@ -208,7 +304,7 @@ func ValidatePolicyPackConfig(schemaMap map[string]apitype.PolicyConfigSchema,
 		configLoader := gojsonschema.NewBytesLoader(*propertyConfig)
 		result, err := gojsonschema.Validate(schemaLoader, configLoader)
 		if err != nil {
-			return errors.Wrap(err, "unable to validate schema")
+			return fmt.Errorf("unable to validate schema: %w", err)
 		}
 
 		// If the result is invalid, we need to gather the errors to return to the user.
@@ -217,7 +313,7 @@ func ValidatePolicyPackConfig(schemaMap map[string]apitype.PolicyConfigSchema,
 			for i, e := range result.Errors() {
 				resultErrs[i] = e.Description()
 			}
-			msg := fmt.Sprintf("policy pack configuration is invalid: %s", strings.Join(resultErrs, ", "))
+			msg := "policy pack configuration is invalid: " + strings.Join(resultErrs, ", ")
 			return errors.New(msg)
 		}
 	}
@@ -242,14 +338,14 @@ func createConfigWithDefaults(policies []plugin.AnalyzerPolicyInfo) map[string]p
 
 	// Prepare the resulting config with all defaults from the policy metadata.
 	for _, policy := range policies {
-		var props map[string]interface{}
+		var props map[string]any
 
 		// Set default values from the schema.
 		if policy.ConfigSchema != nil {
 			for k, v := range policy.ConfigSchema.Properties {
 				if val, ok := v["default"]; ok {
 					if props == nil {
-						props = make(map[string]interface{})
+						props = make(map[string]any)
 					}
 					props[k] = val
 				}
@@ -299,7 +395,8 @@ func ReconcilePolicyPackConfig(
 }
 
 func applyConfig(result map[string]plugin.AnalyzerPolicyConfig,
-	configToApply map[string]plugin.AnalyzerPolicyConfig) map[string]plugin.AnalyzerPolicyConfig {
+	configToApply map[string]plugin.AnalyzerPolicyConfig,
+) map[string]plugin.AnalyzerPolicyConfig {
 	// Apply anything that applies to "all" policies.
 	if all, hasAll := configToApply["all"]; hasAll && all.EnforcementLevel.IsValid() {
 		for k, v := range result {
@@ -312,7 +409,7 @@ func applyConfig(result map[string]plugin.AnalyzerPolicyConfig,
 	// Apply policy level config.
 	for policy, givenConfig := range configToApply {
 		var enforcementLevel apitype.EnforcementLevel
-		var properties map[string]interface{}
+		var properties map[string]any
 
 		if resultConfig, hasResultConfig := result[policy]; hasResultConfig {
 			enforcementLevel = resultConfig.EnforcementLevel
@@ -323,11 +420,9 @@ func applyConfig(result map[string]plugin.AnalyzerPolicyConfig,
 			enforcementLevel = givenConfig.EnforcementLevel
 		}
 		if len(givenConfig.Properties) > 0 && properties == nil {
-			properties = make(map[string]interface{})
+			properties = make(map[string]any)
 		}
-		for k, v := range givenConfig.Properties {
-			properties[k] = v
-		}
+		maps.Copy(properties, givenConfig.Properties)
 		result[policy] = plugin.AnalyzerPolicyConfig{
 			EnforcementLevel: enforcementLevel,
 			Properties:       properties,

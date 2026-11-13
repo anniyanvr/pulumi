@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ const (
 	// RefreshUpdate is an update that came from a refresh operation.
 	RefreshUpdate UpdateKind = "refresh"
 	// RenameUpdate is an update that changes the stack name or project name of a Pulumi program.
+	// NOTE: Do not remove this type - it is used by Pulumi Cloud code.
 	RenameUpdate UpdateKind = "rename"
 	// DestroyUpdate is an update which removes all resources.
 	DestroyUpdate UpdateKind = "destroy"
@@ -77,6 +78,22 @@ const (
 	OpCreateReplacement OpType = "create-replacement"
 	// OpDeleteReplaced indicates an existing resource was deleted after replacement.
 	OpDeleteReplaced OpType = "delete-replaced"
+	// OpRead indicates reading an existing resource.
+	OpRead OpType = "read"
+	// OpReadReplacement indicates reading an existing resource for a replacement.
+	OpReadReplacement OpType = "read-replacement"
+	// OpRefresh indicates refreshing an existing resource.
+	OpRefresh OpType = "refresh" // refreshing an existing resource.
+	// OpReadDiscard indicates removing a resource that was read.
+	OpReadDiscard OpType = "discard"
+	// OpDiscardReplaced indicates discarding a read resource that was replaced.
+	OpDiscardReplaced OpType = "discard-replaced"
+	// OpRemovePendingReplace indicates removing a pending replace resource.
+	OpRemovePendingReplace OpType = "remove-pending-replace"
+	// OpImport indicates importing an existing resource.
+	OpImport OpType = "import"
+	// OpImportReplacement indicates replacement of an existing resource with an imported resource.
+	OpImportReplacement OpType = "import-replacement"
 )
 
 // UpdateInfo describes a previous update.
@@ -97,10 +114,22 @@ type UpdateInfo struct {
 	Version         int             `json:"version"`
 	Deployment      json.RawMessage `json:"deployment,omitempty"`
 	ResourceChanges map[OpType]int  `json:"resourceChanges,omitempty"`
+	ResourceCount   int             `json:"resourceCount,omitempty"`
 }
 
 // GetHistoryResponse is the response from the Pulumi Service when requesting
 // a stack's history.
 type GetHistoryResponse struct {
 	Updates []UpdateInfo `json:"updates"`
+}
+
+// StackPreview describes a single preview operation on a stack. Previews are tracked separately
+// from update history and carry their own opaque UpdateID — the UUID in the console preview URL.
+type StackPreview struct {
+	UpdateID string `json:"updateID"`
+}
+
+// GetLatestStackPreviewsResponse is the Pulumi Service response for a stack's most recent previews.
+type GetLatestStackPreviewsResponse struct {
+	Updates []StackPreview `json:"updates"`
 }

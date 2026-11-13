@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,9 @@
 import { Input, Output } from "../output";
 
 /**
- * toObject takes an array of T values, and a selector that produces key/value pairs from those inputs,
- * and converts this array into an output object with those keys and values.
+ * {@link toObject} takes an array of T values, and a selector that produces
+ * key/value pairs from those inputs, and converts this array into an output
+ * object with those keys and values.
  *
  * For instance, given an array as follows
  *
@@ -28,14 +29,16 @@ import { Input, Output } from "../output";
  *
  */
 export function toObject<T, V>(
-        iter: Input<Input<T>[]>, selector: (t: T) => Input<[Input<string>, Input<V>]>): Output<{[key: string]: V}> {
-    return Output.create(iter).apply(elems => {
+    iter: Input<Input<T>[]>,
+    selector: (t: T) => Input<[Input<string>, Input<V>]>,
+): Output<{ [key: string]: V }> {
+    return Output.create(iter).apply((elems) => {
         const array: Input<[Input<string>, Input<V>]>[] = [];
         for (const e of elems) {
             array.push(selector(<any>e));
         }
-        return Output.create(array).apply(kvps => {
-            const obj: {[key: string]: V} = {};
+        return Output.create(array).apply((kvps) => {
+            const obj: { [key: string]: V } = {};
             for (const kvp of kvps) {
                 obj[<any>kvp[0]] = <any>kvp[1];
             }
@@ -45,9 +48,10 @@ export function toObject<T, V>(
 }
 
 /**
- * groupBy takes an array of T values, and a selector that prduces key/value pairs from those inputs,
- * and converts this array into an output object, with those keys, and where each property is an array of values,
- * in the case that the same key shows up multiple times in the input.
+ * {@link groupBy} takes an array of T values, and a selector that prduces
+ * key/value pairs from those inputs, and converts this array into an output
+ * object, with those keys, and where each property is an array of values, in
+ * the case that the same key shows up multiple times in the input.
  *
  * For instance, given an array as follows
  *
@@ -59,14 +63,16 @@ export function toObject<T, V>(
  *
  */
 export function groupBy<T, V>(
-        iter: Input<Input<T>[]>, selector: (t: T) => Input<[Input<string>, Input<V>]>): Output<{[key: string]: V[]}> {
-    return Output.create(iter).apply(elems => {
+    iter: Input<Input<T>[]>,
+    selector: (t: T) => Input<[Input<string>, Input<V>]>,
+): Output<{ [key: string]: V[] }> {
+    return Output.create(iter).apply((elems) => {
         const array: Input<[Input<string>, Input<V>]>[] = [];
         for (const e of elems) {
             array.push(selector(<any>e));
         }
-        return Output.create(array).apply(kvps => {
-            const obj: {[key: string]: V[]} = {};
+        return Output.create(array).apply((kvps) => {
+            const obj: { [key: string]: V[] } = {};
             for (const kvp of kvps) {
                 let r = obj[<any>kvp[0]];
                 if (!r) {

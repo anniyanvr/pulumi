@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,13 +26,13 @@ func TestTokens(t *testing.T) {
 	// Package tokens/names.
 	p := "test/package"
 	assert.False(t, IsName(p))
-	assert.True(t, IsPackageName(p))
+	assert.True(t, IsQName(p))
 	pkg := NewPackageToken(PackageName(p))
 	assert.Equal(t, p, pkg.Name().String())
 	assert.Equal(t, p, pkg.String())
 	p2 := "test/my-package"
 	assert.False(t, IsName(p2))
-	assert.True(t, IsPackageName(p2))
+	assert.True(t, IsQName(p2))
 	pkg2 := NewPackageToken(PackageName(p2))
 	assert.Equal(t, p2, pkg2.Name().String())
 	assert.Equal(t, p2, pkg2.String())
@@ -55,4 +55,53 @@ func TestTokens(t *testing.T) {
 	assert.Equal(t, m, modm.Module().Name().String())
 	assert.Equal(t, p, modm.Module().Package().Name().String())
 	assert.Equal(t, p+TokenDelimiter+m+TokenDelimiter+mm, modm.String())
+}
+
+func TestTypeDisplayName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		desc string
+		give Type
+		want string
+	}{
+		{
+			desc: "not enough parts",
+			give: "incomplete",
+			want: "incomplete",
+		},
+		{
+			desc: "no name",
+			give: "pkg:mod:",
+			want: "pkg:mod:",
+		},
+		{
+			desc: "no slash",
+			give: "pkg:mod:typ",
+			want: "pkg:mod:typ",
+		},
+		{
+			desc: "bad casing",
+			give: "pkg:Mod/foo:typ",
+			want: "pkg:Mod/foo:typ",
+		},
+		{
+			desc: "remove slash",
+			give: "pkg:mod/foo/bar:Bar",
+			want: "pkg:mod/foo:Bar",
+		},
+		{
+			desc: "remove up to last slash",
+			give: "pkg:mod/foo/bar/baz:Baz",
+			want: "pkg:mod/foo/bar:Baz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, tt.give.DisplayName())
+		})
+	}
 }

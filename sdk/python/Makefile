@@ -1,68 +1,132 @@
 PROJECT_NAME     := Pulumi Python SDK
-LANGHOST_PKG     := github.com/pulumi/pulumi/sdk/v2/python/cmd/pulumi-language-python
-VERSION          := $(shell ../../scripts/get-version HEAD)
-PYPI_VERSION     := $(shell cd ../../scripts && ./get-py-version HEAD)
+LANGHOST_PKG     := github.com/pulumi/pulumi/sdk/python/cmd/pulumi-language-python/v3
+VERSION          := $(if ${PULUMI_VERSION},${PULUMI_VERSION},$(shell ../../scripts/pulumi-version.sh))
+PYPI_VERSION 	   := $(if ${PYPI_VERSION},${PYPI_VERSION},$(shell ../../scripts/pulumi-version.sh python))
 
-PYENV := ./env
-PYENVSRC := $(PYENV)/src
+ifeq ($(DEBUG),"true")
+$(info    VERSION       = $(VERSION))
+$(info    PYPI_VERSION  = $(PYPI_VERSION))
+endif
 
-PROJECT_PKGS    := $(shell go list ./cmd/...)
-TESTPARALLELISM := 10
+LANGHOST_PKGS = $(shell go list -C cmd/pulumi-language-python ./...)
+
+_ := $(shell go build -o build/helpmakego github.com/iwahbe/helpmakego)
 
 include ../../build/common.mk
 
-ensure::
-	pipenv install --dev
-	mkdir -p $(PYENVSRC)
+# Motivation: running `make TEST_ALL_DEPS= test_all` permits running
+# `test_all` without the dependencies.
+TEST_ALL_DEPS ?= build
 
-build_package::
-	rm -rf $(PYENVSRC) && cp -R ./lib/. $(PYENVSRC)/
-	sed -i.bak "s/\$${VERSION}/$(PYPI_VERSION)/g" $(PYENVSRC)/setup.py && rm $(PYENVSRC)/setup.py.bak
-	cp ../../README.md $(PYENVSRC)
-	cd $(PYENVSRC) && pipenv run python setup.py build bdist_wheel --universal
+ensure:: .make/ensure/uv
+	../../scripts/retry uv venv --allow-existing
+	../../scripts/retry uv sync --dev
 
-build_plugin::
-	go install -ldflags "-X github.com/pulumi/pulumi/sdk/v2/go/common/version.Version=${VERSION}" ${LANGHOST_PKG}
+ensure_lowest:: .make/ensure/uv
+	../../scripts/retry uv venv --allow-existing
+	../../scripts/retry uv sync --dev --resolution lowest-direct
+
+build_package: build/pulumi-${PYPI_VERSION}-py3-none-any.whl build/pulumi-${PYPI_VERSION}.tar.gz
+build/pulumi-${PYPI_VERSION}-py3-none-any.whl build/pulumi-${PYPI_VERSION}.tar.gz: $(shell uv run --with hatchling python -- scripts/build_inputs.py)
+	uv run -m build --outdir ./build --installer uv
+	@touch $@
+
+build_plugin: ../../bin/pulumi-language-python  \
+	../../bin/pulumi-language-python-exec   \
+	../../bin/pulumi-resource-pulumi-python
+
+../../bin/pulumi-language-python-exec:   ./cmd/pulumi-language-python-exec ; cp $< $@
+../../bin/pulumi-resource-pulumi-python: ./dist/pulumi-resource-pulumi-python ; cp $< $@
+
+../../bin/pulumi-language-python: $(shell build/helpmakego cmd/pulumi-language-python)
+	go build -C cmd/pulumi-language-python \
+		-o ../../$@ \
+		-tags="${GO_BUILD_TAGS}" \
+		-ldflags "-X github.com/pulumi/pulumi/sdk/v3/go/common/version.Version=${VERSION}" \
+		${LANGHOST_PKG}
 
 build:: build_package build_plugin
 
-lint::
-	pipenv run mypy ./lib/pulumi --config-file=mypy.ini
-	pipenv run pylint ./lib/pulumi --rcfile=.pylintrc
+lint:: ensure
+	uv run -m ruff format --check
+	uv run -m mypy ./lib/pulumi ./lib/test_types
+	uv run -m ruff check
+	uv run -m pyright
+
+lint_fix:: ensure
+	make format
+	uv run -m mypy ./lib/pulumi ./lib/test_types
+	uv run -m ruff check --fix
+	uv run -m pyright
+
+format:: ensure
+	uv run -m ruff format
 
 install_package:: build_package
 	cp ./cmd/pulumi-language-python-exec "$(PULUMI_BIN)"
 	cp ./dist/pulumi-resource-pulumi-python "$(PULUMI_BIN)"
-	cp ./dist/pulumi-analyzer-policy-python "$(PULUMI_BIN)"
 
 install_plugin:: build_plugin
-	GOBIN=$(PULUMI_BIN) go install \
-		  -ldflags "-X github.com/pulumi/pulumi/sdk/v2/go/common/version.Version=${VERSION}" ${LANGHOST_PKG}
+	GOBIN=$(PULUMI_BIN) go install -C cmd/pulumi-language-python \
+		  -tags="${GO_BUILD_TAGS}" \
+		  -ldflags "-X github.com/pulumi/pulumi/sdk/v3/go/common/version.Version=${VERSION}" ${LANGHOST_PKG}
 
 install:: install_package install_plugin
 
-test_fast:: build
-	go test -count=1 -cover -parallel ${TESTPARALLELISM} ${PROJECT_PKGS}
-	pipenv run pip install ./env/src
-	# TODO the ignored test seems to fail in pytest but not unittest. Need to trackdown why
-	pipenv run pytest lib/test --ignore lib/test/langhost/resource_thens/test_resource_thens.py
-	pipenv run python -m unittest lib/test/langhost/resource_thens/test_resource_thens.py
-	# Using python -m also adds lib/test_with_mocks to sys.path which avoids package resolution issues.
-	pushd lib/test_with_mocks ; pipenv run python -m pytest ; popd
+test_go_fast::
+	@cd cmd/pulumi-language-python && \
+		$(GO_TEST_FAST) ${LANGHOST_PKGS}
 
-test_all:: test_fast
+test_go:: $(TEST_ALL_DEPS)
+	@cd cmd/pulumi-language-python && \
+		$(GO_TEST) ${LANGHOST_PKGS}
 
+test_unit_fast:: ensure
+	. .venv/*/activate && ./scripts/test_unit.sh --fast
+
+test_unit:: $(TEST_ALL_DEPS)
+	. .venv/*/activate && ./scripts/test_unit.sh --coverage
+
+test_fast:: test_unit_fast test_go_fast
+
+test_auto:: $(TEST_ALL_DEPS)
+	. .venv/*/activate && ./scripts/test_auto.sh
+
+test_all:: test_unit test_auto test_go
+
+test_all_lowest_deps:: ensure_lowest
+	. .venv/*/activate && ./scripts/test_unit.sh --coverage
+	. .venv/*/activate && ./scripts/test_auto.sh
+
+PULUMI_TEST_ORG ?= $(shell pulumi whoami --json | jq ".organizations[0]")
+
+dist:: GOBIN=$(or $(shell go env GOBIN),$(shell go env GOPATH)/bin)
 dist::
-	go install -ldflags "-X github.com/pulumi/pulumi/sdk/v2/go/common/version.Version=${VERSION}" ${LANGHOST_PKG}
+	go install -C cmd/pulumi-language-python \
+		-tags="${GO_BUILD_TAGS}" \
+		-ldflags "-X github.com/pulumi/pulumi/sdk/v3/go/common/version.Version=${VERSION}" ${LANGHOST_PKG}
+	cp ./cmd/pulumi-language-python-exec "${GOBIN}"
+	cp ./dist/pulumi-resource-pulumi-python "${GOBIN}"
+
+brew:: BREW_VERSION := $(shell ../../scripts/get-version HEAD)
+brew::
+	go install -C cmd/pulumi-language-python \
+		-tags="${GO_BUILD_TAGS}" \
+		-ldflags "-X github.com/pulumi/pulumi/sdk/v3/go/common/version.Version=${BREW_VERSION}" ${LANGHOST_PKG}
 	cp ./cmd/pulumi-language-python-exec "$$(go env GOPATH)"/bin/
 	cp ./dist/pulumi-resource-pulumi-python "$$(go env GOPATH)"/bin/
-	cp ./dist/pulumi-analyzer-policy-python "$$(go env GOPATH)"/bin/
 
-brew:: dist
+clean::
+	rm -rf build
+	rm -rf .make
 
-publish:: build_package
-	twine upload \
-    	-u pulumi -p "${PYPI_PASSWORD}" \
-        "env/src/dist"/*.whl \
-        --skip-existing \
-        --verbose
+publish:: ensure
+	for file in ../../artifacts/sdk-python-*.whl; do \
+		basename=$$(basename $${file}); \
+		mv -vT "$${file}" "../../artifacts/$${basename##sdk-python-}"; \
+	done
+	uv run twine upload \
+	-u "${PYPI_USERNAME}" -p "${PYPI_PASSWORD}" \
+		../../artifacts/*.whl \
+		--skip-existing \
+		--verbose

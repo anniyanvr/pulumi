@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,11 +14,12 @@
 from pulumi import CustomResource
 from pulumi.runtime import is_dry_run
 
+
 class MyResource(CustomResource):
     def __init__(self, name):
-        CustomResource.__init__(self, "test:index:MyResource", name, {
-            "is_preview": is_dry_run()
-        })
+        CustomResource.__init__(
+            self, "test:index:MyResource", name, {"is_preview": is_dry_run()}
+        )
 
 
 MyResource("foo")

@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,18 +17,23 @@ package integration
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
+	"math/rand"
+	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
 	"path"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // DecodeMapString takes a string of the form key1=value1:key2=value2 and returns a go map.
@@ -36,11 +41,12 @@ func DecodeMapString(val string) (map[string]string, error) {
 	newMap := make(map[string]string)
 
 	if val != "" {
-		for _, overrideClause := range strings.Split(val, ":") {
+		for overrideClause := range strings.SplitSeq(val, ":") {
 			data := strings.Split(overrideClause, "=")
 			if len(data) != 2 {
-				return nil, errors.Errorf(
-					"could not decode %s as an override, should be of the form <package>=<version>", overrideClause)
+				return nil, fmt.Errorf(
+					"could not decode %s as an override, should be of the form <package>=<version>",
+					overrideClause)
 			}
 			packageName := data[0]
 			packageVersion := data[1]
@@ -53,12 +59,12 @@ func DecodeMapString(val string) (map[string]string, error) {
 
 // ReplaceInFile does a find and replace for a given string within a file.
 func ReplaceInFile(old, new, path string) error {
-	rawContents, err := ioutil.ReadFile(path)
+	rawContents, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	newContents := strings.Replace(string(rawContents), old, new, -1)
-	return ioutil.WriteFile(path, []byte(newContents), os.ModePerm)
+	newContents := strings.ReplaceAll(string(rawContents), old, new)
+	return os.WriteFile(path, []byte(newContents), 0o600)
 }
 
 // getCmdBin returns the binary named bin in location loc or, if it hasn't yet been initialized, will lazily
@@ -70,7 +76,7 @@ func getCmdBin(loc *string, bin, def string) (string, error) {
 			var err error
 			*loc, err = exec.LookPath(bin)
 			if err != nil {
-				return "", errors.Wrapf(err, "Expected to find `%s` binary on $PATH", bin)
+				return "", fmt.Errorf("Expected to find `%s` binary on $PATH: %w", bin, err)
 			}
 		}
 	}
@@ -81,7 +87,7 @@ func uniqueSuffix() string {
 	// .<timestamp>.<five random hex characters>
 	timestamp := time.Now().Format("20060102-150405")
 	suffix, err := resource.NewUniqueHex("."+timestamp+".", 5, -1)
-	contract.AssertNoError(err)
+	contract.AssertNoErrorf(err, "could not generate random suffix")
 	return suffix
 }
 
@@ -91,14 +97,14 @@ const (
 
 func writeCommandOutput(commandName, runDir string, output []byte) (string, error) {
 	logFileDir := filepath.Join(runDir, commandOutputFolderName)
-	if err := os.MkdirAll(logFileDir, 0700); err != nil {
-		return "", errors.Wrapf(err, "Failed to create '%s'", logFileDir)
+	if err := os.MkdirAll(logFileDir, 0o700); err != nil {
+		return "", fmt.Errorf("Failed to create '%s': %w", logFileDir, err)
 	}
 
 	logFile := filepath.Join(logFileDir, commandName+uniqueSuffix()+".log")
 
-	if err := ioutil.WriteFile(logFile, output, 0600); err != nil {
-		return "", errors.Wrapf(err, "Failed to write '%s'", logFile)
+	if err := os.WriteFile(logFile, output, 0o600); err != nil {
+		return "", fmt.Errorf("Failed to write '%s': %w", logFile, err)
 	}
 
 	return logFile, nil
@@ -111,6 +117,7 @@ func CopyFile(src, dst string) error {
 	var srcfd *os.File
 	var dstfd *os.File
 	var srcinfo os.FileInfo
+	var n int64
 
 	if srcfd, err = os.Open(src); err != nil {
 		return err
@@ -122,11 +129,14 @@ func CopyFile(src, dst string) error {
 	}
 	defer dstfd.Close()
 
-	if _, err = io.Copy(dstfd, srcfd); err != nil {
+	if n, err = io.Copy(dstfd, srcfd); err != nil {
 		return err
 	}
 	if srcinfo, err = os.Stat(src); err != nil {
 		return err
+	}
+	if n != srcinfo.Size() {
+		return fmt.Errorf("failed to copy all bytes from %v to %v", src, dst)
 	}
 	return os.Chmod(dst, srcinfo.Mode())
 }
@@ -135,7 +145,7 @@ func CopyFile(src, dst string) error {
 // From https://blog.depado.eu/post/copy-files-and-directories-in-go
 func CopyDir(src, dst string) error {
 	var err error
-	var fds []os.FileInfo
+	var fds []os.DirEntry
 	var srcinfo os.FileInfo
 
 	if srcinfo, err = os.Stat(src); err != nil {
@@ -146,7 +156,7 @@ func CopyDir(src, dst string) error {
 		return err
 	}
 
-	if fds, err = ioutil.ReadDir(src); err != nil {
+	if fds, err = os.ReadDir(src); err != nil {
 		return err
 	}
 	for _, fd := range fds {
@@ -164,4 +174,112 @@ func CopyDir(src, dst string) error {
 		}
 	}
 	return nil
+}
+
+// AssertHTTPResultWithRetry attempts to assert that an HTTP endpoint exists
+// and evaluate its response.
+func AssertHTTPResultWithRetry(
+	t *testing.T,
+	output any,
+	headers map[string]string,
+	maxWait time.Duration,
+	check func(string) bool,
+) bool {
+	hostname, ok := output.(string)
+	if !assert.True(t, ok, fmt.Sprintf("expected `%s` output", output)) {
+		return false
+	}
+	if !strings.HasPrefix(hostname, "http://") && !strings.HasPrefix(hostname, "https://") {
+		hostname = "http://" + hostname
+	}
+	var err error
+	var resp *http.Response
+	startTime := time.Now()
+	count, sleep := 0, 0
+	for {
+		now := time.Now()
+		req, err := http.NewRequest("GET", hostname, nil)
+		require.NoError(t, err, "error reading request: %v", err)
+
+		for k, v := range headers {
+			// Host header cannot be set via req.Header.Set(), and must be set
+			// directly.
+			if strings.ToLower(k) == "host" {
+				req.Host = v
+				continue
+			}
+			req.Header.Set(k, v)
+		}
+
+		client := &http.Client{Timeout: time.Second * 10}
+		resp, err = client.Do(req)
+
+		if err == nil && resp.StatusCode == 200 {
+			break
+		}
+		if now.Sub(startTime) >= maxWait {
+			t.Logf("Timeout after %v. Unable to http.get %v successfully.", maxWait, hostname)
+			break
+		}
+		count++
+		// delay 10s, 20s, then 30s and stay at 30s
+		if sleep > 30 {
+			sleep = 30
+		} else {
+			sleep += 10
+		}
+		time.Sleep(time.Duration(sleep) * time.Second)
+		t.Logf("Http Error: %v\n", err)
+		t.Logf("  Retry: %v, elapsed wait: %v, max wait %v\n", count, now.Sub(startTime), maxWait)
+	}
+	require.NoError(t, err)
+	// Read the body
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	// Verify it matches expectations
+	return check(string(body))
+}
+
+func CheckRuntimeOptions(t *testing.T, root string, expected map[string]any) {
+	t.Helper()
+
+	var config struct {
+		Runtime struct {
+			Name    string         `yaml:"name"`
+			Options map[string]any `yaml:"options"`
+		} `yaml:"runtime"`
+	}
+	yamlFile, err := os.ReadFile(filepath.Join(root, "Pulumi.yaml"))
+	if err != nil {
+		t.Logf("could not read Pulumi.yaml in %s", root)
+		t.FailNow()
+	}
+	if err := yaml.Unmarshal(yamlFile, &config); err != nil {
+		t.Logf("could not parse Pulumi.yaml in %s", root)
+		t.FailNow()
+	}
+
+	require.Equal(t, expected, config.Runtime.Options)
+}
+
+func createTemporaryGoFolder(prefix string) (string, error) {
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		usr, userErr := user.Current()
+		if userErr != nil {
+			return "", userErr
+		}
+		gopath = filepath.Join(usr.HomeDir, "go")
+	}
+
+	folder := fmt.Sprintf("%s-%d-%d", prefix, time.Now().UnixNano(), rand.Intn(1000000)) //nolint:gosec
+
+	testRoot := filepath.Join(gopath, "src", folder)
+	err := os.MkdirAll(testRoot, 0o700)
+	if err != nil {
+		return "", err
+	}
+
+	return testRoot, err
 }

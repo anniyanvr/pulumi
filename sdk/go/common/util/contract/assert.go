@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ import (
 const assertMsg = "An assertion has failed"
 
 // Assert checks a condition and Fails if it is false.
+//
+// Deprecated: Use Assertf.
 func Assert(cond bool) {
 	if !cond {
 		failfast(assertMsg)
@@ -28,13 +30,15 @@ func Assert(cond bool) {
 }
 
 // Assertf checks a condition and Failfs if it is false, formatting and logging the given message.
-func Assertf(cond bool, msg string, args ...interface{}) {
+func Assertf(cond bool, msg string, args ...any) {
 	if !cond {
 		failfast(fmt.Sprintf("%v: %v", assertMsg, fmt.Sprintf(msg, args...)))
 	}
 }
 
 // AssertNoError will Fail if the error is non-nil.
+//
+// Deprecated: Use AssertNoErrorf.
 func AssertNoError(err error) {
 	if err != nil {
 		failfast(err.Error())
@@ -42,7 +46,7 @@ func AssertNoError(err error) {
 }
 
 // AssertNoErrorf will Fail if the error is non-nil, adding the additional log message.
-func AssertNoErrorf(err error, msg string, args ...interface{}) {
+func AssertNoErrorf(err error, msg string, args ...any) {
 	if err != nil {
 		failfast(fmt.Sprintf("error %v: %v. source error: %v", assertMsg, fmt.Sprintf(msg, args...), err))
 	}

@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,23 +20,23 @@ import (
 	"os"
 	"time"
 
-	"github.com/pulumi/pulumi/pkg/v2/engine"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/engine"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/cmdutil"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // ShowQueryEvents displays query events on the CLI.
 func ShowQueryEvents(op string, events <-chan engine.Event,
-	done chan<- bool, opts Options) {
-
+	done chan<- bool, opts Options,
+) {
 	prefix := fmt.Sprintf("%s%s...", cmdutil.EmojiOr("✨ ", "@ "), op)
 
 	var spinner cmdutil.Spinner
 	var ticker *time.Ticker
 
 	if opts.IsInteractive {
-		spinner, ticker = cmdutil.NewSpinnerAndTicker(prefix, nil, 8 /*timesPerSecond*/)
+		spinner, ticker = cmdutil.NewSpinnerAndTicker(prefix, nil, opts.Color, 8 /*timesPerSecond*/, opts.SuppressProgress)
 	} else {
 		spinner = &nopSpinner{}
 		ticker = time.NewTicker(math.MaxInt64)
@@ -80,6 +80,9 @@ func renderQueryEvent(event engine.Event, opts Options) string {
 	case engine.CancelEvent:
 		return ""
 
+	case engine.ErrorEvent:
+		return ""
+
 	case engine.StdoutColorEvent:
 		return renderStdoutColorEvent(event.Payload().(engine.StdoutEventPayload), opts)
 
@@ -87,10 +90,23 @@ func renderQueryEvent(event engine.Event, opts Options) string {
 	case engine.DiagEvent:
 		return renderQueryDiagEvent(event.Payload().(engine.DiagEventPayload), opts)
 
+	case engine.StartDebuggingEvent:
+		return ""
+
+	case engine.UpdateStartedEvent:
+		return ""
+
 	case engine.PreludeEvent, engine.SummaryEvent, engine.ResourceOperationFailed,
 		engine.ResourceOutputsEvent, engine.ResourcePreEvent:
 
 		contract.Failf("query mode does not support resource operations")
+		return ""
+
+	case engine.PolicyLoadEvent, engine.PolicyViolationEvent, engine.PolicyRemediationEvent,
+		engine.PolicyAnalyzeSummaryEvent, engine.PolicyRemediateSummaryEvent, engine.PolicyAnalyzeStackSummaryEvent:
+		return ""
+
+	case engine.ProgressEvent:
 		return ""
 
 	default:

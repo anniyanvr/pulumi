@@ -1,11 +1,50 @@
+// Copyright 2020, Pulumi Corporation.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package nodejs
 
 import (
+	"strings"
+
+	mapset "github.com/deckarep/golang-set/v2"
+
 	"github.com/hashicorp/hcl/v2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/model"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/pcl"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/zclconf/go-cty/cty"
+)
+
+var outputMemberNames = mapset.NewSet(
+	"allResources",
+	"apply",
+	"constructor",
+	"deploymentOnlyModule",
+	"doNotCapture",
+	"get",
+	"hasOwnProperty",
+	"isKnown",
+	"isPrototypeOf",
+	"isSecret",
+	"promise",
+	"propertyIsEnumerable",
+	"resources",
+	"then",
+	"toJSON",
+	"toLocaleString",
+	"toString",
+	"valueOf",
 )
 
 func isOutputType(t model.Type) bool {
@@ -41,20 +80,66 @@ func isPromiseType(t model.Type) bool {
 	return false
 }
 
-func isParameterReference(parameters codegen.Set, x model.Expression) bool {
+func isDirectParameterReference(parameters mapset.Set[model.Traversable], x model.Expression) bool {
 	scopeTraversal, ok := x.(*model.ScopeTraversalExpression)
-	if !ok {
+	if !ok || len(scopeTraversal.Parts) != 1 {
 		return false
 	}
 
-	return parameters.Has(scopeTraversal.Parts[0])
+	return parameters.Contains(scopeTraversal.Parts[0])
 }
 
-// canLiftTraversal returns true if this traversal can be lifted. Any traversal that does not traverse
-// possibly-undefined values can be lifted.
+func parameterRelativeTraversal(parameters mapset.Set[model.Traversable], x model.Expression) (
+	hcl.Traversal, []model.Traversable, bool,
+) {
+	switch x := x.(type) {
+	case *model.ScopeTraversalExpression:
+		if !parameters.Contains(x.Parts[0]) {
+			return nil, nil, false
+		}
+		return x.Traversal.SimpleSplit().Rel, x.Parts, true
+	case *model.RelativeTraversalExpression:
+		if !isDirectParameterReference(parameters, x.Source) {
+			return nil, nil, false
+		}
+		return x.Traversal, x.Parts, true
+	default:
+		return nil, nil, false
+	}
+}
+
+func canLiftOutputTraversal(traversal hcl.Traversal) bool {
+	for _, traverser := range traversal {
+		var name string
+		switch traverser := traverser.(type) {
+		case hcl.TraverseAttr:
+			name = traverser.Name
+		case hcl.TraverseIndex:
+			if traverser.Key.Type() != cty.String {
+				continue
+			}
+			name = traverser.Key.AsString()
+		default:
+			continue
+		}
+
+		// The Output proxy resolves real Output and Object members before lifting properties.
+		if strings.HasPrefix(name, "__") || outputMemberNames.Contains(name) {
+			return false
+		}
+	}
+	return true
+}
+
+// canLiftTraversal returns true if this traversal can be lifted. Any traversal that does not traverse through
+// possibly-undefined values can be lifted. The result itself may be undefined.
 func (g *generator) canLiftTraversal(parts []model.Traversable) bool {
-	for _, p := range parts {
-		t := model.GetTraversableType(p)
+	if len(parts) < 2 {
+		return false
+	}
+	// Only check nonterminal parts: the final part is the result and may itself be undefined.
+	for _, part := range parts[:len(parts)-1] {
+		t := model.GetTraversableType(part)
 		if model.IsOptionalType(t) || isPromiseType(t) {
 			return false
 		}
@@ -69,53 +154,65 @@ func (g *generator) canLiftTraversal(parts []model.Traversable) bool {
 // - __apply(scope.traversal, eval(x, x.attr)) -> scope.traversal.attr
 //
 // Each of these patterns matches an apply that can be handled by `pulumi.Output`'s property access proxy.
-func (g *generator) parseProxyApply(parameters codegen.Set, args []model.Expression,
-	then model.Expression) (model.Expression, bool) {
-
+func (g *generator) parseProxyApply(parameters mapset.Set[model.Traversable], args []model.Expression,
+	then model.Expression,
+) (model.Expression, bool) {
 	if len(args) != 1 {
 		return nil, false
 	}
 
 	arg := args[0]
-	switch then := then.(type) {
-	case *model.IndexExpression:
-		t := arg.Type()
-		if !isParameterReference(parameters, then.Collection) || model.IsOptionalType(t) || isPromiseType(t) {
-			return nil, false
-		}
-		then.Collection = arg
-	case *model.ScopeTraversalExpression:
-		if !isParameterReference(parameters, then) || isPromiseType(arg.Type()) {
-			return nil, false
-		}
-		if !g.canLiftTraversal(then.Parts) {
-			return nil, false
-		}
-
-		switch arg := arg.(type) {
-		case *model.RelativeTraversalExpression:
-			arg.Traversal = append(arg.Traversal, then.Traversal[1:]...)
-			arg.Parts = append(arg.Parts, then.Parts...)
-		case *model.ScopeTraversalExpression:
-			arg.Traversal = append(arg.Traversal, then.Traversal[1:]...)
-			arg.Parts = append(arg.Parts, then.Parts...)
-		default:
-			return nil, false
-		}
-	default:
+	// If arg is output<dynamic>, then we can't lift the traversal.
+	if arg.Type().Equals(model.NewOutputType(model.DynamicType)) {
 		return nil, false
 	}
 
-	diags := arg.Typecheck(false)
-	contract.Assert(len(diags) == 0)
-	return arg, true
+	switch then := then.(type) {
+	case *model.IndexExpression:
+		t := arg.Type()
+		skipType := model.IsOptionalType(t) || isPromiseType(t) || isOutputType(t)
+		if !isDirectParameterReference(parameters, then.Collection) || skipType {
+			return nil, false
+		}
+		newIndex := &model.IndexExpression{
+			Collection: arg,
+			Key:        then.Key,
+		}
+		if diags := newIndex.Typecheck(false); diags.HasErrors() {
+			return nil, false
+		}
+		return newIndex, true
+	case *model.ScopeTraversalExpression, *model.RelativeTraversalExpression:
+		traversal, parts, ok := parameterRelativeTraversal(parameters, then)
+		if !ok || isPromiseType(arg.Type()) {
+			return nil, false
+		}
+		// A direct parameter reference is the identity projection. Preserve its argument so interpolation lowering can
+		// use it without introducing an explicit apply.
+		if len(traversal) == 0 {
+			return arg, true
+		}
+		if !g.canLiftTraversal(parts) || !canLiftOutputTraversal(traversal) {
+			return nil, false
+		}
+		newTraversal := &model.RelativeTraversalExpression{
+			Source:    arg,
+			Traversal: traversal,
+		}
+		if diags := newTraversal.Typecheck(false); diags.HasErrors() {
+			return nil, false
+		}
+		return newTraversal, true
+	default:
+		return nil, false
+	}
 }
 
-func callbackParameterReferences(expr model.Expression, parameters codegen.Set) []*model.Variable {
+func callbackParameterReferences(expr model.Expression, parameters mapset.Set[model.Traversable]) []*model.Variable {
 	var refs []*model.Variable
 	visitor := func(expr model.Expression) (model.Expression, hcl.Diagnostics) {
 		if expr, isScopeTraversal := expr.(*model.ScopeTraversalExpression); isScopeTraversal {
-			if parameters.Has(expr.Parts[0]) {
+			if parameters.Contains(expr.Parts[0]) {
 				refs = append(refs, expr.Parts[0].(*model.Variable))
 			}
 		}
@@ -123,7 +220,7 @@ func callbackParameterReferences(expr model.Expression, parameters codegen.Set) 
 	}
 
 	_, diags := model.VisitExpression(expr, model.IdentityVisitor, visitor)
-	contract.Assert(len(diags) == 0)
+	contract.Assertf(len(diags) == 0, "unexpected type error: %v", diags)
 	return refs
 }
 
@@ -132,9 +229,9 @@ func callbackParameterReferences(expr model.Expression, parameters codegen.Set) 
 //
 // If a match is found, parseInterpolate returns an appropriate call to the __interpolate intrinsic with a mix of
 // expressions and proxied applies.
-func (g *generator) parseInterpolate(parameters codegen.Set, args []model.Expression,
-	then *model.AnonymousFunctionExpression) (model.Expression, bool) {
-
+func (g *generator) parseInterpolate(parameters mapset.Set[model.Traversable], args []model.Expression,
+	then *model.AnonymousFunctionExpression,
+) (model.Expression, bool) {
 	template, ok := then.Body.(*model.TemplateExpression)
 	if !ok {
 		return nil, false
@@ -156,7 +253,7 @@ func (g *generator) parseInterpolate(parameters codegen.Set, args []model.Expres
 		proxyArgs := make([]model.Expression, len(parameterRefs))
 		for i, p := range parameterRefs {
 			argIndex, ok := indices[p]
-			contract.Assert(ok)
+			contract.Assertf(ok, "parameter index not found")
 
 			proxyArgs[i] = args[argIndex]
 		}
@@ -192,14 +289,14 @@ func (g *generator) lowerProxyApplies(expr model.Expression) (model.Expression, 
 	rewriter := func(expr model.Expression) (model.Expression, hcl.Diagnostics) {
 		// Ignore the node if it is not a call to the apply intrinsic.
 		apply, ok := expr.(*model.FunctionCallExpression)
-		if !ok || apply.Name != hcl2.IntrinsicApply {
+		if !ok || apply.Name != pcl.IntrinsicApply {
 			return expr, nil
 		}
 
 		// Parse the apply call.
-		args, then := hcl2.ParseApplyCall(apply)
+		args, then := pcl.ParseApplyCall(apply)
 
-		parameters := codegen.Set{}
+		parameters := mapset.NewSet[model.Traversable]()
 		for _, p := range then.Parameters {
 			parameters.Add(p)
 		}
@@ -226,21 +323,22 @@ func (g *generator) lowerProxyApplies(expr model.Expression) (model.Expression, 
 // this changes in the future, this transform will need to be applied in a more general way (e.g. by the apply
 // rewriter).
 func (g *generator) awaitInvokes(x model.Expression) model.Expression {
-	contract.Assert(g.asyncMain)
+	contract.Assertf(g.asyncMain, "main must be async to wrap invokes with await")
 
 	rewriter := func(x model.Expression) (model.Expression, hcl.Diagnostics) {
 		// Ignore the node if it is not a call to invoke.
 		call, ok := x.(*model.FunctionCallExpression)
-		if !ok || call.Name != hcl2.Invoke {
+		if !ok || call.Name != pcl.Invoke {
 			return x, nil
 		}
 
-		_, isPromise := call.Type().(*model.PromiseType)
-		contract.Assert(isPromise)
+		if _, isPromise := call.Type().(*model.PromiseType); isPromise {
+			return newAwaitCall(call), nil
+		}
 
-		return newAwaitCall(call), nil
+		return call, nil
 	}
 	x, diags := model.VisitExpression(x, model.IdentityVisitor, rewriter)
-	contract.Assert(len(diags) == 0)
+	contract.Assertf(len(diags) == 0, "unexpected diagnostics: %v", diags)
 	return x
 }

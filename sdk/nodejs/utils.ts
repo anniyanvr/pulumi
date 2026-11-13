@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,8 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-import { InvokeOptions } from "./invoke";
 
 /**
  * Common code for doing RTTI typechecks.  RTTI is done by having a boolean property on an object
@@ -29,7 +27,9 @@ export function isInstance<T>(obj: any, name: keyof T): obj is T {
     return hasTrueBooleanMember(obj, name);
 }
 
-/** @internal */
+/**
+ * @internal
+ */
 export function hasTrueBooleanMember(obj: any, memberName: string | number | symbol): boolean {
     if (obj === undefined || obj === null) {
         return false;
@@ -43,8 +43,27 @@ export function hasTrueBooleanMember(obj: any, memberName: string | number | sym
     return val === true;
 }
 
-// Workaround errors we sometimes get on some machines saying that Object.values is not available.
-/** @internal */
+/**
+ * @internal
+ */
+export function hasFunctionMember(obj: any, memberName: string | number | symbol): boolean {
+    if (obj === undefined || obj === null) {
+        return false;
+    }
+
+    const val = obj[memberName];
+    if (typeof val !== "function") {
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * A polyfill for Object.values
+ *
+ * @internal
+ */
 export function values(obj: object): any[] {
     const result: any[] = [];
     for (const key of Object.keys(obj)) {
@@ -53,12 +72,22 @@ export function values(obj: object): any[] {
     return result;
 }
 
-/** @internal */
+/**
+ * @internal
+ */
 export function union<T>(set1: Set<T>, set2: Set<T>) {
     return new Set([...set1, ...set2]);
 }
 
-/** @internal */
+/**
+ * @internal
+ */
 export const disableResourceReferences: boolean =
     process.env.PULUMI_DISABLE_RESOURCE_REFERENCES === "1" ||
     (process.env.PULUMI_DISABLE_RESOURCE_REFERENCES ?? "").toUpperCase() === "TRUE";
+
+/**
+ * @internal
+ */
+export const errorOutputString: boolean =
+    process.env.PULUMI_ERROR_OUTPUT_STRING === "1" || process.env.PULUMI_ERROR_OUTPUT_STRING?.toUpperCase() === "TRUE";

@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,20 +19,27 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
 )
 
 func testTraverse(t *testing.T, receiver Traversable, traverser hcl.Traverser, expected Traversable, expectDiags bool) {
 	actual, diags := receiver.Traverse(traverser)
-	assert.Equal(t, expected, actual)
+	if a, ok := actual.(Type); ok {
+		assert.True(t, a.Equals(expected.(Type)))
+	} else {
+		assert.Equal(t, expected, actual)
+	}
 	if expectDiags {
 		assert.Greater(t, len(diags), 0)
 	} else {
-		assert.Equal(t, 0, len(diags))
+		assert.Empty(t, diags)
 	}
 }
 
 func TestDynamicType(t *testing.T) {
+	t.Parallel()
+
 	// Test that DynamicType is assignable to and from itself.
 	assert.True(t, DynamicType.AssignableFrom(DynamicType))
 
@@ -116,7 +123,31 @@ func TestDynamicType(t *testing.T) {
 	testTraverse(t, DynamicType, hcl.TraverseIndex{Key: encapsulateType(DynamicType)}, DynamicType, false)
 }
 
+func TestIDType(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, IDType.AssignableFrom(StringType))
+	assert.False(t, StringType.AssignableFrom(IDType))
+
+	assert.Equal(t, SafeConversion, IDType.ConversionFrom(StringType))
+	assert.Equal(t, SafeConversion, StringType.ConversionFrom(IDType))
+
+	assert.Equal(t, SafeConversion, IDType.ConversionFrom(BoolType))
+	assert.Equal(t, SafeConversion, IDType.ConversionFrom(IntType))
+	assert.Equal(t, SafeConversion, IDType.ConversionFrom(NumberType))
+
+	assert.Equal(t, UnsafeConversion, BoolType.ConversionFrom(IDType))
+	assert.Equal(t, UnsafeConversion, IntType.ConversionFrom(IDType))
+	assert.Equal(t, UnsafeConversion, NumberType.ConversionFrom(IDType))
+
+	safeType, unsafeType := UnifyTypes(IDType, StringType)
+	assert.True(t, safeType.Equals(StringType))
+	assert.True(t, unsafeType.Equals(StringType))
+}
+
 func TestOptionalType(t *testing.T) {
+	t.Parallel()
+
 	typ := NewOptionalType(DynamicType)
 
 	// Test that creating an optional type with the same element type does not create a new type.
@@ -151,6 +182,8 @@ func TestOptionalType(t *testing.T) {
 }
 
 func TestOutputType(t *testing.T) {
+	t.Parallel()
+
 	typ := NewOutputType(DynamicType)
 
 	// Test that creating an output type with the same element type does not create a new type.
@@ -181,9 +214,15 @@ func TestOutputType(t *testing.T) {
 
 	// Test that output(T) is _not_ assignable from output(U), where U is not assignable to T.
 	assert.False(t, NewOutputType(BoolType).AssignableFrom(NewOutputType(IntType)))
+	assert.False(t, NewOutputType(NumberType).AssignableFrom(NewOutputType(StringType)))
 
 	// Test that output(T) is _not_ assignable from promise(U), where U is not assignable to T.
 	assert.False(t, NewOutputType(BoolType).AssignableFrom(NewPromiseType(IntType)))
+	assert.False(t, NewOutputType(NumberType).AssignableFrom(NewPromiseType(StringType)))
+
+	// But output(T) is still convertible from output(U)/promise(U) if U is convertible to T.
+	assert.Equal(t, UnsafeConversion, NewOutputType(NumberType).ConversionFrom(NewOutputType(StringType)))
+	assert.Equal(t, UnsafeConversion, NewOutputType(NumberType).ConversionFrom(NewPromiseType(StringType)))
 
 	// Test that traversing an output(T) returns an output(U), where U is the result of the inner traversal.
 	typ = NewOutputType(NewMapType(StringType))
@@ -226,6 +265,8 @@ func TestOutputType(t *testing.T) {
 }
 
 func TestPromiseType(t *testing.T) {
+	t.Parallel()
+
 	typ := NewPromiseType(DynamicType)
 
 	// Test that creating an promise type with the same element type does not create a new type.
@@ -295,6 +336,8 @@ func TestPromiseType(t *testing.T) {
 }
 
 func TestMapType(t *testing.T) {
+	t.Parallel()
+
 	typ := NewMapType(DynamicType)
 
 	// Test that creating an map type with the same element type does not create a new type.
@@ -332,6 +375,8 @@ func TestMapType(t *testing.T) {
 }
 
 func TestListType(t *testing.T) {
+	t.Parallel()
+
 	typ := NewListType(DynamicType)
 
 	// Test that creating an list type with the same element type does not create a new type.
@@ -362,6 +407,8 @@ func TestListType(t *testing.T) {
 }
 
 func TestSetType(t *testing.T) {
+	t.Parallel()
+
 	typ := NewSetType(DynamicType)
 
 	// Test that creating an set type with the same element type does not create a new type.
@@ -388,6 +435,8 @@ func TestSetType(t *testing.T) {
 }
 
 func TestUnionType(t *testing.T) {
+	t.Parallel()
+
 	typ := NewUnionType(BoolType, IntType, NumberType, StringType).(*UnionType)
 
 	// Test that creating a union with the same element types does not create a new type.
@@ -436,6 +485,8 @@ func TestUnionType(t *testing.T) {
 }
 
 func TestObjectType(t *testing.T) {
+	t.Parallel()
+
 	typ := NewObjectType(map[string]Type{
 		"foo": BoolType,
 		"bar": IntType,
@@ -490,6 +541,8 @@ func TestObjectType(t *testing.T) {
 	testTraverse(t, typ, hcl.TraverseAttr{Name: "bar"}, IntType, false)
 	testTraverse(t, typ, hcl.TraverseAttr{Name: "baz"}, NumberType, false)
 	testTraverse(t, typ, hcl.TraverseAttr{Name: "qux"}, NewOptionalType(BoolType), false)
+	// test case-insensitive attribute
+	testTraverse(t, typ, hcl.TraverseAttr{Name: "Qux"}, NewOptionalType(BoolType), true)
 	testTraverse(t, typ, hcl.TraverseIndex{Key: cty.StringVal("foo")}, BoolType, false)
 	testTraverse(t, typ, hcl.TraverseIndex{Key: cty.StringVal("bar")}, IntType, false)
 	testTraverse(t, typ, hcl.TraverseIndex{Key: cty.StringVal("baz")}, NumberType, false)
@@ -504,31 +557,9 @@ func TestObjectType(t *testing.T) {
 	testTraverse(t, typ, hcl.TraverseIndex{Key: encapsulateType(typ)}, DynamicType, true)
 }
 
-func TestOpaqueType(t *testing.T) {
-	foo, err := NewOpaqueType("foo")
-	assert.NotNil(t, foo)
-	assert.NoError(t, err)
-
-	foo2, ok := GetOpaqueType("foo")
-	assert.EqualValues(t, foo, foo2)
-	assert.True(t, ok)
-
-	foo3, err := NewOpaqueType("foo")
-	assert.Nil(t, foo3)
-	assert.Error(t, err)
-
-	bar, ok := GetOpaqueType("bar")
-	assert.Nil(t, bar)
-	assert.False(t, ok)
-
-	bar, err = NewOpaqueType("bar")
-	assert.NotNil(t, bar)
-	assert.NoError(t, err)
-
-	assert.NotEqual(t, foo, bar)
-}
-
 func TestInputType(t *testing.T) {
+	t.Parallel()
+
 	// Test that InputType(DynamicType) just returns DynamicType.
 	assert.Equal(t, DynamicType, InputType(DynamicType))
 
@@ -555,6 +586,10 @@ func TestInputType(t *testing.T) {
 		NewOutputType(NewListType(BoolType))), InputType(NewListType(BoolType)))
 
 	assert.Equal(t, NewUnionType(
+		NewTupleType(NewUnionType(BoolType, NewOutputType(BoolType)), NewUnionType(IntType, NewOutputType(IntType))),
+		NewOutputType(NewTupleType(BoolType, IntType))), InputType(NewTupleType(BoolType, IntType)))
+
+	assert.Equal(t, NewUnionType(
 		NewUnionType(BoolType, IntType, NewOutputType(BoolType), NewOutputType(IntType)),
 		NewOutputType(NewUnionType(BoolType, IntType))),
 		InputType(NewUnionType(BoolType, IntType)))
@@ -570,19 +605,21 @@ func TestInputType(t *testing.T) {
 
 func assertUnified(t *testing.T, expectedSafe, expectedUnsafe Type, types ...Type) {
 	actualSafe, actualUnsafe := UnifyTypes(types...)
-	assert.Equal(t, expectedSafe, actualSafe)
-	assert.Equal(t, expectedUnsafe, actualUnsafe)
+	assert.True(t, expectedSafe.Equals(actualSafe))
+	assert.True(t, expectedUnsafe.Equals(actualUnsafe))
 
 	// Reverse the types and ensure we get the same results.
 	for i, j := 0, len(types)-1; i < j; i, j = i+1, j-1 {
 		types[i], types[j] = types[j], types[i]
 	}
 	actualSafe2, actualUnsafe2 := UnifyTypes(types...)
-	assert.Equal(t, actualSafe, actualSafe2)
-	assert.Equal(t, actualUnsafe, actualUnsafe2)
+	assert.True(t, actualSafe.Equals(actualSafe2))
+	assert.True(t, actualUnsafe.Equals(actualUnsafe2))
 }
 
 func TestUnifyType(t *testing.T) {
+	t.Parallel()
+
 	// Number, int, and bool unify with string by preferring string.
 	assertUnified(t, StringType, StringType, NumberType, StringType)
 	assertUnified(t, StringType, StringType, IntType, StringType)
@@ -634,6 +671,58 @@ func TestUnifyType(t *testing.T) {
 	assertUnified(t, m5, m5, m4, m2, m0, m1)
 	assertUnified(t, m5, m5, m4, m0, m2, m1)
 
+	// A constant converts from nothing but itself, so distinct constants unify to their union.
+	cf, ct := NewConstType(BoolType, cty.False), NewConstType(BoolType, cty.True)
+	assert.Equal(t, NoConversion, cf.ConversionFrom(ct))
+	assert.Equal(t, UnsafeConversion, cf.ConversionFrom(BoolType))
+	// The same constant converts as its type does: a schema constant has an input-wrapped type.
+	inputCf := NewConstType(NewUnionType(BoolType, NewOutputType(BoolType)), cty.False)
+	assert.Equal(t, SafeConversion, inputCf.ConversionFrom(cf))
+	assert.Equal(t, NoConversion, inputCf.ConversionFrom(ct))
+	// A union, output, or optional destination sees the constant rather than its base type.
+	assert.Equal(t, SafeConversion, NewOptionalType(cf).ConversionFrom(cf))
+	assert.Equal(t, NoConversion, NewOptionalType(cf).ConversionFrom(ct))
+	assert.Equal(t, SafeConversion, InputType(NewOptionalType(cf)).ConversionFrom(cf))
+	assert.Equal(t, NoConversion, InputType(NewOptionalType(cf)).ConversionFrom(ct))
+	// A union of constants is assignable to the type of their values.
+	ca, cb := NewConstType(StringType, cty.StringVal("a")), NewConstType(StringType, cty.StringVal("b"))
+	assert.True(t, StringType.AssignableFrom(NewUnionType(ca, cb)))
+	assert.True(t, InputType(StringType).AssignableFrom(NewUnionType(ca, cb)))
+	assert.False(t, StringType.AssignableFrom(NewUnionType(ca, cf)))
+	// The null literal is a constant of the none type and converts to any optional type.
+	null := NewConstType(NoneType, cty.NullVal(cty.DynamicPseudoType))
+	assert.Equal(t, SafeConversion, NoneType.ConversionFrom(null))
+	assert.Equal(t, SafeConversion, InputType(NewOptionalType(StringType)).ConversionFrom(null))
+	// An enum accepts a member constant safely, no other constant, and its base type unsafely.
+	c1, c2, c3 := NewConstType(IntType, cty.NumberIntVal(1)), NewConstType(IntType, cty.NumberIntVal(2)),
+		NewConstType(IntType, cty.NumberIntVal(3))
+	enum := NewEnumType("test:index:Level", IntType, []cty.Value{cty.NumberIntVal(1), cty.NumberIntVal(2)})
+	assert.Equal(t, SafeConversion, enum.ConversionFrom(c1))
+	assert.Equal(t, NoConversion, enum.ConversionFrom(c3))
+	assert.Equal(t, UnsafeConversion, enum.ConversionFrom(IntType))
+	assert.Equal(t, SafeConversion, InputType(NewOptionalType(enum)).ConversionFrom(c2))
+	assert.Equal(t, NoConversion, InputType(NewOptionalType(enum)).ConversionFrom(c3))
+	assertUnified(t, NewUnionType(cf, ct), NewUnionType(cf, ct), cf, ct)
+	assertUnified(t, NewTupleType(NewUnionType(cf, ct)), NewTupleType(NewUnionType(cf, ct)),
+		NewTupleType(cf), NewTupleType(ct))
+
+	// A conversion check and a unification of the same types do not share a cached result, in either order.
+	a, b := NewTupleType(cf), NewTupleType(ct)
+	assertUnified(t, NewTupleType(NewUnionType(cf, ct)), NewTupleType(NewUnionType(cf, ct)), a, b)
+	assert.Equal(t, NoConversion, a.ConversionFrom(b))
+	a, b = NewTupleType(cf), NewTupleType(ct)
+	assert.Equal(t, NoConversion, a.ConversionFrom(b))
+	assertUnified(t, NewTupleType(NewUnionType(cf, ct)), NewTupleType(NewUnionType(cf, ct)), a, b)
+
+	// Nested tuples of constants with different lengths unify element by element.
+	t6 := NewTupleType(NewTupleType(cf, cf, cf))
+	t7 := NewTupleType(NewTupleType(ct), NewTupleType(cf))
+	t8 := NewTupleType(
+		NewTupleType(NewUnionType(cf, ct), NewOptionalType(cf), NewOptionalType(cf)),
+		NewOptionalType(NewTupleType(cf)),
+	)
+	assertUnified(t, t8, t8, t6, t7)
+
 	// Tuple types unify by constructing a new tuple type whose element types are the unification of the corresponding
 	// element types.
 	t2 := NewTupleType(StringType, NumberType)
@@ -668,20 +757,34 @@ func TestUnifyType(t *testing.T) {
 }
 
 func TestRecursiveObjectType(t *testing.T) {
-	props := map[string]Type{
-		"data": NewOutputType(IntType),
-	}
-	linkedListType := NewOptionalType(NewObjectType(props))
-	props["next"] = linkedListType
+	t.Parallel()
 
-	propsOther := map[string]Type{
-		"data": NewOutputType(IntType),
+	makeType := func(prop string) Type {
+		props := map[string]Type{
+			prop: NewOutputType(IntType),
+		}
+		objType := NewObjectType(props)
+		props["sibling"] = objType
+		listType := NewListType(objType)
+		linkedListType := NewOptionalType(listType)
+		props["next"] = linkedListType
+		return linkedListType
 	}
-	linkedListTypeOther := NewOptionalType(NewObjectType(propsOther))
-	propsOther["next"] = linkedListTypeOther
+
+	linkedListType := makeType("data")
+	linkedListTypeEqual := makeType("data")
+	linkedListTypeNonEqual := makeType("data1")
 
 	// Equals
-	assert.True(t, linkedListType.Equals(linkedListTypeOther))
+	assert.True(t, linkedListType.Equals(linkedListTypeEqual))
+	assert.False(t, linkedListType.Equals(linkedListTypeNonEqual))
+
+	// String conversion
+	assert.Equal(t, "union(none, list(object({data = output(int), next = union(none, list(...)), sibling = ...})))",
+		linkedListType.String())
+
+	// Convert from another type
+	assert.Equal(t, UnsafeConversion, linkedListType.ConversionFrom(linkedListTypeNonEqual))
 
 	// Contains eventuals
 	hasOutputs, hasPromises := ContainsEventuals(linkedListType)
@@ -690,7 +793,7 @@ func TestRecursiveObjectType(t *testing.T) {
 
 	// Resolving eventuals
 	resolvedLinkedListType := ResolveOutputs(linkedListType)
-	data := resolvedLinkedListType.(*UnionType).ElementTypes[1].(*ObjectType).Properties["data"]
+	data := resolvedLinkedListType.(*UnionType).ElementTypes[1].(*ListType).ElementType.(*ObjectType).Properties["data"]
 	assert.True(t, data.Equals(IntType))
 	hasOutputs, _ = ContainsEventuals(resolvedLinkedListType)
 	assert.False(t, hasOutputs)
@@ -699,4 +802,712 @@ func TestRecursiveObjectType(t *testing.T) {
 	inputLinkedListType := InputType(resolvedLinkedListType)
 	hasOutputs, _ = ContainsEventuals(inputLinkedListType)
 	assert.True(t, hasOutputs)
+}
+
+// TestRecursiveObjectTypeConvertsFromFiniteSource verifies that a finite source
+// value can be converted to a self-referential ObjectType.
+func TestRecursiveObjectTypeConvertsFromFiniteSource(t *testing.T) {
+	t.Parallel()
+
+	// Build a self-referential object type: Obj { a: Optional<Obj> }.
+	props := map[string]Type{}
+	recursive := NewObjectType(props)
+	props["a"] = NewOptionalType(recursive)
+
+	// Optional `a` means the property may be absent, so an empty source satisfies.
+	t.Run("empty source converts safely", func(t *testing.T) {
+		t.Parallel()
+		empty := NewObjectType(map[string]Type{})
+		assert.Equal(t, SafeConversion, recursive.ConversionFrom(empty))
+	})
+
+	t.Run("none source converts safely", func(t *testing.T) {
+		t.Parallel()
+		// Source: { a: <recursive itself absent> } — the recursive property is Optional.
+		src := NewObjectType(map[string]Type{"a": NoneType})
+		assert.Equal(t, SafeConversion, recursive.ConversionFrom(src))
+	})
+
+	t.Run("source mirroring schema converges", func(t *testing.T) {
+		t.Parallel()
+		// Source: { a: { a: {} } } has finite depth and matches the recursive shape.
+		outer := NewObjectType(map[string]Type{
+			"a": NewObjectType(map[string]Type{
+				"a": NewObjectType(map[string]Type{}),
+			}),
+		})
+		assert.Equal(t, SafeConversion, recursive.ConversionFrom(outer))
+	})
+
+	t.Run("source with incompatible property still rejected", func(t *testing.T) {
+		t.Parallel()
+		// Coinductive cycle handling shouldn't make conversions universally permissive:
+		// a source whose recursive property has a primitive type that can't satisfy the
+		// recursive target should still fail to convert.
+		src := NewObjectType(map[string]Type{"a": StringType})
+		assert.Equal(t, NoConversion, recursive.ConversionFrom(src))
+	})
+
+	t.Run("source with deeply incompatible nested property still rejected", func(t *testing.T) {
+		t.Parallel()
+		// Source: { a: { a: "string" } }. The OUTER "a" matches the recursive shape
+		// (it's an object), but the INNER nested "a" is a string and can never satisfy
+		// Optional<recursive>. The conversion check must descend into the source rather
+		// than short-circuit on the destination cycle.
+		src := NewObjectType(map[string]Type{
+			"a": NewObjectType(map[string]Type{
+				"a": StringType,
+			}),
+		})
+		assert.Equal(t, NoConversion, recursive.ConversionFrom(src))
+	})
+}
+
+// TestRecursiveObjectTypeViaInputUnion mirrors the InputShape/PlainShape
+// pattern produced by codegen/pcl.schemaTypeToType: the schema property is
+// reachable as `Optional<Union<recursiveInputObj | Output<recursivePlainObj>>>`,
+// and the value is an empty object that should satisfy `recursiveInputObj`.
+// Before the cycle-handling fix, the conversion bailed out with NoConversion.
+func TestRecursiveObjectTypeViaInputUnion(t *testing.T) {
+	t.Parallel()
+
+	inputProps := map[string]Type{}
+	inputObj := NewObjectType(inputProps)
+	inputProps["a"] = NewOptionalType(inputObj)
+
+	plainProps := map[string]Type{}
+	plainObj := NewObjectType(plainProps)
+	plainProps["a"] = NewOptionalType(plainObj)
+
+	schemaTyp := NewOptionalType(NewUnionType(inputObj, NewOutputType(plainObj)))
+
+	// Value type: { a: {} } - finite, satisfies inputObj.
+	value := NewObjectType(map[string]Type{
+		"a": NewObjectType(map[string]Type{}),
+	})
+
+	assert.Equal(t, SafeConversion, schemaTyp.ConversionFrom(value))
+}
+
+// Tests that object type annotations can be added and queried correctly.
+func TestObjectTypeAnnotations(t *testing.T) {
+	t.Parallel()
+
+	// Tests that an annotation of a non-interface type (here, *x) can be added and queried correctly, whether added using
+	// NewObjectType, Annotate or append.
+	t.Run("new/x-x", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{}, expected)
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[*x](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type *x")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("append/x-x", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotations = append(o.Annotations, expected)
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[*x](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type *x")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("annotate/x-x", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotate(expected)
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[*x](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type *x")
+		require.Same(t, expected, actual)
+	})
+
+	// Tests that when multiple annotations of a non-interface type (here, *x) are added, the first is returned by a
+	// query, whether they are added by NewObjectType, Annotate or append.
+	t.Run("new/x-x-x", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{}, expected, &x{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[*x](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find the first annotation of type *x")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("append/x-x-x", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotations = append(o.Annotations, expected, &x{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[*x](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find the first annotation of type *x")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("annotate/x-x-x", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotate(expected, &x{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[*x](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find the first annotation of type *x")
+		require.Same(t, expected, actual)
+	})
+
+	// Tests that when an annotation is queried by non-interface type and there is no match, that no annotations are
+	// returned, whether they were added by NewObjectType, Annotate or append.
+	t.Run("new/x-y", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		o := NewObjectType(map[string]Type{}, &x{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[*y](o)
+
+		// Assert.
+		require.False(t, ok, "did not expect to find an annotation of type *y")
+		require.Nil(t, actual)
+	})
+
+	t.Run("append/x-y", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		o := NewObjectType(map[string]Type{})
+		o.Annotations = append(o.Annotations, &x{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[*y](o)
+
+		// Assert.
+		require.False(t, ok, "did not expect to find an annotation of type *y")
+		require.Nil(t, actual)
+	})
+
+	t.Run("annotate/x-y", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		o := NewObjectType(map[string]Type{})
+		o.Annotate(&x{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[*y](o)
+
+		// Assert.
+		require.False(t, ok, "did not expect to find an annotation of type *y")
+		require.Nil(t, actual)
+	})
+
+	// Tests that when an annotation is queried by interface type (here i, with an implementation of *x), the correct
+	// annotation is returned, whether it was added by NewObjectType, Annotate or append.
+	t.Run("new/x-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{}, expected)
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("append/x-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotations = append(o.Annotations, expected)
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("annotate/x-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotate(expected)
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	// Tests that when an annotation is queried by interface type (here i) and there are no matching implementations, no
+	// annotation is returned, whether they were added by NewObjectType, Annotate or append.
+	t.Run("new/z-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		o := NewObjectType(map[string]Type{}, &z{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.False(t, ok, "did not expect to find an annotation of type i")
+		require.Nil(t, actual)
+	})
+
+	t.Run("append/z-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		o := NewObjectType(map[string]Type{})
+		o.Annotations = append(o.Annotations, &z{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.False(t, ok, "did not expect to find an annotation of type i")
+		require.Nil(t, actual)
+	})
+
+	t.Run("annotate/z-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		o := NewObjectType(map[string]Type{})
+		o.Annotate(&z{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.False(t, ok, "did not expect to find an annotation of type i")
+		require.Nil(t, actual)
+	})
+
+	// Tests that when multiple (identically typed) implementations of an interface type (here i) are added, the first is
+	// returned by a query for that interface type, whether they were added by NewObjectType, Annotate or append.
+	t.Run("new/x-x-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{}, expected, &x{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find the first annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("append/x-x-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotations = append(o.Annotations, expected, &x{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find the first annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("annotate/x-x-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotate(expected, &x{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find the first annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	// Tests that when multiple (differently typed) implementations of an interface type (here i) are added, the first is
+	// returned by a query for that interface type, whether they were added by NewObjectType, Annotate or append.
+	t.Run("new/x-y-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{}, expected, &y{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("append/x-y-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotations = append(o.Annotations, expected, &y{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("annotate/x-y-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotate(expected, &y{})
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	// Tests that interface type queries return the first implementing annotation, even if there are annotations of
+	// non-implementing types present. Tests this whether the annotations were added by NewObjectType, Annotate or append.
+	t.Run("new/z-x-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{}, &z{}, expected)
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("append/z-x-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotations = append(o.Annotations, &z{}, expected)
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+
+	t.Run("annotate/z-x-i", func(t *testing.T) {
+		t.Parallel()
+
+		// Arrange.
+		expected := &x{}
+
+		o := NewObjectType(map[string]Type{})
+		o.Annotate(&z{}, expected)
+
+		// Act.
+		actual, ok := GetObjectTypeAnnotation[i](o)
+
+		// Assert.
+		require.True(t, ok, "expected to find an annotation of type i (*x)")
+		require.Same(t, expected, actual)
+	})
+}
+
+type i interface {
+	f() string
+}
+
+type x struct{}
+
+func (*x) f() string {
+	return "x"
+}
+
+var _ i = (*x)(nil)
+
+type y struct{}
+
+func (*y) f() string {
+	return "y"
+}
+
+var _ i = (*y)(nil)
+
+type z struct{}
+
+// TestUnifyRecursiveObjectTypes verifies that two recursive object types of different shapes unify to one
+// recursive object type instead of recursing without end.
+func TestUnifyRecursiveObjectTypes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("list", func(t *testing.T) {
+		t.Parallel()
+
+		aProps := map[string]Type{}
+		a := NewObjectType(aProps)
+		aProps["self"] = NewListType(a)
+		bProps := map[string]Type{"b": IntType}
+		b := NewObjectType(bProps)
+		bProps["self"] = NewListType(b)
+
+		expectedProps := map[string]Type{"b": NewOptionalType(IntType)}
+		expected := NewObjectType(expectedProps)
+		expectedProps["self"] = NewListType(expected)
+
+		assertUnified(t, expected, expected, a, b)
+	})
+
+	t.Run("optional", func(t *testing.T) {
+		t.Parallel()
+
+		aProps := map[string]Type{}
+		a := NewObjectType(aProps)
+		aProps["self"] = NewOptionalType(a)
+		bProps := map[string]Type{"b": IntType}
+		b := NewObjectType(bProps)
+		bProps["self"] = NewOptionalType(b)
+
+		expected := NewObjectType(map[string]Type{
+			"b":    NewOptionalType(IntType),
+			"self": NewUnionType(NoneType, a, b),
+		})
+
+		assertUnified(t, expected, expected, a, b)
+	})
+}
+
+// TestUnifyMapWithObject verifies that a map unifies with an object by folding the object's property types into
+// the map's element type in an order that does not depend on the property names.
+func TestUnifyMapWithObject(t *testing.T) {
+	t.Parallel()
+
+	m := NewMapType(NewUnionType(BoolType, IntType, NoneType))
+	properties := map[string]Type{
+		"a": BoolType,
+		"b": NumberType,
+		"c": NewConstType(StringType, cty.StringVal("y")),
+	}
+	reordered := map[string]Type{
+		"a": properties["c"],
+		"b": properties["a"],
+		"c": properties["b"],
+	}
+	expectedUnsafe := NewMapType(NewUnionType(NumberType, NoneType, NewConstType(StringType, cty.StringVal("y"))))
+
+	for _, obj := range []Type{NewObjectType(properties), NewObjectType(reordered)} {
+		assertUnified(t, NewUnionType(m, obj), expectedUnsafe, m, obj)
+	}
+}
+
+// TestTupleConversionFromShorterTuple verifies that a tuple converts from a shorter tuple only when the elements
+// that the source lacks are optional.
+func TestTupleConversionFromShorterTuple(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, SafeConversion,
+		NewTupleType(IntType, NewOptionalType(BoolType)).ConversionFrom(NewTupleType(IntType)))
+	assert.Equal(t, NoConversion, NewTupleType(IntType, BoolType).ConversionFrom(NewTupleType(IntType)))
+	assert.Equal(t, NoConversion, NewTupleType(IntType).ConversionFrom(NewTupleType(IntType, BoolType)))
+}
+
+// A recursive type, such as a WAF statement that nests statements, must not send assignability into an
+// infinite descent. A cycle is assumed assignable only for the exact `(dest, src)` pair that is mid-flight, so a
+// mismatch at any finite leaf is still found.
+func TestAssignableFromRecursiveType(t *testing.T) {
+	t.Parallel()
+
+	// statement = { statements: list(statement) }
+	statement := NewObjectType(map[string]Type{})
+	statement.Properties["statements"] = NewListType(statement)
+
+	// named = { statements: list(named), name: string }
+	named := NewObjectType(map[string]Type{"name": StringType})
+	named.Properties["statements"] = NewListType(named)
+
+	// node = { next: optional(node) }
+	node := NewObjectType(map[string]Type{})
+	node.Properties["next"] = NewOptionalType(node)
+
+	// tree = { children: map(tree) }
+	tree := NewObjectType(map[string]Type{})
+	tree.Properties["children"] = NewMapType(tree)
+
+	// even = { odd: odd }, odd = { even: optional(even) }
+	even, odd := NewObjectType(map[string]Type{}), NewObjectType(map[string]Type{})
+	even.Properties["odd"] = odd
+	odd.Properties["even"] = NewOptionalType(even)
+
+	// outerNamed = { statements: list(statement), name: string }: named at the top level only.
+	outerNamed := NewObjectType(map[string]Type{"name": StringType, "statements": NewListType(statement)})
+
+	cases := []struct {
+		name      string
+		dest, src Type
+		want      bool
+	}{
+		{"input from self", InputType(statement), statement, true},
+		{"output from self", NewOutputType(statement), statement, true},
+		{"promise from self", NewPromiseType(statement), statement, true},
+		{"list of input from list of self", NewListType(InputType(statement)), NewListType(statement), true},
+		{"optional self reference", InputType(node), node, true},
+		{"map self reference", InputType(tree), tree, true},
+		{"mutual recursion", InputType(even), even, true},
+		{"wider recursive source", statement, named, true},
+		{"narrower recursive source", named, statement, false},
+		{"finite source mismatch at a leaf", statement, NewObjectType(map[string]Type{
+			"statements": NewListType(NewObjectType(map[string]Type{"statements": NewListType(StringType)})),
+		}), false},
+		{"re-entry with a different source", named, outerNamed, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, c.want, c.dest.AssignableFrom(c.src))
+		})
+	}
+}
+
+// A constant keeps its identity under assignability: a union that lists the constant accepts it, and a type that
+// accepts the constant's value type accepts the constant.
+func TestAssignableFromConst(t *testing.T) {
+	t.Parallel()
+
+	a := NewConstType(StringType, cty.StringVal("a"))
+	b := NewConstType(StringType, cty.StringVal("b"))
+	c := NewConstType(StringType, cty.StringVal("c"))
+	aOrB := NewUnionType(a, b)
+
+	assert.True(t, aOrB.AssignableFrom(NewConstType(StringType, cty.StringVal("a"))))
+	assert.False(t, aOrB.AssignableFrom(c))
+	assert.False(t, aOrB.AssignableFrom(StringType))
+	assert.True(t, NewOutputType(StringType).AssignableFrom(a))
+	assert.True(t, NewListType(StringType).AssignableFrom(NewTupleType(a, b)))
+}
+
+// Two recursive objects are equal when every finite leaf matches. A cycle counts as equal only for the exact pair of
+// objects that is mid-flight, so an object that re-enters the cycle against a different other is still compared.
+func TestObjectTypeEqualsRecursive(t *testing.T) {
+	t.Parallel()
+
+	// statement = { statements: list(statement) }, twice, as two distinct values.
+	newStatement := func() *ObjectType {
+		statement := NewObjectType(map[string]Type{})
+		statement.Properties["statements"] = NewListType(statement)
+		return statement
+	}
+	statement, sameShape := newStatement(), newStatement()
+
+	// named = { statements: list(named), name: string }
+	named := NewObjectType(map[string]Type{"name": StringType})
+	named.Properties["statements"] = NewListType(named)
+
+	// outerNamed = { statements: list(statement), name: string }: named at the top level only.
+	outerNamed := NewObjectType(map[string]Type{"name": StringType, "statements": NewListType(statement)})
+
+	// twoDeep = { statements: list({ statements: list(string) }) }: finite, and differs from statement at depth two.
+	twoDeep := NewObjectType(map[string]Type{
+		"statements": NewListType(NewObjectType(map[string]Type{"statements": NewListType(StringType)})),
+	})
+
+	cases := []struct {
+		name string
+		a, b Type
+		want bool
+	}{
+		{"same shape", statement, sameShape, true},
+		{"differs in a leaf", statement, twoDeep, false},
+		{"differs under a cycle", named, outerNamed, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, c.want, c.a.Equals(c.b))
+			assert.Equal(t, c.want, c.b.Equals(c.a))
+		})
+	}
 }

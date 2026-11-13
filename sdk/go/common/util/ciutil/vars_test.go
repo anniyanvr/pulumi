@@ -1,4 +1,4 @@
-// Copyright 2016-2019, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,11 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package ciutil
 
 import (
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +34,13 @@ func TestDetectVars(t *testing.T) {
 			"TF_BUILD":       "true",
 			"BUILD_BUILDID":  buildNumber,
 			"GITHUB_ACTIONS": "",
+		},
+		Buildkite: {
+			"GITHUB_ACTIONS":         "",
+			"TRAVIS":                 "",
+			"BUILDKITE":              "true",
+			"BUILDKITE_BUILD_NUMBER": buildNumber,
+			"BUILDKITE_BUILD_ID":     buildID,
 		},
 		CircleCI: {
 			"TRAVIS":           "",
@@ -71,14 +78,8 @@ func TestDetectVars(t *testing.T) {
 	for system := range systemAndEnvVars {
 		t.Run(fmt.Sprintf("Test_%v_Detection", system), func(t *testing.T) {
 			envVars := systemAndEnvVars[system]
-			originalEnvVars := make(map[string]string)
 			for envVar := range envVars {
-				// Save the original env value
-				if value, isSet := os.LookupEnv(envVar); isSet {
-					originalEnvVars[envVar] = value
-				}
-
-				os.Setenv(envVar, envVars[envVar])
+				t.Setenv(envVar, envVars[envVar])
 			}
 			vars := DetectVars()
 			// For CI systems where the build number and the ID are the same,
@@ -94,16 +95,6 @@ func TestDetectVars(t *testing.T) {
 				assert.Equal(t,
 					buildNumber, vars.BuildNumber,
 					"%v did not set the expected build number %v in the Vars struct.", system, buildNumber)
-			}
-
-			// Restore any modified env vars back to their original value
-			// if we previously saved it. Otherwise, just unset it.
-			for envVar := range envVars {
-				if val, ok := originalEnvVars[envVar]; ok {
-					os.Setenv(envVar, val)
-				} else {
-					os.Unsetenv(envVar)
-				}
 			}
 		})
 	}
@@ -130,42 +121,33 @@ func TestDetectVarsBaseCI(t *testing.T) {
 	for system := range systemAndEnvVars {
 		t.Run(fmt.Sprintf("Test_%v_Detection", system), func(t *testing.T) {
 			envVars := systemAndEnvVars[system]
-			originalEnvVars := make(map[string]string)
 			for envVar := range envVars {
-				// Save the original env value
-				if value, isSet := os.LookupEnv(envVar); isSet {
-					originalEnvVars[envVar] = value
-				}
-
-				os.Setenv(envVar, envVars[envVar])
+				t.Setenv(envVar, envVars[envVar])
 			}
 			vars := DetectVars()
 			assert.Equal(t,
 				string(system), string(vars.Name),
 				"%v did not set the expected CI system name in the Vars struct.", system)
-
-			// Restore any modified env vars back to their original value
-			// if we previously saved it. Otherwise, just unset it.
-			for envVar := range envVars {
-				if val, ok := originalEnvVars[envVar]; ok {
-					os.Setenv(envVar, val)
-				} else {
-					os.Unsetenv(envVar)
-				}
-			}
 		})
 	}
 }
 
 func TestDetectVarsDisableCIDetection(t *testing.T) {
-	os.Setenv("PULUMI_DISABLE_CI_DETECTION", "nonEmptyString")
-	os.Setenv("TRAVIS", "true")
-	os.Setenv("TRAVIS_JOB_ID", "1234")
+	t.Setenv("PULUMI_DISABLE_CI_DETECTION", "nonEmptyString")
+	t.Setenv("TRAVIS", "true")
+	t.Setenv("TRAVIS_JOB_ID", "1234")
 
 	v := DetectVars()
 	assert.Equal(t, "", v.BuildID)
+}
 
-	os.Setenv("PULUMI_DISABLE_CI_DETECTION", "")
-	os.Setenv("TRAVIS", "")
-	os.Setenv("TRAVIS_JOB_ID", "")
+func TestDetectVarsPrefersGenericCI(t *testing.T) {
+	name := "generic-ci-system"
+
+	t.Setenv("PULUMI_CI_SYSTEM", name)
+	t.Setenv("TRAVIS", "true")
+
+	v := DetectVars()
+
+	assert.Equal(t, name, string(v.Name))
 }

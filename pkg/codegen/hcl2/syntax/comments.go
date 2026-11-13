@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,13 +16,16 @@ package syntax
 
 import (
 	"bytes"
+	"maps"
 	"regexp"
 	"strings"
 
+	mapset "github.com/deckarep/golang-set/v2"
+
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/slice"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // tokenList is a list of Tokens with methods to aid in mapping source positions to tokens.
@@ -97,9 +100,7 @@ func (tokenMap) isTokenMap() {}
 func NewTokenMapForFiles(files []*File) TokenMap {
 	tokens := tokenMap{}
 	for _, f := range files {
-		for node, ts := range f.Tokens.(tokenMap) {
-			tokens[node] = ts
-		}
+		maps.Copy(tokens, f.Tokens.(tokenMap))
 	}
 	return tokens
 }
@@ -108,7 +109,7 @@ type tokenMapper struct {
 	tokenMap             tokenMap
 	tokens               tokenList
 	stack                []hclsyntax.Node
-	templateControlExprs codegen.Set
+	templateControlExprs mapset.Set[hclsyntax.Node]
 }
 
 func (m *tokenMapper) getParent() (hclsyntax.Node, bool) {
@@ -132,7 +133,7 @@ func (m *tokenMapper) inTemplateControl() bool {
 		return false
 	}
 	parent := m.stack[len(m.stack)-2]
-	return m.templateControlExprs.Has(parent)
+	return m.templateControlExprs.Contains(parent)
 }
 
 func (m *tokenMapper) collectLabelTokens(r hcl.Range) Token {
@@ -148,22 +149,22 @@ func (m *tokenMapper) collectLabelTokens(r hcl.Range) Token {
 	if str.Raw.Type != hclsyntax.TokenQuotedLit || len(str.LeadingTrivia) != 0 || len(str.TrailingTrivia) != 0 {
 		return m.tokens.atPos(r.Start)
 	}
-	close := tokens[2]
-	if close.Raw.Type != hclsyntax.TokenCQuote || len(close.LeadingTrivia) != 0 {
+	closeTok := tokens[2]
+	if closeTok.Raw.Type != hclsyntax.TokenCQuote || len(closeTok.LeadingTrivia) != 0 {
 		return m.tokens.atPos(r.Start)
 	}
 	return Token{
 		Raw: hclsyntax.Token{
 			Type:  hclsyntax.TokenQuotedLit,
-			Bytes: append(append(open.Raw.Bytes, str.Raw.Bytes...), close.Raw.Bytes...),
+			Bytes: append(append(open.Raw.Bytes, str.Raw.Bytes...), closeTok.Raw.Bytes...),
 			Range: hcl.Range{
 				Filename: open.Raw.Range.Filename,
 				Start:    open.Raw.Range.Start,
-				End:      close.Raw.Range.End,
+				End:      closeTok.Raw.Range.End,
 			},
 		},
 		LeadingTrivia:  open.LeadingTrivia,
-		TrailingTrivia: close.TrailingTrivia,
+		TrailingTrivia: closeTok.TrailingTrivia,
 	}
 }
 
@@ -172,7 +173,7 @@ func (m *tokenMapper) mapRelativeTraversalTokens(traversal hcl.Traversal) []Trav
 		return nil
 	}
 
-	contract.Assert(traversal.IsRelative())
+	contract.Requiref(traversal.IsRelative(), "traversal", "must be relative")
 	items := make([]TraverserTokens, len(traversal))
 	for i, t := range traversal {
 		rng := t.SourceRange()
@@ -326,12 +327,12 @@ func (m *tokenMapper) Exit(n hclsyntax.Node) hcl.Diagnostics {
 	var parens Parentheses
 	startParens, endParens := n.Range().Start.Byte-1, n.Range().End.Byte
 	for {
-		open, close := m.tokens.atOffset(startParens), m.tokens.atOffset(endParens)
-		if open.Raw.Type != hclsyntax.TokenOParen || close.Raw.Type != hclsyntax.TokenCParen {
+		openTok, closeTok := m.tokens.atOffset(startParens), m.tokens.atOffset(endParens)
+		if openTok.Raw.Type != hclsyntax.TokenOParen || closeTok.Raw.Type != hclsyntax.TokenCParen {
 			break
 		}
-		parens.Open, parens.Close = append(parens.Open, open), append(parens.Close, close)
-		startParens, endParens = open.Range().Start.Byte-1, close.Range().End.Byte
+		parens.Open, parens.Close = append(parens.Open, openTok), append(parens.Close, closeTok)
+		startParens, endParens = openTok.Range().Start.Byte-1, closeTok.Range().End.Byte
 	}
 	if m.isSingleFunctionCallArg() && len(parens.Open) > 0 {
 		parens.Open, parens.Close = parens.Open[:len(parens.Open)-1], parens.Close[:len(parens.Close)-1]
@@ -365,7 +366,7 @@ func (m *tokenMapper) Exit(n hclsyntax.Node) hcl.Diagnostics {
 		trueRange := m.nodeRange(n.TrueResult)
 		falseRange := m.nodeRange(n.FalseResult)
 
-		if m.templateControlExprs.Has(n) {
+		if m.templateControlExprs.Contains(n) {
 			condition := m.tokens.atPos(condRange.Start)
 
 			ift := m.tokens.atOffset(condition.Range().Start.Byte - 1)
@@ -378,8 +379,8 @@ func (m *tokenMapper) Exit(n hclsyntax.Node) hcl.Diagnostics {
 
 			var openElse, elset, closeElse *Token
 			if endifOrElse.Raw.Type == hclsyntax.TokenIdent && string(endifOrElse.Raw.Bytes) == "else" {
-				open, t, close := openEndifOrElse, endifOrElse, closeEndifOrElse
-				openElse, elset, closeElse = &open, &t, &close
+				openTok, t, closeTok := openEndifOrElse, endifOrElse, closeEndifOrElse
+				openElse, elset, closeElse = &openTok, &t, &closeTok
 
 				openEndifOrElse = m.tokens.atPos(falseRange.End)
 				endifOrElse = m.tokens.atPos(openEndifOrElse.Range().End)
@@ -444,7 +445,7 @@ func (m *tokenMapper) Exit(n hclsyntax.Node) hcl.Diagnostics {
 			ifToken = &ift
 		}
 
-		if m.templateControlExprs.Has(n) {
+		if m.templateControlExprs.Contains(n) {
 			closeFor := m.tokens.atPos(m.nodeRange(n.CollExpr).End)
 
 			openEndfor := m.tokens.atPos(valRange.End)
@@ -481,7 +482,7 @@ func (m *tokenMapper) Exit(n hclsyntax.Node) hcl.Diagnostics {
 		}
 	case *hclsyntax.FunctionCallExpr:
 		args := n.Args
-		commas := make([]Token, 0, len(args))
+		commas := slice.Prealloc[Token](len(args))
 		if len(args) > 0 {
 			for _, ex := range args[:len(args)-1] {
 				commas = append(commas, m.tokens.atPos(m.nodeRange(ex).End))
@@ -596,7 +597,7 @@ func (m *tokenMapper) Exit(n hclsyntax.Node) hcl.Diagnostics {
 		}
 	case *hclsyntax.TupleConsExpr:
 		exprs := n.Exprs
-		commas := make([]Token, 0, len(exprs))
+		commas := slice.Prealloc[Token](len(exprs))
 		if len(exprs) > 0 {
 			for _, ex := range exprs[:len(exprs)-1] {
 				commas = append(commas, m.tokens.atPos(m.nodeRange(ex).End))
@@ -631,8 +632,8 @@ func (m *tokenMapper) Exit(n hclsyntax.Node) hcl.Diagnostics {
 // mapTokens builds a mapping from the syntax nodes in the given source file to their tokens. The mapping is recorded
 // in the map passed in to the function.
 func mapTokens(rawTokens hclsyntax.Tokens, filename string, root hclsyntax.Node, contents []byte, tokenMap tokenMap,
-	initialPos hcl.Pos) {
-
+	initialPos hcl.Pos,
+) {
 	// Turn the list of raw tokens into a list of trivia-carrying tokens.
 	lastEndPos := initialPos
 	var tokens tokenList
@@ -662,6 +663,7 @@ func mapTokens(rawTokens hclsyntax.Tokens, filename string, root hclsyntax.Node,
 			trivia = append(trivia, Whitespace{rng: rng, bytes: triviaBytes})
 		}
 
+		//nolint:exhaustive // Only some types need special casing, the rest are handled by the default case.
 		switch raw.Type {
 		case hclsyntax.TokenComment:
 			trivia = append(trivia, Comment{Lines: processComment(raw.Bytes), rng: raw.Range, bytes: raw.Bytes})
@@ -698,7 +700,8 @@ func mapTokens(rawTokens hclsyntax.Tokens, filename string, root hclsyntax.Node,
 	}
 
 	// If we had any tokens, we should have attached all trivia to something.
-	contract.Assert(len(trivia) == 0 || len(tokens) == 0)
+	contract.Assertf(len(trivia) == 0 || len(tokens) == 0,
+		"unexpected unattached trivia (%d found)", len(trivia))
 
 	// Now build the token map.
 	//
@@ -712,9 +715,9 @@ func mapTokens(rawTokens hclsyntax.Tokens, filename string, root hclsyntax.Node,
 	diags := hclsyntax.Walk(root, &tokenMapper{
 		tokenMap:             tokenMap,
 		tokens:               tokens,
-		templateControlExprs: codegen.Set{},
+		templateControlExprs: mapset.NewSet[hclsyntax.Node](),
 	})
-	contract.Assert(diags == nil)
+	contract.Assertf(diags == nil, "error building token map: %v", diags)
 
 	// If the root was a Body and there is a trailing end-of-file token, attach it to the body.
 	body, isBody := root.(*hclsyntax.Body)
@@ -745,23 +748,24 @@ func processComment(bytes []byte) []string {
 
 // These regexes are used by processBlockComment. The first matches a block comment start, the second a block comment
 // end, and the third a block comment line prefix.
-var blockStartPat = regexp.MustCompile(`^/\*+`)
-var blockEndPat = regexp.MustCompile(`[[:space:]]*\*+/$`)
-var blockPrefixPat = regexp.MustCompile(`^[[:space:]]*\*`)
+var (
+	blockStartPat  = regexp.MustCompile(`^/\*+`)
+	blockEndPat    = regexp.MustCompile(`[[:space:]]*\*+/$`)
+	blockPrefixPat = regexp.MustCompile(`^[[:space:]]*\*`)
+)
 
 // processBlockComment splits a block comment into mutiple lines, removes comment delimiters, and attempts to remove
 // common comment prefixes from interior lines. For example, the following HCL block comment:
 //
-//     /**
-//      * This is a block comment!
-//      *
-//      * It has multiple lines.
-//      */
+//	/**
+//	 * This is a block comment!
+//	 *
+//	 * It has multiple lines.
+//	 */
 //
 // becomes this set of lines:
 //
-//     []string{" This is a block comment!", "", " It has multiple lines."}
-//
+//	[]string{" This is a block comment!", "", " It has multiple lines."}
 func processBlockComment(text string) []string {
 	lines := strings.Split(text, "\n")
 
@@ -787,12 +791,12 @@ func processBlockComment(text string) []string {
 		switch i {
 		case 0:
 			start := blockStartPat.FindString(l)
-			contract.Assert(start != "")
+			contract.Assertf(start != "", "unexpected block comment start: %q", l)
 			l = l[len(start):]
 
 			// If this is a single-line block comment, trim the end pattern as well.
 			if len(lines) == 1 {
-				contract.Assert(prefix == "")
+				contract.Assertf(prefix == "", "unexpected block comment prefix: %q", prefix)
 
 				if end := blockEndPat.FindString(l); end != "" {
 					l = l[:len(l)-len(end)]

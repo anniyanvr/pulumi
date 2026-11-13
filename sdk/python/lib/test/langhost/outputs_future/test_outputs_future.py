@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,20 +19,22 @@ class TestOutputsFuture(LanghostTest):
     def test_outputs_future(self):
         self.run_test(
             program=path.join(self.base_path(), "outputs_future"),
-            expected_resource_count=0)
+            expected_resource_count=0,
+        )
 
     def invoke(self, _ctx, token, args, _provider, _version):
         self.assertEqual("test:index:MyFunction", token)
-        self.assertDictEqual({
-            "value": 41,
-        }, args)
+        self.assertDictEqual(
+            {
+                "value": 41,
+            },
+            args,
+        )
 
-        return [], {
-            "value": args["value"] + 1
-        }
+        return [], {"value": args["value"] + 1}
 
-    def register_resource_outputs(self, _ctx, _dry_run, _urn, ty, _name, _resource, outputs):
+    def register_resource_outputs(
+        self, _ctx, _dry_run, _urn, ty, _name, _resource, outputs
+    ):
         self.assertEqual(ty, "pulumi:pulumi:Stack")
-        self.assertDictEqual({
-            "value": 42
-        }, outputs)
+        self.assertDictEqual({"value": 42}, outputs)

@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,23 +15,27 @@
 package diag
 
 import (
+	"bytes"
+	"fmt"
 	"io"
-	"io/ioutil"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/diag/colors"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/diag/colors"
 )
 
 func discardSink() Sink {
 	// Create a new default sink with /dev/null writers to avoid spamming the test log.
 	return newDefaultSink(FormatOptions{Color: colors.Never}, map[Severity]io.Writer{
-		Debug:   ioutil.Discard,
-		Info:    ioutil.Discard,
-		Infoerr: ioutil.Discard,
-		Error:   ioutil.Discard,
-		Warning: ioutil.Discard,
+		Debug:   io.Discard,
+		Info:    io.Discard,
+		Infoerr: io.Discard,
+		Error:   io.Discard,
+		Warning: io.Discard,
 	})
 }
 
@@ -42,11 +46,11 @@ func TestCounts(t *testing.T) {
 
 	const numEach = 10
 
-	for i := 0; i < numEach; i++ {
+	for i := range numEach {
 		sink.Warningf(&Diag{Message: "A test of the emergency warning system: %v."}, i)
 	}
 
-	for i := 0; i < numEach; i++ {
+	for i := range numEach {
 		sink.Errorf(&Diag{Message: "A test of the emergency error system: %v."}, i)
 	}
 }
@@ -55,7 +59,7 @@ func TestCounts(t *testing.T) {
 func TestEscape(t *testing.T) {
 	t.Parallel()
 
-	sink := discardSink()
+	sink := discardSink().(*defaultSink)
 
 	// Passing % chars in the argument should not yield %!(MISSING)s.
 	p, s := sink.Stringify(Error, Message("", "%s"), "lots of %v %s %d chars")
@@ -64,4 +68,70 @@ func TestEscape(t *testing.T) {
 	// Passing % chars in the format string, on the other hand, should.
 	pmiss, smiss := sink.Stringify(Error, Message("", "lots of %v %s %d chars"))
 	assert.Equal(t, "error: lots of %!v(MISSING) %!s(MISSING) %!d(MISSING) chars\n", pmiss+smiss)
+}
+
+func TestDefaultSink_concurrency(t *testing.T) {
+	t.Parallel()
+
+	// Verifies that we can safely log to the sink concurrently.
+
+	const (
+		NumWorkers = 10  // number of concurrent loggers
+		NumLogs    = 100 // number of logs per worker
+	)
+
+	levels := []Severity{Debug, Info, Infoerr, Warning, Error}
+	var out bytes.Buffer
+	sink := DefaultSink(&out, &out, FormatOptions{
+		Debug: true,
+		Color: colors.Never,
+	})
+
+	var wg sync.WaitGroup
+	for i := range NumWorkers {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+
+			for j := range NumLogs {
+				for _, level := range levels {
+					sink.Logf(level, Message("", "worker(%d) log(%d) level(%s)"), i, j, level)
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	got := out.String()
+	assert.Equal(t,
+		len(levels)*NumWorkers*NumLogs,
+		strings.Count(got, "\n"))
+
+	for i := range NumWorkers {
+		for j := range NumLogs {
+			for _, level := range levels {
+				want := fmt.Sprintf("worker(%d) log(%d) level(%s)\n", i, j, level)
+				require.Contains(t, got, want)
+				// Require instead of assert to avoid flooding
+				// the test log in case of failures.
+			}
+		}
+	}
+}
+
+func TestDefaultSink_uncomparableWriters(t *testing.T) {
+	t.Parallel()
+
+	// Verifies that we don't panic
+	// when a writer is not comparable with ==.
+
+	out := struct {
+		io.Writer
+		// Slices are not comparable with ==.
+		Foo []string
+	}{Writer: io.Discard}
+
+	assert.NotPanics(t, func() {
+		DefaultSink(out, out, FormatOptions{Color: colors.Never})
+	})
 }

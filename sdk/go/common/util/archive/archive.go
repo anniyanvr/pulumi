@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,14 +20,15 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/logging"
 )
 
 // TGZ adds the contents of the provided directory to an in-memory .tar.gz/.tgz and returns the bytes.
@@ -60,64 +61,121 @@ func TGZ(dir, prefixPathInsideTar string, useDefaultExcludes bool) ([]byte, erro
 	return buffer.Bytes(), nil
 }
 
-// UnTGZ uncompresses a .tar.gz/.tgz file into a specific directory.
-func UnTGZ(tarball []byte, dir string) error {
-	tarReader := bytes.NewReader(tarball)
-	gzr, err := gzip.NewReader(tarReader)
-	if err != nil {
-		return errors.Wrapf(err, "unzipping")
+func extractFile(r *tar.Reader, header *tar.Header, dir string, rename func(string) string) error {
+	// Guard against ZipSlip path traversal: ensure the resolved target stays inside dir.
+	cleanDir := filepath.Clean(dir)
+	relName := rename(header.Name)
+	if relName == "" {
+		return nil
 	}
-	r := tar.NewReader(gzr)
-	for {
-		header, err := r.Next()
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return errors.Wrapf(err, "untarring")
+
+	path := filepath.Join(cleanDir, relName)
+	if path != cleanDir && !strings.HasPrefix(path, cleanDir+string(os.PathSeparator)) {
+		return fmt.Errorf("tar entry %q escapes destination directory", header.Name)
+	}
+
+	switch header.Typeflag {
+	case tar.TypeDir:
+		// Create any directories as needed.
+		if _, err := os.Stat(path); err != nil {
+			if err = os.MkdirAll(path, 0o0700); err != nil {
+				return fmt.Errorf("extracting dir %s: %w", path, err)
+			}
+		}
+	case tar.TypeReg:
+		// Create any directories as needed. Some tools (notably `npm pack`) don't list
+		// directories individually, so if a file is in a directory that doesn't exist, we need
+		// to create it here.
+		dir := filepath.Dir(path)
+		if _, err := os.Stat(dir); err != nil {
+			if err = os.MkdirAll(dir, 0o0700); err != nil {
+				return fmt.Errorf("extracting dir %s: %w", dir, err)
+			}
 		}
 
-		// TODO: check the name to ensure that it does not contain path traversal characters.
-		//
-		//nolint: gosec
-		path := filepath.Join(dir, header.Name)
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			// Create any directories as needed.
-			if _, err := os.Stat(path); err != nil {
-				if err = os.MkdirAll(path, 0700); err != nil {
-					return errors.Wrapf(err, "untarring dir %s", path)
-				}
-			}
-		case tar.TypeReg:
-			// Create any directories as needed. Some tools (notably `npm pack`) don't list
-			// directories individually, so if a file is in a directory that doesn't exist, we need
-			// to create it here.
-			dir := filepath.Dir(path)
-			if _, err := os.Stat(dir); err != nil {
-				if err = os.MkdirAll(dir, 0700); err != nil {
-					return errors.Wrapf(err, "untarring dir %s", dir)
-				}
-			}
-
-			// Expand files into the target directory.
-			dst, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
-			if err != nil {
-				return errors.Wrapf(err, "opening file %s for untar", path)
-			}
-			defer contract.IgnoreClose(dst)
-
-			// We're not concerned with potential tarbombs, so disable gosec.
-			// nolint:gosec
-			if _, err = io.Copy(dst, r); err != nil {
-				return errors.Wrapf(err, "untarring file %s", path)
-			}
-		default:
-			return errors.Errorf("unexpected plugin file type %s (%v)", header.Name, header.Typeflag)
+		// Expand files into the target directory.
+		if header.Mode > math.MaxUint32 {
+			return fmt.Errorf("unexpected file mode %v for %s", header.Mode, header.Name)
 		}
+		dst, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, os.FileMode(header.Mode))
+		if err != nil {
+			return fmt.Errorf("opening file %s for extraction: %w", path, err)
+		}
+		defer contract.IgnoreClose(dst)
+
+		// We're not concerned with potential tarbombs, so disable gosec.
+		if _, err = io.Copy(dst, r); err != nil {
+			return fmt.Errorf("untarring file %s: %w", path, err)
+		}
+	case tar.TypeSymlink:
+		// Guard against symlinks that point outside the extraction directory.
+		target := header.Linkname
+		if !filepath.IsAbs(target) {
+			//nolint:gosec // The resolved target is checked against the destination directory below.
+			target = filepath.Join(filepath.Dir(path), target)
+		}
+		target = filepath.Clean(target)
+		if target != cleanDir && !strings.HasPrefix(target, cleanDir+string(os.PathSeparator)) {
+			return fmt.Errorf("symlink %s points outside the extraction directory", header.Name)
+		}
+
+		linkDir := filepath.Dir(path)
+		if _, err := os.Stat(linkDir); err != nil {
+			if err = os.MkdirAll(linkDir, 0o0700); err != nil {
+				return fmt.Errorf("extracting dir %s: %w", linkDir, err)
+			}
+		}
+
+		if _, err := os.Lstat(path); err == nil {
+			if err = os.Remove(path); err != nil {
+				return fmt.Errorf("removing existing file %s before creating symlink: %w", path, err)
+			}
+		}
+		if err := os.Symlink(header.Linkname, path); err != nil {
+			return fmt.Errorf("extracting symlink %s: %w", path, err)
+		}
+	default:
+		return fmt.Errorf("unexpected plugin file type %s (%v)", header.Name, header.Typeflag)
 	}
 
 	return nil
+}
+
+// ExtractTGZ uncompresses a .tar.gz/.tgz file into a specific directory.
+func ExtractTGZ(r io.Reader, dir string) error {
+	return ExtractTGZWithRemap(r, dir, func(path string) string { return path })
+}
+
+// ExtractTGZ uncompresses a .tar.gz/.tgz file into a specific directory.
+//
+// rename is called on each file header and can be used to rename files during
+// unpacking. If rename returns "", the file will be dropped.
+func ExtractTGZWithRemap(r io.Reader, dir string, rename func(path string) string) error {
+	// Convert to absolute path so that path traversal checks in extractFile are reliable.
+	absDir, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("resolving destination path: %w", err)
+	}
+
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return fmt.Errorf("uncompressing: %w", err)
+	}
+	defer contract.IgnoreClose(gzr)
+	tr := tar.NewReader(gzr)
+	for {
+		header, err := tr.Next()
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return fmt.Errorf("extracting: %w", err)
+		}
+
+		if err = extractFile(tr, header, absDir, rename); err != nil {
+			return err
+		}
+	}
 }
 
 const (
@@ -126,7 +184,8 @@ const (
 )
 
 func addDirectoryToTar(writer *tar.Writer, root, dir, prefixPathInsideTar string,
-	useDefaultIgnores bool, ignores *ignoreState) error {
+	useDefaultIgnores bool, ignores *ignoreState,
+) error {
 	ignoreFilePath := filepath.Join(dir, gitIgnoreFile)
 
 	// If there is an ignorefile, process it before looking at any child paths.
@@ -135,10 +194,30 @@ func addDirectoryToTar(writer *tar.Writer, root, dir, prefixPathInsideTar string
 
 		ignore, err := newGitIgnoreIgnorer(ignoreFilePath)
 		if err != nil {
-			return errors.Wrapf(err, "could not read ignore file in %v", dir)
+			return fmt.Errorf("could not read ignore file in %v: %w", dir, err)
 		}
 
 		ignores = ignores.Append(ignore)
+	}
+
+	// If we're at root, also add any .gitignores above us
+	if root == dir {
+		parent := filepath.Dir(dir)
+		// Keep going up till we hit the root of the file system
+		for ; parent != filepath.Dir(parent); parent = filepath.Dir(parent) {
+			// If there is an ignorefile, process it before looking at any child paths.
+			ignoreFilePath := filepath.Join(parent, gitIgnoreFile)
+			if stat, err := os.Stat(ignoreFilePath); err == nil && !stat.IsDir() {
+				logging.V(9).Infof("processing ignore file in %v", dir)
+
+				ignore, err := newGitIgnoreIgnorer(ignoreFilePath)
+				if err != nil {
+					return fmt.Errorf("could not read ignore file in %v: %w", dir, err)
+				}
+
+				ignores = ignores.Append(ignore)
+			}
+		}
 	}
 
 	if useDefaultIgnores {
@@ -161,7 +240,10 @@ func addDirectoryToTar(writer *tar.Writer, root, dir, prefixPathInsideTar string
 	}
 
 	for _, info := range infos {
-		fullName := filepath.Join(dir, info.Name())
+		// Precompose the entry name to NFC on filesystems that decompose Unicode
+		// (macOS), mirroring git's core.precomposeunicode, so NFC-authored ignore
+		// patterns match files the filesystem hands back in decomposed form.
+		fullName := filepath.Join(dir, precomposeUnicode(info.Name()))
 
 		if !info.IsDir() && ignores.IsIgnored(fullName) {
 			logging.V(9).Infof("skip archiving of %v due to ignore file", fullName)
@@ -208,10 +290,13 @@ func addDirectoryToTar(writer *tar.Writer, root, dir, prefixPathInsideTar string
 			}
 			// no defer because we want to close file as soon as possible (right after we call Copy)
 
-			_, err = io.Copy(writer, file)
+			n, err := io.Copy(writer, file)
 			contract.IgnoreClose(file)
 			if err != nil {
 				return err
+			}
+			if n != header.Size {
+				return fmt.Errorf("failed to copy all bytes from %v to tar file", fullName)
 			}
 		} else {
 			logging.V(9).Infof("ignoring special file %v with mode %v", fullName, info.Mode())

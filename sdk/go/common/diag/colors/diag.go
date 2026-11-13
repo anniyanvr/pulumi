@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,15 +14,11 @@
 
 package colors
 
-import (
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
-)
+import "github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 
 type Colorization string
 
 const (
-	// Auto determines if we should colorize depending on the surrounding environment we're in.
-	Auto Colorization = "auto"
 	// Always colorizes text.
 	Always Colorization = "always"
 	// Never colorizes text.
@@ -33,27 +29,52 @@ const (
 
 // Colorize conditionally colorizes the given string based on the kind of colorization selected.
 func (c Colorization) Colorize(v string) string {
+	return c.ColorizeWithMaxWidth(v, -1)
+}
+
+// ColorizeWithMaxWidth conditionally colorizes the given string based on the kind of colorization selected.
+// The result will contain no more than maxWidth user-perceived characters (grapheme clusters).
+func (c Colorization) ColorizeWithMaxWidth(v string, maxWidth int) string {
 	switch c {
 	case Raw:
 		// Don't touch the string.  Output control sequences as is.
 		return v
 	case Always:
-		// Convert the constrol sequences into appropriate console escapes for the platform we're on.
-		return colorizeText(v, Always, -1)
+		// Convert the control sequences into appropriate console escapes for the platform we're on.
+		return colorizeText(v, Always, maxWidth)
 	case Never:
-		return colorizeText(v, Never, -1)
+		return colorizeText(v, Never, maxWidth)
 	default:
-		contract.Failf("Unexpected colorization value: %v", c)
+		contract.Failf("Unrecognized colorization mode: %v", c)
 		return ""
 	}
 }
 
 // TrimColorizedString takes a string with embedded color tags and returns a new string (still with
-// embedded color tags) such that the length of the *non-tag* portion of the string is no greater
-// than maxLength.  This is useful for scenarios where the string has to be printed in a a context
-// where there is a max allowed width.  In these scenarios, we can't just measure the length of the
-// string as the embedded color tags would count against it, even though they end up with no length
-// when actually interpretted by the console.
-func TrimColorizedString(v string, maxRuneLength int) string {
-	return colorizeText(v, Raw, maxRuneLength)
+// embedded color tags) such that the number of user-perceived characters (grapheme clusters) in
+// the result is no greater than maxWidth. This is useful for scenarios where the string has to be
+// printed in a context where there is a max allowed width. In these scenarios, we can't just
+// measure the length of the string as the embedded color tags would count against it, even though
+// they end up with no length when actually interpreted by the console.
+func TrimColorizedString(v string, maxWidth int) string {
+	return colorizeText(v, Raw, maxWidth)
+}
+
+// MeasureColorizedString measures the number of user-perceived characters (grapheme clusters) in the
+// given string with embedded color tags. Color tags do not contribute to the total.
+func MeasureColorizedString(v string) int {
+	return measureText(v)
+}
+
+// Hyperlink wraps displayText in an OSC 8 terminal hyperlink to url and styles it as a link, so
+// terminals that support it render displayText as a click target. Terminals without support show
+// the styled displayText. When colorization is disabled, or url is empty, displayText is returned
+// as-is.
+//
+// The wire format is `ESC ] 8 ; ; <url> ESC \ <text> ESC ] 8 ; ; ESC \`.
+func (c Colorization) Hyperlink(url, displayText string) string {
+	if disableColorization || c == Never || url == "" {
+		return displayText
+	}
+	return "\x1b]8;;" + url + "\x1b\\" + c.Colorize(Underline+BrightBlue+displayText+Reset) + "\x1b]8;;\x1b\\"
 }

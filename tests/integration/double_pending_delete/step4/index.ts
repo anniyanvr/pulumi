@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ const a = new Resource("a", { fail: 4 });
 // Create B
 const b = new Resource("b", { fail: 2 }, { dependsOn: a });
 
+// Delete A
 // Delete A
 // Delete B
 

@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,15 +15,16 @@
 // Pulling out some of the repeated strings tokens into constants would harm readability, so we just ignore the
 // goconst linter's warning.
 //
-// nolint: lll, goconst
+//nolint:lll, goconst
 package nodejs
 
 import (
 	"fmt"
 	"strings"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/schema"
+	"github.com/pulumi/pulumi/pkg/v3/codegen"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/cgstrings"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/schema"
 )
 
 // DocLanguageHelper is the NodeJS-specific implementation of the DocLanguageHelper.
@@ -31,10 +32,27 @@ type DocLanguageHelper struct{}
 
 var _ codegen.DocLanguageHelper = DocLanguageHelper{}
 
-// GetDocLinkForPulumiType returns the NodeJS API doc link for a Pulumi type.
+// pulumiTypeDocRoot is the TypeDoc reference for the `@pulumi/pulumi` package.
+const pulumiTypeDocRoot = "/docs/reference/pkg/nodejs/pulumi/pulumi/"
+
+// pulumiTypeDocKinds maps linked `@pulumi/pulumi` types to their TypeDoc kind directory.
+var pulumiTypeDocKinds = map[string]string{
+	"ComponentResourceOptions": "interfaces",
+	"CustomResourceOptions":    "interfaces",
+	"InvokeOptions":            "interfaces",
+	"InvokeOutputOptions":      "interfaces",
+	"ID":                       "types",
+}
+
+// GetDocLinkForPulumiType returns the TypeDoc page for a `@pulumi/pulumi` type. Unknown types link to
+// the package index, since TypeDoc does not generate per-type anchors there.
 func (d DocLanguageHelper) GetDocLinkForPulumiType(pkg *schema.Package, typeName string) string {
 	typeName = strings.ReplaceAll(typeName, "?", "")
-	return fmt.Sprintf("/docs/reference/pkg/nodejs/pulumi/pulumi/#%s", typeName)
+	kind, ok := pulumiTypeDocKinds[typeName]
+	if !ok {
+		return pulumiTypeDocRoot
+	}
+	return pulumiTypeDocRoot + kind + "/" + typeName + ".html"
 }
 
 // GetDocLinkForResourceType returns the NodeJS API doc for a type belonging to a resource provider.
@@ -68,13 +86,29 @@ func (d DocLanguageHelper) GetDocLinkForFunctionInputOrOutputType(pkg *schema.Pa
 	return d.GetDocLinkForResourceInputOrOutputType(pkg, modName, typeName, input)
 }
 
+func (d DocLanguageHelper) GetModuleName(pkg schema.PackageReference, module string) string {
+	return moduleName(module, pkg)
+}
+
 // GetLanguageTypeString returns the language-specific type given a Pulumi schema type.
-func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName string, t schema.Type, input, optional bool) string {
-	modCtx := &modContext{
-		pkg: pkg,
-		mod: moduleName,
+func (d DocLanguageHelper) GetTypeName(pkg schema.PackageReference, t schema.Type, input bool, relativeToModule string) string {
+	// Remove the union with `undefined` for optional types,
+	// since we will show that information separately anyway.
+	if optional, ok := t.(*schema.OptionalType); ok {
+		t = optional.ElementType
 	}
-	typeName := modCtx.typeString(t, input, false, optional, nil)
+
+	var info NodePackageInfo
+	if a, err := pkg.Language("nodejs"); err == nil {
+		info, _ = a.(NodePackageInfo)
+	}
+
+	modCtx := &modContext{
+		pkg:      pkg,
+		modToPkg: info.ModuleToPackage,
+		mod:      moduleName(relativeToModule, pkg),
+	}
+	typeName := modCtx.typeString(t, input, nil)
 
 	// Remove any package qualifiers from the type name.
 	typeQualifierPackage := "inputs"
@@ -84,23 +118,72 @@ func (d DocLanguageHelper) GetLanguageTypeString(pkg *schema.Package, moduleName
 	typeName = strings.ReplaceAll(typeName, typeQualifierPackage+".", "")
 	typeName = strings.ReplaceAll(typeName, "enums.", "")
 
-	// Remove the union with `undefined` for optional types,
-	// since we will show that information separately anyway.
-	if optional {
-		typeName = strings.ReplaceAll(typeName, " | undefined", "?")
-	}
 	return typeName
 }
 
-func (d DocLanguageHelper) GetFunctionName(modName string, f *schema.Function) string {
+func (d DocLanguageHelper) GetResourceName(r *schema.Resource) string {
+	return resourceName(r)
+}
+
+func (d DocLanguageHelper) GetFunctionName(f *schema.Function) string {
 	return tokenToFunctionName(f.Token)
 }
 
 // GetResourceFunctionResultName returns the name of the result type when a function is used to lookup
 // an existing resource.
 func (d DocLanguageHelper) GetResourceFunctionResultName(modName string, f *schema.Function) string {
-	funcName := d.GetFunctionName(modName, f)
-	return title(funcName) + "Result"
+	funcName := d.GetFunctionName(f)
+	return cgstrings.UppercaseFirst(funcName) + "Result"
+}
+
+// ResolveDocRef renders a single doc ref as a NodeJS name.
+func (d DocLanguageHelper) ResolveDocRef(pkg schema.PackageReference, selfRef, ref schema.DocRef) (string, bool, error) {
+	var info NodePackageInfo
+	if a, err := pkg.Language("nodejs"); err == nil {
+		info, _ = a.(NodePackageInfo)
+	}
+	mod := &modContext{
+		pkg:      pkg,
+		modToPkg: info.ModuleToPackage,
+		mod:      "\x00docrefresolver",
+	}
+	name, ok := mod.docRefResolver(selfRef)(ref)
+	return name, ok, nil
+}
+
+func (d DocLanguageHelper) GetMethodName(m *schema.Method) string {
+	return cgstrings.Camel(m.Name)
+}
+
+func (d DocLanguageHelper) GetMethodResultName(pkg schema.PackageReference, modName string, r *schema.Resource,
+	m *schema.Method,
+) string {
+	var objectReturnType *schema.ObjectType
+	if m.Function.ReturnType != nil {
+		if objectType, ok := m.Function.ReturnType.(*schema.ObjectType); ok && objectType != nil {
+			objectReturnType = objectType
+		} else {
+			modCtx := &modContext{
+				pkg: pkg,
+				mod: modName,
+			}
+			return modCtx.typeString(m.Function.ReturnType, false, nil)
+		}
+	}
+
+	var info NodePackageInfo
+	if i, err := pkg.Language("nodejs"); err == nil {
+		info, _ = i.(NodePackageInfo)
+	}
+
+	if info.LiftSingleValueMethodReturns && objectReturnType != nil && len(objectReturnType.Properties) == 1 {
+		modCtx := &modContext{
+			pkg: pkg,
+			mod: modName,
+		}
+		return modCtx.typeString(objectReturnType.Properties[0].Type, false, nil)
+	}
+	return fmt.Sprintf("%s.%sResult", resourceName(r), cgstrings.UppercaseFirst(d.GetMethodName(m)))
 }
 
 // GetPropertyName returns the property name specific to NodeJS.
@@ -109,23 +192,6 @@ func (d DocLanguageHelper) GetPropertyName(p *schema.Property) (string, error) {
 }
 
 // GetEnumName returns the enum name specific to NodeJS.
-func (d DocLanguageHelper) GetEnumName(e *schema.Enum) (string, error) {
-	name := fmt.Sprintf("%v", e.Value)
-	if e.Name != "" {
-		name = e.Name
-	}
-	return makeSafeEnumName(name)
-}
-
-// GetModuleDocLink returns the display name and the link for a module.
-func (d DocLanguageHelper) GetModuleDocLink(pkg *schema.Package, modName string) (string, string) {
-	var displayName string
-	var link string
-	if modName == "" {
-		displayName = fmt.Sprintf("@pulumi/%s", pkg.Name)
-	} else {
-		displayName = fmt.Sprintf("@pulumi/%s/%s", pkg.Name, strings.ToLower(modName))
-	}
-	link = d.GetDocLinkForResourceType(pkg, modName, "")
-	return displayName, link
+func (d DocLanguageHelper) GetEnumName(e *schema.Enum, typeName string) (string, error) {
+	return enumMemberName(typeName, e)
 }

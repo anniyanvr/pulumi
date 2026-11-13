@@ -1,4 +1,16 @@
-// Copyright 2016-2020, Pulumi Corporation.  All rights reserved.
+// Copyright 2020, Pulumi Corporation.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package ints
 
@@ -10,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	ptesting "github.com/pulumi/pulumi/sdk/v2/go/common/testing"
+	ptesting "github.com/pulumi/pulumi/sdk/v3/go/common/testing"
 )
 
 // TestPolicyWithConfig runs integration tests against the policy pack in the policy_pack_w_config
@@ -19,11 +31,7 @@ func TestPolicyWithConfig(t *testing.T) {
 	t.Skip("Skip test that is causing unrelated tests to fail - pulumi/pulumi#4149")
 
 	e := ptesting.NewEnvironment(t)
-	defer func() {
-		if !t.Failed() {
-			e.DeleteEnvironment()
-		}
-	}()
+	defer e.DeleteIfNotFailed()
 
 	// Confirm we have credentials.
 	if os.Getenv("PULUMI_ACCESS_TOKEN") == "" {
@@ -35,8 +43,8 @@ func TestPolicyWithConfig(t *testing.T) {
 	// Pack and push a Policy Pack for the organization.
 	policyPackName := fmt.Sprintf("%s-%x", "test-policy-pack", time.Now().UnixNano())
 	e.ImportDirectory("policy_pack_w_config")
-	e.RunCommand("yarn", "install")
-	os.Setenv("TEST_POLICY_PACK", policyPackName)
+	e.RunCommandWithRetry("npm", "install")
+	t.Setenv("TEST_POLICY_PACK", policyPackName)
 
 	// Publish the Policy Pack twice.
 	publishPolicyPackWithVersion(e, orgName, `"0.0.1"`)
@@ -94,11 +102,7 @@ func TestPolicyWithoutConfig(t *testing.T) {
 	t.Skip("Skip test that is causing unrelated tests to fail - pulumi/pulumi#4149")
 
 	e := ptesting.NewEnvironment(t)
-	defer func() {
-		if !t.Failed() {
-			e.DeleteEnvironment()
-		}
-	}()
+	defer e.DeleteIfNotFailed()
 
 	// Confirm we have credentials.
 	if os.Getenv("PULUMI_ACCESS_TOKEN") == "" {
@@ -111,8 +115,8 @@ func TestPolicyWithoutConfig(t *testing.T) {
 	// Pack and push a Policy Pack for the organization.
 	policyPackName := fmt.Sprintf("%s-%x", "test-policy-pack", time.Now().UnixNano())
 	e.ImportDirectory("policy_pack_wo_config")
-	e.RunCommand("yarn", "install")
-	os.Setenv("TEST_POLICY_PACK", policyPackName)
+	e.RunCommandWithRetry("npm", "install")
+	t.Setenv("TEST_POLICY_PACK", policyPackName)
 
 	// Publish the Policy Pack twice.
 	e.RunCommand("pulumi", "policy", "publish", orgName)
@@ -151,7 +155,7 @@ type policyGroupsJSON struct {
 	NumStacks      int    `json:"numStacks"`
 }
 
-func assertJSON(e *ptesting.Environment, out string, respObj interface{}) {
+func assertJSON(e *ptesting.Environment, out string, respObj any) {
 	err := json.Unmarshal([]byte(out), &respObj)
 	if err != nil {
 		e.Errorf("unable to unmarshal %v", out)

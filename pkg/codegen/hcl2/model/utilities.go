@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,8 +20,9 @@ import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
 
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/slice"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 func syntaxOrNone(node hclsyntax.Node) hclsyntax.Node {
@@ -39,7 +40,7 @@ func SourceOrderLess(a, b hcl.Range) bool {
 
 // SourceOrderBody sorts the contents of an HCL2 body in source order.
 func SourceOrderBody(body *hclsyntax.Body) []hclsyntax.Node {
-	items := make([]hclsyntax.Node, 0, len(body.Attributes)+len(body.Blocks))
+	items := slice.Prealloc[hclsyntax.Node](len(body.Attributes) + len(body.Blocks))
 	for _, attr := range body.Attributes {
 		items = append(items, attr)
 	}
@@ -59,7 +60,7 @@ func VariableReference(v *Variable) *ScopeTraversalExpression {
 		Parts:     []Traversable{v},
 	}
 	diags := x.Typecheck(false)
-	contract.Assert(len(diags) == 0)
+	contract.Assertf(len(diags) == 0, "error typechecking variable reference: %v", diags)
 	return x
 }
 
@@ -70,6 +71,6 @@ func ConstantReference(c *Constant) *ScopeTraversalExpression {
 		Parts:     []Traversable{c},
 	}
 	diags := x.Typecheck(false)
-	contract.Assert(len(diags) == 0)
+	contract.Assertf(len(diags) == 0, "error typechecking constant reference: %v", diags)
 	return x
 }

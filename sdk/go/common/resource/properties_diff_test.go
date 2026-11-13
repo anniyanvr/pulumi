@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,16 +19,25 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/archive"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/asset"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
+
+func assertDeepEqualsIffEmptyDiff(t *testing.T, val1, val2 PropertyValue) {
+	diff := val1.Diff(val2)
+	equals := val1.DeepEquals(val2)
+	assert.Equal(t, diff == nil, equals, "DeepEquals <--> empty diff")
+}
 
 func TestNullPropertyValueDiffs(t *testing.T) {
 	t.Parallel()
 	d1 := NewNullProperty().Diff(NewNullProperty())
 	assert.Nil(t, d1)
-	d2 := NewNullProperty().Diff(NewBoolProperty(true))
-	assert.NotNil(t, d2)
+	d2 := NewNullProperty().Diff(NewProperty(true))
+	require.NotNil(t, d2)
 	assert.Nil(t, d2.Array)
 	assert.Nil(t, d2.Object)
 	assert.True(t, d2.Old.IsNull())
@@ -38,18 +47,18 @@ func TestNullPropertyValueDiffs(t *testing.T) {
 
 func TestBoolPropertyValueDiffs(t *testing.T) {
 	t.Parallel()
-	d1 := NewBoolProperty(true).Diff(NewBoolProperty(true))
+	d1 := NewProperty(true).Diff(NewProperty(true))
 	assert.Nil(t, d1)
-	d2 := NewBoolProperty(true).Diff(NewBoolProperty(false))
-	assert.NotNil(t, d2)
+	d2 := NewProperty(true).Diff(NewProperty(false))
+	require.NotNil(t, d2)
 	assert.Nil(t, d2.Array)
 	assert.Nil(t, d2.Object)
 	assert.True(t, d2.Old.IsBool())
 	assert.Equal(t, true, d2.Old.BoolValue())
 	assert.True(t, d2.New.IsBool())
 	assert.Equal(t, false, d2.New.BoolValue())
-	d3 := NewBoolProperty(true).Diff(NewNullProperty())
-	assert.NotNil(t, d3)
+	d3 := NewProperty(true).Diff(NewNullProperty())
+	require.NotNil(t, d3)
 	assert.Nil(t, d3.Array)
 	assert.Nil(t, d3.Object)
 	assert.True(t, d3.Old.IsBool())
@@ -59,18 +68,18 @@ func TestBoolPropertyValueDiffs(t *testing.T) {
 
 func TestNumberPropertyValueDiffs(t *testing.T) {
 	t.Parallel()
-	d1 := NewNumberProperty(42).Diff(NewNumberProperty(42))
+	d1 := NewProperty(42.0).Diff(NewProperty(42.0))
 	assert.Nil(t, d1)
-	d2 := NewNumberProperty(42).Diff(NewNumberProperty(66))
-	assert.NotNil(t, d2)
+	d2 := NewProperty(42.0).Diff(NewProperty(66.0))
+	require.NotNil(t, d2)
 	assert.Nil(t, d2.Array)
 	assert.Nil(t, d2.Object)
 	assert.True(t, d2.Old.IsNumber())
 	assert.Equal(t, float64(42), d2.Old.NumberValue())
 	assert.True(t, d2.New.IsNumber())
 	assert.Equal(t, float64(66), d2.New.NumberValue())
-	d3 := NewNumberProperty(88).Diff(NewBoolProperty(true))
-	assert.NotNil(t, d3)
+	d3 := NewProperty(88.0).Diff(NewProperty(true))
+	require.NotNil(t, d3)
 	assert.Nil(t, d3.Array)
 	assert.Nil(t, d3.Object)
 	assert.True(t, d3.Old.IsNumber())
@@ -81,16 +90,16 @@ func TestNumberPropertyValueDiffs(t *testing.T) {
 
 func TestStringPropertyValueDiffs(t *testing.T) {
 	t.Parallel()
-	d1 := NewStringProperty("a string").Diff(NewStringProperty("a string"))
+	d1 := NewProperty("a string").Diff(NewProperty("a string"))
 	assert.Nil(t, d1)
-	d2 := NewStringProperty("a string").Diff(NewStringProperty("some other string"))
-	assert.NotNil(t, d2)
+	d2 := NewProperty("a string").Diff(NewProperty("some other string"))
+	require.NotNil(t, d2)
 	assert.True(t, d2.Old.IsString())
 	assert.Equal(t, "a string", d2.Old.StringValue())
 	assert.True(t, d2.New.IsString())
 	assert.Equal(t, "some other string", d2.New.StringValue())
-	d3 := NewStringProperty("what a string").Diff(NewNumberProperty(973))
-	assert.NotNil(t, d3)
+	d3 := NewProperty("what a string").Diff(NewProperty(973.0))
+	require.NotNil(t, d3)
 	assert.Nil(t, d3.Array)
 	assert.Nil(t, d3.Object)
 	assert.True(t, d3.Old.IsString())
@@ -102,88 +111,97 @@ func TestStringPropertyValueDiffs(t *testing.T) {
 func TestArrayPropertyValueDiffs(t *testing.T) {
 	t.Parallel()
 	// no diffs:
-	d1 := NewArrayProperty([]PropertyValue{}).Diff(NewArrayProperty([]PropertyValue{}))
+	d1 := NewProperty([]PropertyValue{}).Diff(NewProperty([]PropertyValue{}))
 	assert.Nil(t, d1)
-	d2 := NewArrayProperty([]PropertyValue{
-		NewStringProperty("element one"), NewNumberProperty(2), NewNullProperty(),
-	}).Diff(NewArrayProperty([]PropertyValue{
-		NewStringProperty("element one"), NewNumberProperty(2), NewNullProperty(),
+	d2 := NewProperty([]PropertyValue{
+		NewProperty("element one"), NewProperty(2.0), NewNullProperty(),
+	}).Diff(NewProperty([]PropertyValue{
+		NewProperty("element one"), NewProperty(2.0), NewNullProperty(),
 	}))
 	assert.Nil(t, d2)
 	// all updates:
-	d3a1 := NewArrayProperty([]PropertyValue{
-		NewStringProperty("element one"), NewNumberProperty(2), NewNullProperty()})
-	d3a2 := NewArrayProperty([]PropertyValue{
-		NewNumberProperty(1), NewNullProperty(), NewStringProperty("element three")})
+	d3a1 := NewProperty([]PropertyValue{
+		NewProperty("element one"), NewProperty(2.0), NewNullProperty(),
+	})
+	d3a2 := NewProperty([]PropertyValue{
+		NewProperty(1.0), NewNullProperty(), NewProperty("element three"),
+	})
+	assertDeepEqualsIffEmptyDiff(t, NewPropertyValue(d3a1), NewPropertyValue(d3a2))
 	d3 := d3a1.Diff(d3a2)
-	assert.NotNil(t, d3)
-	assert.NotNil(t, d3.Array)
+	require.NotNil(t, d3)
+	require.NotNil(t, d3.Array)
 	assert.Nil(t, d3.Object)
-	assert.Equal(t, 0, len(d3.Array.Adds))
-	assert.Equal(t, 0, len(d3.Array.Deletes))
-	assert.Equal(t, 0, len(d3.Array.Sames))
-	assert.Equal(t, 3, len(d3.Array.Updates))
+	assert.Empty(t, d3.Array.Adds)
+	assert.Empty(t, d3.Array.Deletes)
+	assert.Empty(t, d3.Array.Sames)
+	require.Len(t, d3.Array.Updates, 3)
 	for i, update := range d3.Array.Updates {
 		assert.Equal(t, d3a1.ArrayValue()[i], update.Old)
 		assert.Equal(t, d3a2.ArrayValue()[i], update.New)
 	}
 	// update one, keep one, delete one:
-	d4a1 := NewArrayProperty([]PropertyValue{
-		NewStringProperty("element one"), NewNumberProperty(2), NewBoolProperty(true)})
-	d4a2 := NewArrayProperty([]PropertyValue{
-		NewStringProperty("element 1"), NewNumberProperty(2)})
+	d4a1 := NewProperty([]PropertyValue{
+		NewProperty("element one"), NewProperty(2.0), NewProperty(true),
+	})
+	d4a2 := NewProperty([]PropertyValue{
+		NewProperty("element 1"), NewProperty(2.0),
+	})
+	assertDeepEqualsIffEmptyDiff(t, NewPropertyValue(d4a1), NewPropertyValue(d4a2))
 	d4 := d4a1.Diff(d4a2)
-	assert.NotNil(t, d4)
-	assert.NotNil(t, d4.Array)
+	require.NotNil(t, d4)
+	require.NotNil(t, d4.Array)
 	assert.Nil(t, d4.Object)
-	assert.Equal(t, 0, len(d4.Array.Adds))
-	assert.Equal(t, 1, len(d4.Array.Deletes))
+	assert.Empty(t, d4.Array.Adds)
+	require.Len(t, d4.Array.Deletes, 1)
 	for i, delete := range d4.Array.Deletes {
 		assert.Equal(t, 2, i)
 		assert.Equal(t, d4a1.ArrayValue()[i], delete)
 	}
-	assert.Equal(t, 1, len(d4.Array.Sames))
+	require.Len(t, d4.Array.Sames, 1)
 	for i, same := range d4.Array.Sames {
 		assert.Equal(t, 1, i)
 		assert.Equal(t, d4a1.ArrayValue()[i], same)
 		assert.Equal(t, d4a2.ArrayValue()[i], same)
 	}
-	assert.Equal(t, 1, len(d4.Array.Updates))
+	require.Len(t, d4.Array.Updates, 1)
 	for i, update := range d4.Array.Updates {
 		assert.Equal(t, 0, i)
 		assert.Equal(t, d4a1.ArrayValue()[i], update.Old)
 		assert.Equal(t, d4a2.ArrayValue()[i], update.New)
 	}
 	// keep one, update one, add one:
-	d5a1 := NewArrayProperty([]PropertyValue{
-		NewStringProperty("element one"), NewNumberProperty(2)})
-	d5a2 := NewArrayProperty([]PropertyValue{
-		NewStringProperty("element 1"), NewNumberProperty(2), NewBoolProperty(true)})
+	d5a1 := NewProperty([]PropertyValue{
+		NewProperty("element one"), NewProperty(2.0),
+	})
+	d5a2 := NewProperty([]PropertyValue{
+		NewProperty("element 1"), NewProperty(2.0), NewProperty(true),
+	})
+	assertDeepEqualsIffEmptyDiff(t, NewPropertyValue(d5a1), NewPropertyValue(d5a2))
 	d5 := d5a1.Diff(d5a2)
-	assert.NotNil(t, d5)
-	assert.NotNil(t, d5.Array)
+	require.NotNil(t, d5)
+	require.NotNil(t, d5.Array)
 	assert.Nil(t, d5.Object)
-	assert.Equal(t, 1, len(d5.Array.Adds))
+	require.Len(t, d5.Array.Adds, 1)
 	for i, add := range d5.Array.Adds {
 		assert.Equal(t, 2, i)
 		assert.Equal(t, d5a2.ArrayValue()[i], add)
 	}
-	assert.Equal(t, 0, len(d5.Array.Deletes))
-	assert.Equal(t, 1, len(d5.Array.Sames))
+	assert.Empty(t, d5.Array.Deletes)
+	require.Len(t, d5.Array.Sames, 1)
 	for i, same := range d5.Array.Sames {
 		assert.Equal(t, 1, i)
 		assert.Equal(t, d5a1.ArrayValue()[i], same)
 		assert.Equal(t, d5a2.ArrayValue()[i], same)
 	}
-	assert.Equal(t, 1, len(d5.Array.Updates))
+	require.Len(t, d5.Array.Updates, 1)
 	for i, update := range d5.Array.Updates {
 		assert.Equal(t, 0, i)
 		assert.Equal(t, d5a1.ArrayValue()[i], update.Old)
 		assert.Equal(t, d5a2.ArrayValue()[i], update.New)
 	}
 	// from nil to empty array:
-	d6 := NewNullProperty().Diff(NewArrayProperty([]PropertyValue{}))
-	assert.NotNil(t, d6)
+	d6 := NewNullProperty().Diff(NewProperty([]PropertyValue{}))
+	require.NotNil(t, d6)
 }
 
 func TestObjectPropertyValueDiffs(t *testing.T) {
@@ -192,33 +210,34 @@ func TestObjectPropertyValueDiffs(t *testing.T) {
 	d1 := PropertyMap{}.Diff(PropertyMap{})
 	assert.Nil(t, d1)
 	d2 := PropertyMap{
-		PropertyKey("a"): NewBoolProperty(true),
+		PropertyKey("a"): NewProperty(true),
 	}.Diff(PropertyMap{
-		PropertyKey("a"): NewBoolProperty(true),
+		PropertyKey("a"): NewProperty(true),
 	})
 	assert.Nil(t, d2)
 	// all updates:
 	{
 		obj1 := PropertyMap{
-			PropertyKey("prop-a"): NewBoolProperty(true),
-			PropertyKey("prop-b"): NewStringProperty("bbb"),
-			PropertyKey("prop-c"): NewObjectProperty(PropertyMap{
-				PropertyKey("inner-prop-a"): NewNumberProperty(673),
+			PropertyKey("prop-a"): NewProperty(true),
+			PropertyKey("prop-b"): NewProperty("bbb"),
+			PropertyKey("prop-c"): NewProperty(PropertyMap{
+				PropertyKey("inner-prop-a"): NewProperty(673.0),
 			}),
 		}
 		obj2 := PropertyMap{
-			PropertyKey("prop-a"): NewBoolProperty(false),
-			PropertyKey("prop-b"): NewNumberProperty(89),
-			PropertyKey("prop-c"): NewObjectProperty(PropertyMap{
-				PropertyKey("inner-prop-a"): NewNumberProperty(672),
+			PropertyKey("prop-a"): NewProperty(false),
+			PropertyKey("prop-b"): NewProperty(89.0),
+			PropertyKey("prop-c"): NewProperty(PropertyMap{
+				PropertyKey("inner-prop-a"): NewProperty(672.0),
 			}),
 		}
+		assertDeepEqualsIffEmptyDiff(t, NewPropertyValue(obj1), NewPropertyValue(obj2))
 		d3 := obj1.Diff(obj2)
-		assert.NotNil(t, d3)
-		assert.Equal(t, 0, len(d3.Adds))
-		assert.Equal(t, 0, len(d3.Deletes))
-		assert.Equal(t, 0, len(d3.Sames))
-		assert.Equal(t, 3, len(d3.Updates))
+		require.NotNil(t, d3)
+		assert.Empty(t, d3.Adds)
+		assert.Empty(t, d3.Deletes)
+		assert.Empty(t, d3.Sames)
+		require.Len(t, d3.Updates, 3)
 		d3pa := d3.Updates[PropertyKey("prop-a")]
 		assert.Nil(t, d3pa.Array)
 		assert.Nil(t, d3pa.Object)
@@ -235,11 +254,11 @@ func TestObjectPropertyValueDiffs(t *testing.T) {
 		assert.Equal(t, float64(89), d3pb.New.NumberValue())
 		d3pc := d3.Updates[PropertyKey("prop-c")]
 		assert.Nil(t, d3pc.Array)
-		assert.NotNil(t, d3pc.Object)
-		assert.Equal(t, 0, len(d3pc.Object.Adds))
-		assert.Equal(t, 0, len(d3pc.Object.Deletes))
-		assert.Equal(t, 0, len(d3pc.Object.Sames))
-		assert.Equal(t, 1, len(d3pc.Object.Updates))
+		require.NotNil(t, d3pc.Object)
+		assert.Empty(t, d3pc.Object.Adds)
+		assert.Empty(t, d3pc.Object.Deletes)
+		assert.Empty(t, d3pc.Object.Sames)
+		require.Len(t, d3pc.Object.Updates, 1)
 		d3pcu := d3pc.Object.Updates[PropertyKey("inner-prop-a")]
 		assert.True(t, d3pcu.Old.IsNumber())
 		assert.Equal(t, float64(673), d3pcu.Old.NumberValue())
@@ -250,34 +269,35 @@ func TestObjectPropertyValueDiffs(t *testing.T) {
 	{
 		obj1 := PropertyMap{
 			PropertyKey("prop-a-2"): NewNullProperty(),
-			PropertyKey("prop-b"):   NewStringProperty("bbb"),
-			PropertyKey("prop-c-1"): NewNumberProperty(6767),
+			PropertyKey("prop-b"):   NewProperty("bbb"),
+			PropertyKey("prop-c-1"): NewProperty(6767.0),
 			PropertyKey("prop-c-2"): NewNullProperty(),
-			PropertyKey("prop-d-1"): NewBoolProperty(true),
-			PropertyKey("prop-d-2"): NewBoolProperty(false),
+			PropertyKey("prop-d-1"): NewProperty(true),
+			PropertyKey("prop-d-2"): NewProperty(false),
 		}
 		obj2 := PropertyMap{
-			PropertyKey("prop-a-1"): NewStringProperty("a fresh value"),
-			PropertyKey("prop-a-2"): NewStringProperty("a non-nil value"),
-			PropertyKey("prop-b"):   NewNumberProperty(89),
-			PropertyKey("prop-c-1"): NewNumberProperty(6767),
+			PropertyKey("prop-a-1"): NewProperty("a fresh value"),
+			PropertyKey("prop-a-2"): NewProperty("a non-nil value"),
+			PropertyKey("prop-b"):   NewProperty(89.0),
+			PropertyKey("prop-c-1"): NewProperty(6767.0),
 			PropertyKey("prop-c-2"): NewNullProperty(),
 			PropertyKey("prop-d-2"): NewNullProperty(),
 		}
+		assertDeepEqualsIffEmptyDiff(t, NewPropertyValue(obj1), NewPropertyValue(obj2))
 		d4 := obj1.Diff(obj2)
-		assert.NotNil(t, d4)
-		assert.Equal(t, 2, len(d4.Adds))
+		require.NotNil(t, d4)
+		require.Len(t, d4.Adds, 2)
 		assert.Equal(t, obj2[PropertyKey("prop-a-1")], d4.Adds[PropertyKey("prop-a-1")])
 		assert.Equal(t, obj2[PropertyKey("prop-a-2")], d4.Adds[PropertyKey("prop-a-2")])
-		assert.Equal(t, 2, len(d4.Deletes))
+		require.Len(t, d4.Deletes, 2)
 		assert.Equal(t, obj1[PropertyKey("prop-d-1")], d4.Deletes[PropertyKey("prop-d-1")])
 		assert.Equal(t, obj1[PropertyKey("prop-d-2")], d4.Deletes[PropertyKey("prop-d-2")])
-		assert.Equal(t, 2, len(d4.Sames))
+		require.Len(t, d4.Sames, 2)
 		assert.Equal(t, obj1[PropertyKey("prop-c-1")], d4.Sames[PropertyKey("prop-c-1")])
 		assert.Equal(t, obj1[PropertyKey("prop-c-2")], d4.Sames[PropertyKey("prop-c-2")])
 		assert.Equal(t, obj2[PropertyKey("prop-c-1")], d4.Sames[PropertyKey("prop-c-1")])
 		assert.Equal(t, obj2[PropertyKey("prop-c-2")], d4.Sames[PropertyKey("prop-c-2")])
-		assert.Equal(t, 1, len(d4.Updates))
+		require.Len(t, d4.Updates, 1)
 		assert.Equal(t, obj1[PropertyKey("prop-b")], d4.Updates[PropertyKey("prop-b")].Old)
 		assert.Equal(t, obj2[PropertyKey("prop-b")], d4.Updates[PropertyKey("prop-b")].New)
 	}
@@ -285,22 +305,22 @@ func TestObjectPropertyValueDiffs(t *testing.T) {
 
 func TestAssetPropertyValueDiffs(t *testing.T) {
 	t.Parallel()
-	a1, err := NewTextAsset("test")
-	assert.Nil(t, err)
-	d1 := NewAssetProperty(a1).Diff(NewAssetProperty(a1))
+	a1, err := asset.FromText("test")
+	require.NoError(t, err)
+	d1 := NewProperty(a1).Diff(NewProperty(a1))
 	assert.Nil(t, d1)
-	a2, err := NewTextAsset("test2")
-	assert.Nil(t, err)
-	d2 := NewAssetProperty(a1).Diff(NewAssetProperty(a2))
-	assert.NotNil(t, d2)
+	a2, err := asset.FromText("test2")
+	require.NoError(t, err)
+	d2 := NewProperty(a1).Diff(NewProperty(a2))
+	require.NotNil(t, d2)
 	assert.Nil(t, d2.Array)
 	assert.Nil(t, d2.Object)
 	assert.True(t, d2.Old.IsAsset())
 	assert.Equal(t, "test", d2.Old.AssetValue().Text)
 	assert.True(t, d2.New.IsAsset())
 	assert.Equal(t, "test2", d2.New.AssetValue().Text)
-	d3 := NewAssetProperty(a1).Diff(NewNullProperty())
-	assert.NotNil(t, d3)
+	d3 := NewProperty(a1).Diff(NewNullProperty())
+	require.NotNil(t, d3)
 	assert.Nil(t, d3.Array)
 	assert.Nil(t, d3.Object)
 	assert.True(t, d3.Old.IsAsset())
@@ -311,27 +331,27 @@ func TestAssetPropertyValueDiffs(t *testing.T) {
 func TestArchivePropertyValueDiffs(t *testing.T) {
 	t.Parallel()
 	path, err := tempArchive("test", false)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	defer func() { contract.IgnoreError(os.Remove(path)) }()
-	a1, err := NewPathArchive(path)
-	assert.Nil(t, err)
-	d1 := NewArchiveProperty(a1).Diff(NewArchiveProperty(a1))
+	a1, err := archive.FromPath(path)
+	require.NoError(t, err)
+	d1 := NewProperty(a1).Diff(NewProperty(a1))
 	assert.Nil(t, d1)
 	path2, err := tempArchive("test2", true)
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	defer func() { contract.IgnoreError(os.Remove(path)) }()
-	a2, err := NewPathArchive(path2)
-	assert.Nil(t, err)
-	d2 := NewArchiveProperty(a1).Diff(NewArchiveProperty(a2))
-	assert.NotNil(t, d2)
+	a2, err := archive.FromPath(path2)
+	require.NoError(t, err)
+	d2 := NewProperty(a1).Diff(NewProperty(a2))
+	require.NotNil(t, d2)
 	assert.Nil(t, d2.Array)
 	assert.Nil(t, d2.Object)
 	assert.True(t, d2.Old.IsArchive())
 	assert.Equal(t, path, d2.Old.ArchiveValue().Path)
 	assert.True(t, d2.New.IsArchive())
 	assert.Equal(t, path2, d2.New.ArchiveValue().Path)
-	d3 := NewArchiveProperty(a1).Diff(NewNullProperty())
-	assert.NotNil(t, d3)
+	d3 := NewProperty(a1).Diff(NewNullProperty())
+	require.NotNil(t, d3)
 	assert.Nil(t, d3.Array)
 	assert.Nil(t, d3.Object)
 	assert.True(t, d3.Old.IsArchive())
@@ -350,4 +370,58 @@ func TestMismatchedPropertyValueDiff(t *testing.T) {
 
 	assert.True(t, s2.DeepEquals(s1))
 	assert.True(t, s1.DeepEquals(s2))
+}
+
+func TestComputedProperyValueDiff(t *testing.T) {
+	t.Parallel()
+
+	a1 := MakeComputed(NewPropertyValue("a"))
+	a2 := MakeComputed(NewPropertyValue("a"))
+	assert.True(t, a1.DeepEquals(a2))
+
+	a3 := MakeComputed(NewPropertyValue("b"))
+	assert.False(t, a1.DeepEquals(a3))
+
+	a4 := NewPropertyValue("a")
+	assert.False(t, a1.DeepEquals(a4))
+}
+
+func TestSecretVsNonSecretWholeObjectDiff(t *testing.T) {
+	t.Parallel()
+
+	inner := PropertyMap{"k": NewProperty("v")}
+	plain := NewObjectProperty(inner)
+	secret := MakeSecret(NewObjectProperty(inner))
+
+	assert.False(t, plain.DeepEquals(secret))
+	assert.False(t, secret.DeepEquals(plain))
+
+	// At the value level the secret wrapper makes the whole thing differ —
+	// the diff is a flat Old/New replacement, not a recursive Object diff.
+	vd := plain.Diff(secret)
+	require.NotNil(t, vd)
+	assert.Nil(t, vd.Object)
+	assert.Nil(t, vd.Array)
+	assert.True(t, vd.Old.IsObject())
+	assert.True(t, vd.New.IsSecret())
+}
+
+func TestSecretVsNonSecretWholeArrayDiff(t *testing.T) {
+	t.Parallel()
+
+	inner := []PropertyValue{NewProperty("a"), NewProperty("b")}
+	plain := NewArrayProperty(inner)
+	secret := MakeSecret(NewArrayProperty(inner))
+
+	assert.False(t, plain.DeepEquals(secret))
+	assert.False(t, secret.DeepEquals(plain))
+
+	// As with objects, wrapping the whole array in a secret produces a flat
+	// Old/New replacement rather than a recursive Array diff.
+	vd := plain.Diff(secret)
+	require.NotNil(t, vd)
+	assert.Nil(t, vd.Array)
+	assert.Nil(t, vd.Object)
+	assert.True(t, vd.Old.IsArray())
+	assert.True(t, vd.New.IsSecret())
 }

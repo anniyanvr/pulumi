@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,8 +20,8 @@ import (
 
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // BodyItem represents either an *Attribute or a *Block that is part of an HCL2 Body.
@@ -97,7 +97,7 @@ func (b *Body) print(w io.Writer, p *printer) {
 	}
 }
 
-// Attribute returns the attribute with the givne in the body if any exists.
+// Attribute returns the attribute with the given name in the body if any exists.
 func (b *Body) Attribute(name string) (*Attribute, bool) {
 	for _, item := range b.Items {
 		if attr, ok := item.(*Attribute); ok && attr.Name == name {
@@ -120,8 +120,8 @@ func (b *Body) Blocks(typ string) []*Block {
 
 // BindBody binds an HCL2 body using the given scopes and token map.
 func BindBody(body *hclsyntax.Body, scopes Scopes, tokens syntax.TokenMap,
-	opts ...BindOption) (*Body, hcl.Diagnostics) {
-
+	opts ...BindOption,
+) (*Body, hcl.Diagnostics) {
 	var diagnostics hcl.Diagnostics
 
 	syntaxItems := SourceOrderBody(body)

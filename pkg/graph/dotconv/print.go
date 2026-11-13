@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,12 +24,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pulumi/pulumi/pkg/v2/graph"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/pkg/v3/graph"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/slice"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // Print prints a resource graph.
-func Print(g graph.Graph, w io.Writer) error {
+func Print(g graph.Graph, w io.Writer, dotFragment string) error {
 	// Allocate a new writer.  In general, we will ignore write errors throughout this function, for simplicity, opting
 	// instead to return the result of flushing the buffer at the end, which is generally latching.
 	b := bufio.NewWriter(w)
@@ -39,9 +40,22 @@ func Print(g graph.Graph, w io.Writer) error {
 		return err
 	}
 
+	// If the caller provided a fragment then insert it here.
+	if dotFragment != "" {
+		if _, err := b.WriteString(dotFragment); err != nil {
+			return err
+		}
+
+		// Ensure that the fragment is followed by newline, this reduces
+		// problems if the fragment doesn't end with a semicolon
+		if _, err := b.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+
 	// Initialize the frontier with unvisited graph vertices.
 	queued := make(map[graph.Vertex]bool)
-	frontier := make([]graph.Vertex, 0, len(g.Roots()))
+	frontier := slice.Prealloc[graph.Vertex](len(g.Roots()))
 	for _, root := range g.Roots() {
 		to := root.To()
 		queued[to] = true
@@ -69,7 +83,7 @@ func Print(g graph.Graph, w io.Writer) error {
 		// Dequeue the head of the frontier.
 		v := frontier[0]
 		frontier = frontier[1:]
-		contract.Assert(!emitted[v])
+		contract.Assertf(!emitted[v], "vertex was emitted twice")
 		emitted[v] = true
 
 		// Get and lazily allocate the ID for this vertex.
@@ -77,11 +91,11 @@ func Print(g graph.Graph, w io.Writer) error {
 
 		// Print this vertex; first its "label" (type) and then its direct dependencies.
 		// IDEA: consider serializing properties on the node also.
-		if _, err := b.WriteString(fmt.Sprintf("%v%v", indent, id)); err != nil {
+		if _, err := fmt.Fprintf(b, "%v%v", indent, id); err != nil {
 			return err
 		}
 		if label := v.Label(); label != "" {
-			if _, err := b.WriteString(fmt.Sprintf(" [label=\"%v\"]", label)); err != nil {
+			if _, err := fmt.Fprintf(b, " [label=\"%v\"]", label); err != nil {
 				return err
 			}
 		}
@@ -96,7 +110,7 @@ func Print(g graph.Graph, w io.Writer) error {
 			// Print the ID of each dependency and, for those we haven't seen, add them to the frontier.
 			for _, out := range outs {
 				to := out.To()
-				if _, err := b.WriteString(fmt.Sprintf("%s -> %s", base, getID(to))); err != nil {
+				if _, err := fmt.Fprintf(b, "%s -> %s", base, getID(to)); err != nil {
 					return err
 				}
 
@@ -108,7 +122,7 @@ func Print(g graph.Graph, w io.Writer) error {
 					attrs = append(attrs, fmt.Sprintf("label = \"%s\"", out.Label()))
 				}
 				if len(attrs) > 0 {
-					if _, err := b.WriteString(fmt.Sprintf(" [%s]", strings.Join(attrs, ", "))); err != nil {
+					if _, err := fmt.Fprintf(b, " [%s]", strings.Join(attrs, ", ")); err != nil {
 						return err
 					}
 				}

@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2019, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,144 +16,150 @@ package npm
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
-	uuid "github.com/gofrs/uuid"
-
-	"github.com/pkg/errors"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/cmdutil"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/logging"
+	"github.com/blang/semver"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/errutil"
 )
 
-// Pack runs `npm pack` in the given directory, packaging the Node.js app located there into a
-// tarball and returning it as `[]byte`. `stdout` is ignored for the command, as it does not
-// generate useful data. If the `PULUMI_PREFER_YARN` environment variable is set, `yarn pack` is run
-// instead of `npm pack`.
-func Pack(dir string, stderr io.Writer) ([]byte, error) {
-	c, npm, bin, err := getCmd("pack")
-	if err != nil {
-		return nil, err
-	}
-	c.Dir = dir
-
-	// Note that `npm pack` doesn't have the ability to specify the resulting filename, since
-	// it's meant to be uploaded directly to npm, which means we have to get that information
-	// by parsing the output of the command. However, if we're using `yarn`, we can specify a
-	// filename.
-	var packfile string
-
-	if !npm {
-		// generate a new uuid
-		uuid, err := uuid.NewV4()
-		if err != nil {
-			return nil, err
-		}
-		packfile = fmt.Sprintf("%s.tgz", uuid.String())
-		c.Args = append(c.Args, "--filename", packfile)
-	}
-
-	// Run the command.
-	// `stdout` is ignored for the command, as it does not generate useful data.
-	var stdout bytes.Buffer
-	if err = runCmd(c, npm, &stdout, stderr); err != nil {
-		return nil, err
-	}
-
-	// If `npm` was used, parse the filename from the output.
-	if npm {
-		packfile = strings.TrimSpace(stdout.String())
-	}
-
-	defer os.Remove(packfile)
-
-	packTarball, err := ioutil.ReadFile(packfile)
-	if err != nil {
-		return nil, fmt.Errorf("%s pack completed successfully but the packed .tgz file was not generated", bin)
-	}
-
-	return packTarball, nil
+// NPM is the canonical "Node Package Manager".
+type npmManager struct {
+	executable string
 }
 
-// Install runs `npm install` in the given directory, installing the dependencies for the Node.js
-// app located there. If the `PULUMI_PREFER_YARN` environment variable is set, `yarn install` is used
-// instead of `npm install`.
-func Install(dir string, stdout, stderr io.Writer) (string, error) {
-	c, npm, bin, err := getCmd("install")
+// Assert that NPM is an instance of PackageManager.
+var _ PackageManager = &npmManager{}
+
+func newNPM() (*npmManager, error) {
+	npmPath, err := exec.LookPath("npm")
 	if err != nil {
-		return bin, err
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, errors.New("Could not find `npm` executable.\n" +
+				"Install npm and make sure it is in your PATH.")
+		}
+		return nil, err
 	}
-	c.Dir = dir
-
-	// Run the command.
-	if err = runCmd(c, npm, stdout, stderr); err != nil {
-		return bin, err
-	}
-
-	// Ensure the "node_modules" directory exists.
-	nodeModulesPath := filepath.Join(dir, "node_modules")
-	if _, err := os.Stat(nodeModulesPath); os.IsNotExist(err) {
-		return bin, errors.Errorf("%s install reported success, but node_modules directory is missing", bin)
-	}
-
-	return bin, nil
+	return &npmManager{
+		executable: npmPath,
+	}, nil
 }
 
-// getCmd returns the exec.Cmd used to install NPM dependencies. It will either use `npm` or `yarn` depending
-// on what is available on the current path, and if `PULUMI_PREFER_YARN` is truthy.
-// The boolean return parameter indicates if `npm` is chosen or not (instead of `yarn`).
-func getCmd(command string) (*exec.Cmd, bool, string, error) {
-	if preferYarn() {
-		const file = "yarn"
-		yarnPath, err := exec.LookPath(file)
-		if err == nil {
-			return exec.Command(yarnPath, command), false, file, nil
-		}
-		logging.Warningf("could not find yarn on the $PATH, trying npm instead: %v", err)
-	}
+func (node *npmManager) Name() string {
+	return "npm"
+}
 
-	const file = "npm"
-	npmPath, err := exec.LookPath(file)
+func (node *npmManager) Version() (semver.Version, error) {
+	cmd := exec.Command(node.executable, "--version")
+	output, err := cmd.Output()
 	if err != nil {
-		return nil, false, file, errors.Wrapf(err, "could not find npm on the $PATH; npm is installed with Node.js "+
-			"available at https://nodejs.org/")
+		return semver.Version{}, errutil.ErrorWithStderr(err, cmd.String())
 	}
+	versionStr := strings.TrimSpace(string(output))
+	version, err := semver.Parse(versionStr)
+	if err != nil {
+		return semver.Version{}, err
+	}
+	return version, nil
+}
+
+func (node *npmManager) Install(ctx context.Context, dir string, production bool, stdout, stderr io.Writer) error {
+	command := node.installCmd(ctx, production)
+	command.Dir = dir
+	command.Stdout = stdout
+	command.Stderr = stderr
+	return command.Run()
+}
+
+func (node *npmManager) installCmd(ctx context.Context, production bool) *exec.Cmd {
 	// We pass `--loglevel=error` to prevent `npm` from printing warnings about missing
 	// `description`, `repository`, and `license` fields in the package.json file.
-	return exec.Command(npmPath, command, "--loglevel=error"), true, file, nil
+	args := []string{"install", "--loglevel=error"}
+
+	if production {
+		args = append(args, "--production")
+	}
+
+	return exec.CommandContext(ctx, node.executable, args...)
 }
 
-// runCmd handles hooking up `stdout` and `stderr` and then runs the command.
-func runCmd(c *exec.Cmd, npm bool, stdout, stderr io.Writer) error {
-	// Setup `stdout` and `stderr`.
-	// `stderr` is ignored when `yarn` is used because it outputs warnings like "package.json: No license field"
-	// to `stderr` that we don't need to show.
-	c.Stdout = stdout
-	var stderrBuffer bytes.Buffer
-	if npm {
-		c.Stderr = stderr
-	} else {
-		c.Stderr = &stderrBuffer
+func (node *npmManager) Link(ctx context.Context, dir, packageName, path string) error {
+	packageSpecifier := getLinkPackageProperty(packageName, path)
+	cmd := exec.CommandContext(ctx, "npm", "pkg", "set", packageSpecifier)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error executing npm command %s: %w, output: %s", cmd.String(), err, out)
 	}
 
-	// Run the command.
-	if err := c.Run(); err != nil {
-		// If we failed, and we're using `yarn`, write out any bytes that were written to `stderr`.
-		if !npm {
-			stderr.Write(stderrBuffer.Bytes())
+	// Local SDKs have a postinstall script that needs to run to compile the SDK from TypeScript. Starting with
+	// npm 11.16.0, npm warns about packages whose install scripts are not covered by the `allowScripts` field in
+	// package.json, and npm 12 will skip those scripts unless they are allowlisted. Add the package to
+	// `allowScripts`, keyed by its `file:` dependency spec, so its install scripts keep running.
+	// https://docs.npmjs.com/cli/configuring-npm/package-json#allowscripts
+	cmd = exec.CommandContext(ctx, "npm", "pkg", "get", "allowScripts")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error running %s: %w, output: %s", cmd.String(), err, out)
+	}
+	out = bytes.TrimSpace(out)
+	allowScripts := map[string]bool{}
+	if len(out) > 0 && string(out) != "undefined" {
+		if err := json.Unmarshal(out, &allowScripts); err != nil {
+			allowScripts = map[string]bool{}
 		}
-		return err
 	}
-
+	allowScripts["file:"+path] = true
+	jsonData, err := json.Marshal(allowScripts)
+	if err != nil {
+		return fmt.Errorf("error marshaling allowScripts to JSON: %w", err)
+	}
+	cmd = exec.CommandContext(ctx, "npm", "pkg", "set", "--json", "allowScripts="+string(jsonData))
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error running %s: %w, output: %s", cmd.String(), err, out)
+	}
 	return nil
 }
 
-// preferYarn returns true if the `PULUMI_PREFER_YARN` environment variable is set.
-func preferYarn() bool {
-	return cmdutil.IsTruthy(os.Getenv("PULUMI_PREFER_YARN"))
+func (node *npmManager) ListPackages(
+	ctx context.Context, dir string, transitive bool,
+) ([]plugin.DependencyInfo, error) {
+	return listPackagesFromLockFile(dir, "package-lock.json", transitive)
+}
+
+func (node *npmManager) Pack(ctx context.Context, dir string, stderr io.Writer) ([]byte, error) {
+	command := exec.CommandContext(ctx, node.executable, "pack", "--loglevel=error")
+	command.Dir = dir
+
+	// We have to read the name of the file from stdout.
+	var stdout bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = stderr
+	err := command.Run()
+	if err != nil {
+		return nil, err
+	}
+	// Next, we try to read the name of the file from stdout.
+	// packfile is the name of the file containing the tarball,
+	// as produced by `npm pack`.
+	packFilename := strings.TrimSpace(stdout.String())
+	packfile := filepath.Join(dir, packFilename)
+	defer os.Remove(packfile)
+
+	packTarball, err := os.ReadFile(packfile)
+	if err != nil {
+		newErr := fmt.Errorf("'npm pack' completed successfully but the package .tgz file was not generated: %w", err)
+		return nil, newErr
+	}
+
+	return packTarball, nil
 }

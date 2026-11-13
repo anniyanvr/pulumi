@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,22 +13,33 @@
 # limitations under the License.
 from pulumi import Output, CustomResource
 
+
 class MyResource(CustomResource):
     nested_numbers: Output[dict]
 
     def __init__(self, name):
-        CustomResource.__init__(self, "test:index:MyResource", name, {
-            "nested_numbers": None,
-        })
+        CustomResource.__init__(
+            self,
+            "test:index:MyResource",
+            name,
+            {
+                "nested_numbers": None,
+            },
+        )
 
 
 class SumResource(CustomResource):
     sum: Output[int]
 
     def __init__(self, name, sum):
-        CustomResource.__init__(self, "test:index:SumResource", name, {
-            "sum": sum,
-        })
+        CustomResource.__init__(
+            self,
+            "test:index:SumResource",
+            name,
+            {
+                "sum": sum,
+            },
+        )
 
 
 res1 = MyResource("testResource1")

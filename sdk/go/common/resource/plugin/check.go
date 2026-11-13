@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,30 +15,30 @@
 package plugin
 
 import (
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/mapper"
-	lumirpc "github.com/pulumi/pulumi/sdk/v2/proto/go"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/mapper"
+	pulumirpc "github.com/pulumi/pulumi/sdk/v3/proto/go"
 )
 
 // NewCheckResponse produces a response with property validation failures from the given array of mapper failures.
-func NewCheckResponse(err error) *lumirpc.CheckResponse {
-	var failures []*lumirpc.CheckFailure
+func NewCheckResponse(err error) *pulumirpc.CheckResponse {
+	var failures []*pulumirpc.CheckFailure
 	if err != nil {
 		switch e := err.(type) {
 		case mapper.MappingError:
 			for _, failure := range e.Failures() {
 				switch f := failure.(type) {
 				case mapper.FieldError:
-					failures = append(failures, &lumirpc.CheckFailure{
+					failures = append(failures, &pulumirpc.CheckFailure{
 						Property: f.Field(),
 						Reason:   f.Reason(),
 					})
 				default:
-					failures = append(failures, &lumirpc.CheckFailure{Reason: f.Error()})
+					failures = append(failures, &pulumirpc.CheckFailure{Reason: f.Error()})
 				}
 			}
 		default:
-			failures = append(failures, &lumirpc.CheckFailure{Reason: e.Error()})
+			failures = append(failures, &pulumirpc.CheckFailure{Reason: e.Error()})
 		}
 	}
-	return &lumirpc.CheckResponse{Failures: failures}
+	return &pulumirpc.CheckResponse{Failures: failures}
 }

@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,10 +17,10 @@ package backend
 import (
 	"context"
 	"encoding/json"
+	"io"
 
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource/plugin"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/result"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/workspace"
+	"github.com/pulumi/pulumi/pkg/v3/resource/plugin"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 )
 
 // PublishOperation publishes a PolicyPack to the backend.
@@ -29,6 +29,19 @@ type PublishOperation struct {
 	PlugCtx    *plugin.Context
 	PolicyPack *workspace.PolicyPackProject
 	Scopes     CancellationScopeSource
+
+	// Metadata contains optional data about the environment performing the publish operation,
+	// e.g. the current source code control commit information.
+	Metadata map[string]string
+
+	// Progress receives human-readable progress messages. It must not be nil.
+	Progress io.Writer
+}
+
+// PublishResult describes a published PolicyPack version.
+type PublishResult struct {
+	Name       string
+	VersionTag string
 }
 
 // PolicyPackOperation is used to make various operations against a Policy Pack.
@@ -37,16 +50,18 @@ type PolicyPackOperation struct {
 	VersionTag *string
 	Scopes     CancellationScopeSource
 	Config     map[string]*json.RawMessage
+	// Environments are the ESC environment references to attach to the Policy Pack.
+	Environments []string
 }
 
-// PolicyPack is a set of policies associated with a particular backend implementation.
+// PolicyPack is used to manage policy against a pluggable backend.
 type PolicyPack interface {
 	// Ref returns a reference to this PolicyPack.
 	Ref() PolicyPackReference
 	// Backend returns the backend this PolicyPack is managed by.
 	Backend() Backend
 	// Publish the PolicyPack to the service.
-	Publish(ctx context.Context, op PublishOperation) result.Result
+	Publish(ctx context.Context, op PublishOperation) (PublishResult, error)
 	// Enable the PolicyPack to a Policy Group in an organization. If Policy Group is
 	// empty, it enables it for the default Policy Group.
 	Enable(ctx context.Context, policyGroup string, op PolicyPackOperation) error

@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,16 +22,32 @@ class ConfigTest(LanghostTest):
     def test_config(self):
         self.run_test(
             program=path.join(self.base_path(), "config"),
-            config={
-                "foo:name": "myname"
-            },
-            expected_resource_count=1)
+            config={"foo:name": "myname"},
+            expected_resource_count=1,
+        )
 
-    def register_resource(self, ctx, dry_run, ty, name, _resource,
-                          _dependencies, _parent, _custom, _protect, _provider, _property_deps, _delete_before_replace,
-                          _ignore_changes, _version):
+    def register_resource(
+        self,
+        _ctx,
+        _dry_run,
+        ty,
+        name,
+        _resource,
+        _dependencies,
+        _parent,
+        _custom,
+        protect,
+        _provider,
+        _property_deps,
+        _delete_before_replace,
+        _ignore_changes,
+        _version,
+        _import,
+        _replace_on_changes,
+        _providers,
+        source_position,
+        stack_trace,
+    ):
         self.assertEqual("test:index:MyResource", ty)
         self.assertEqual("myname", name)
-        return {
-            "urn": self.make_urn(ty, name)
-        }
+        return {"urn": self.make_urn(ty, name)}

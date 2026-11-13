@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,35 +18,57 @@ The runtime implementation of the Pulumi Python SDK.
 
 from .config import (
     set_config,
+    set_all_config,
     get_config,
     get_config_env,
     get_config_env_key,
+    get_config_secret_keys_env,
+    is_config_secret,
 )
 
 from .mocks import (
     Mocks,
     set_mocks,
     test,
+    MockResourceArgs,
+    MockCallArgs,
 )
 
 from .settings import (
     Settings,
     configure,
     is_dry_run,
+    register_package,
+    reset_options,
+    get_root_resource,
+    get_root_directory,
+    require_pulumi_version,
 )
 
 from .stack import (
     run_in_stack,
-    get_root_resource,
     register_stack_transformation,
+    register_stack_transform,
+    register_resource_transform,
+    register_invoke_transform,
 )
 
 from .invoke import (
     invoke,
+    invoke_single,
+    invoke_async,
+    invoke_output,
+    invoke_output_single,
+    call,
+    call_single,
 )
 
 from ._json import (
     to_json,
+)
+
+from .resource import (
+    exists_resource,
 )
 
 from .rpc import (
@@ -55,3 +77,54 @@ from .rpc import (
     register_resource_module,
     register_resource_package,
 )
+
+__all__ = [
+    # config
+    "set_config",
+    "set_all_config",
+    "get_config",
+    "get_config_env",
+    "get_config_env_key",
+    "get_config_secret_keys_env",
+    "is_config_secret",
+    # mocks
+    "Mocks",
+    "set_mocks",
+    "test",
+    "MockCallArgs",
+    "MockResourceArgs",
+    # settings
+    "Settings",
+    "configure",
+    "is_dry_run",
+    "register_package",
+    "reset_options",
+    "get_root_resource",
+    "get_root_directory",
+    "require_pulumi_version",
+    # stack
+    "run_in_stack",
+    "register_stack_transformation",
+    "register_stack_transform",
+    "register_resource_transform",
+    "register_invoke_transform",
+    # invoke
+    "invoke",
+    "invoke_single",
+    "invoke_async",
+    "invoke_output",
+    "invoke_output_single",
+    "call",
+    "call_single",
+    # _json
+    "to_json",
+    # resource
+    "exists_resource",
+    # rpc
+    "ResourceModule",
+    "ResourcePackage",
+    "register_resource_module",
+    "register_resource_package",
+    # submodules
+    "rpc",
+]

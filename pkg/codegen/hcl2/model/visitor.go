@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,8 @@ package model
 
 import (
 	"github.com/hashicorp/hcl/v2"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/util/contract"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/slice"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/util/contract"
 )
 
 // A BodyItemVisitor is a function that visits and optionally replaces the contents of a body item.
@@ -282,7 +283,7 @@ func visitExpressions(ns []Expression, pre, post ExpressionVisitor) ([]Expressio
 		return []Expression{}, diagnostics
 	}
 
-	nns := make([]Expression, 0, len(ns)-nils)
+	nns := slice.Prealloc[Expression](len(ns) - nils)
 	for _, e := range ns {
 		if e != nil {
 			nns = append(nns, e)

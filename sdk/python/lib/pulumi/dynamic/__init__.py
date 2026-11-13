@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ Dynamic Providers for Python.
 
 # Make all module members inside of this package available as package members.
 from .dynamic import (
+    ConfigureRequest,
     CheckResult,
     CheckFailure,
     DiffResult,
@@ -27,3 +28,20 @@ from .dynamic import (
     Resource,
     ResourceProvider,
 )
+
+from .config import (
+    Config,
+)
+
+__all__ = [
+    "ConfigureRequest",
+    "CheckResult",
+    "CheckFailure",
+    "DiffResult",
+    "CreateResult",
+    "ReadResult",
+    "UpdateResult",
+    "Resource",
+    "ResourceProvider",
+    "Config",
+]

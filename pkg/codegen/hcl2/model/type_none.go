@@ -1,4 +1,4 @@
-// Copyright 2016-2020, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,9 @@ package model
 import (
 	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclsyntax"
-	"github.com/pulumi/pulumi/pkg/v2/codegen/hcl2/syntax"
+
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/model/pretty"
+	"github.com/pulumi/pulumi/pkg/v3/codegen/hcl2/syntax"
 )
 
 type noneType int
@@ -26,41 +28,66 @@ func (noneType) SyntaxNode() hclsyntax.Node {
 	return syntax.None
 }
 
+func (noneType) pretty(seenFormatters map[Type]pretty.Formatter) pretty.Formatter {
+	return pretty.FromStringer(NoneType)
+}
+
+func (noneType) Pretty() pretty.Formatter {
+	return pretty.FromStringer(NoneType)
+}
+
 func (noneType) Traverse(traverser hcl.Traverser) (Traversable, hcl.Diagnostics) {
-	return NoneType, hcl.Diagnostics{unsupportedReceiverType(NoneType, traverser.SourceRange())}
+	return NoneType, hcl.Diagnostics{unsupportedReceiverTypeWarning(NoneType, traverser.SourceRange())}
 }
 
 func (n noneType) Equals(other Type) bool {
 	return n.equals(other, nil)
 }
 
-func (noneType) equals(other Type, seen map[Type]struct{}) bool {
+func (noneType) equals(other Type, seen comparePairs) bool {
 	return other == NoneType
 }
 
 func (noneType) AssignableFrom(src Type) bool {
-	return assignableFrom(NoneType, src, func() bool {
+	return NoneType.assignableFrom(src, nil)
+}
+
+func (noneType) assignableFrom(src Type, seen *cycleSet) bool {
+	return assignableFrom(NoneType, src, seen, func(seen *cycleSet) bool {
 		return false
 	})
 }
 
 func (noneType) ConversionFrom(src Type) ConversionKind {
-	return NoneType.conversionFrom(src, false)
+	kind, _ := NoneType.conversionFrom(src, false, nil)
+	return kind
 }
 
-func (noneType) conversionFrom(src Type, unifying bool) ConversionKind {
-	return conversionFrom(NoneType, src, unifying, func() ConversionKind {
-		return NoConversion
-	})
+func (noneType) conversionFrom(src Type, unifying bool, seen *cycleSet) (ConversionKind, lazyDiagnostics) {
+	return conversionFrom(NoneType, src, unifying, seen, &typeCache{},
+		func() (ConversionKind, lazyDiagnostics) {
+			// The null literal is a constant of the none type.
+			if src, ok := src.(*ConstType); ok {
+				return NoneType.conversionFrom(src.Type, unifying, seen)
+			}
+			return NoConversion, func() hcl.Diagnostics {
+				return hcl.Diagnostics{typeNotConvertible(NoneType, src)}
+			}
+		})
 }
 
 func (noneType) String() string {
 	return "none"
 }
 
-func (noneType) unify(other Type) (Type, ConversionKind) {
-	return unify(NoneType, other, func() (Type, ConversionKind) {
-		return NoneType, other.ConversionFrom(NoneType)
+func (noneType) string(_ map[Type]struct{}) string {
+	return "none"
+}
+
+func (noneType) unify(other Type, seen *cycleSet) (Type, ConversionKind) {
+	return unify(NoneType, other, seen, func() (Type, ConversionKind) {
+		kind, _ := other.conversionFrom(NoneType, true, seen)
+		return NoneType, kind
 	})
 }
 

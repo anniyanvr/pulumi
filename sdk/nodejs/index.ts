@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Enable source map support so we get good stack traces.
-import "source-map-support/register";
-
 // Export top-level elements.
 export * from "./config";
 export * from "./errors";
@@ -23,16 +20,18 @@ export * from "./metadata";
 export * from "./output";
 export * from "./resource";
 export * from "./stackReference";
+export * from "./stash";
 
 // Export submodules individually.
 import * as asset from "./asset";
+import * as automation from "./automation";
 import * as dynamic from "./dynamic";
 import * as iterable from "./iterable";
 import * as log from "./log";
 import * as provider from "./provider";
 import * as runtime from "./runtime";
 import * as utils from "./utils";
-export { asset, dynamic, iterable, log, provider, runtime, utils };
+export { asset, automation, dynamic, iterable, log, provider, runtime, utils };
 
 // @pulumi is a deployment-only module.  If someone tries to capture it, and we fail for some reason
 // we want to give a good message about what the problem likely is.  Note that capturing a

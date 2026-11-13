@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,9 @@ from pulumi.runtime import invoke
 
 class MyResource(CustomResource):
     def __init__(self, name, version=None):
-        CustomResource.__init__(self, "test:index:MyResource", name, opts=ResourceOptions(version=version))
+        CustomResource.__init__(
+            self, "test:index:MyResource", name, opts=ResourceOptions(version=version)
+        )
 
 
 res = MyResource("testres", version="0.19.1")

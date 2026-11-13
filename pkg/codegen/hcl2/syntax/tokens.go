@@ -1,9 +1,25 @@
+// Copyright 2020, Pulumi Corporation.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package syntax
 
 import (
 	"bytes"
 	"fmt"
 	"math/big"
+	"strconv"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -165,7 +181,18 @@ func (c Comment) Range() hcl.Range {
 
 // Bytes returns the raw bytes that comprise the comment.
 func (c Comment) Bytes() []byte {
-	return c.bytes
+	if c.rng != (hcl.Range{}) {
+		return c.bytes
+	}
+	var b bytes.Buffer
+	for _, l := range c.Lines {
+		for line := range strings.SplitSeq(l, "\n") {
+			b.WriteString("//")
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+	}
+	return b.Bytes()
 }
 
 func (Comment) isTrivia() {}
@@ -206,21 +233,15 @@ type TemplateDelimiter struct {
 // NewTemplateDelimiter creates a new TemplateDelimiter value with the given delimiter type. If the token type is not a
 // template delimiter, this function will panic.
 func NewTemplateDelimiter(typ hclsyntax.TokenType) TemplateDelimiter {
-	var s string
-	switch typ {
-	case hclsyntax.TokenTemplateInterp:
-		s = "${"
-	case hclsyntax.TokenTemplateControl:
-		s = "%{"
-	case hclsyntax.TokenTemplateSeqEnd:
-		s = "}"
-	default:
+	if !isTemplateDelimiter(typ) {
 		panic(fmt.Errorf("%v is not a template delimiter", typ))
 	}
-	return TemplateDelimiter{
-		Type:  typ,
-		bytes: []byte(s),
-	}
+	return TemplateDelimiter{Type: typ}
+}
+
+func isTemplateDelimiter(typ hclsyntax.TokenType) bool {
+	return typ == hclsyntax.TokenTemplateInterp || typ == hclsyntax.TokenTemplateControl ||
+		typ == hclsyntax.TokenTemplateSeqEnd
 }
 
 // Range returns the range of the delimiter in the source file.
@@ -230,7 +251,10 @@ func (t TemplateDelimiter) Range() hcl.Range {
 
 // Bytes returns the raw bytes that comprise the delimiter.
 func (t TemplateDelimiter) Bytes() []byte {
-	return t.bytes
+	if t.rng != (hcl.Range{}) || !isTemplateDelimiter(t.Type) {
+		return t.bytes
+	}
+	return []byte(tokenStrings[t.Type])
 }
 
 func (TemplateDelimiter) isTrivia() {}
@@ -262,12 +286,8 @@ func (t Token) Format(f fmt.State, c rune) {
 
 func (t Token) AllTrivia() TriviaList {
 	result := make(TriviaList, len(t.LeadingTrivia)+len(t.TrailingTrivia))
-	for i, trivia := range t.LeadingTrivia {
-		result[i] = trivia
-	}
-	for i, trivia := range t.TrailingTrivia {
-		result[len(t.LeadingTrivia)+i] = trivia
-	}
+	copy(result, t.LeadingTrivia)
+	copy(result[len(t.LeadingTrivia):], t.TrailingTrivia)
 	return result
 }
 
@@ -787,7 +807,7 @@ func (t *FunctionCallTokens) GetCommas(argCount int) []Token {
 		}
 
 		commas := make([]Token, argCount-1)
-		for i := 0; i < len(commas); i++ {
+		for i := range commas {
 			commas[i] = Token{Raw: newRawToken(hclsyntax.TokenComma)}
 		}
 		return commas
@@ -864,7 +884,7 @@ func rawLiteralValueToken(value cty.Value) hclsyntax.Token {
 		bf := value.AsBigFloat()
 		i, acc := bf.Int64()
 		if acc == big.Exact {
-			rawText = fmt.Sprintf("%v", i)
+			rawText = strconv.FormatInt(i, 10)
 		} else {
 			d, _ := bf.Float64()
 			rawText = fmt.Sprintf("%g", d)
@@ -911,7 +931,6 @@ func NewObjectConsItemTokens(last bool) ObjectConsItemTokens {
 			Raw:            newRawToken(hclsyntax.TokenComma),
 			TrailingTrivia: TriviaList{NewWhitespace('\n')},
 		}
-
 	}
 	return ObjectConsItemTokens{
 		Equals: Token{
@@ -964,7 +983,7 @@ func (t *ObjectConsTokens) GetOpenBrace(itemCount int) Token {
 func (t *ObjectConsTokens) GetItems(itemCount int) []ObjectConsItemTokens {
 	if t == nil {
 		items := make([]ObjectConsItemTokens, itemCount)
-		for i := 0; i < len(items); i++ {
+		for i := range items {
 			items[i] = NewObjectConsItemTokens(i == len(items)-1)
 		}
 		return items
@@ -1263,7 +1282,7 @@ func (t *TupleConsTokens) GetCommas(elementCount int) []Token {
 		}
 
 		commas := make([]Token, elementCount-1)
-		for i := 0; i < len(commas); i++ {
+		for i := range commas {
 			commas[i] = Token{Raw: newRawToken(hclsyntax.TokenComma)}
 		}
 		return commas

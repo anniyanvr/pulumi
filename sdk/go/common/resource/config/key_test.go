@@ -1,4 +1,4 @@
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,48 +19,59 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v2"
 )
 
 func TestParseKey(t *testing.T) {
+	t.Parallel()
+
 	k, err := ParseKey("test:config:key")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "test", k.namespace)
 	assert.Equal(t, "key", k.name)
 
 	k, err = ParseKey("test:key")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "test", k.namespace)
 	assert.Equal(t, "key", k.name)
 
 	_, err = ParseKey("foo")
-	assert.Error(t, err)
+	assert.ErrorContains(t, err,
+		"could not parse foo as a configuration key "+
+			"(configuration keys should be of the form `<namespace>:<name>`)")
 
 	_, err = ParseKey("test:data:key")
-	assert.Error(t, err)
+	assert.ErrorContains(t, err,
+		"could not parse test:data:key as a configuration key "+
+			"(configuration keys should be of the form `<namespace>:<name>`)")
 }
 
 func TestMarshalKeyJSON(t *testing.T) {
+	t.Parallel()
+
 	k := Key{namespace: "test", name: "key"}
 
 	b, err := json.Marshal(k)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, []byte("\"test:key\""), b)
 
 	newK, err := roundtripKeyJSON(k)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, k, newK)
 }
 
 func TestMarshalKeyYAML(t *testing.T) {
+	t.Parallel()
+
 	k := Key{namespace: "test", name: "key"}
 
 	b, err := yaml.Marshal(k)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, []byte("test:key\n"), b)
 
 	newK, err := roundtripKeyYAML(k)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, k, newK)
 }
 
@@ -72,8 +83,9 @@ func roundtripKeyJSON(k Key) (Key, error) {
 	return roundtripKey(k, json.Marshal, json.Unmarshal)
 }
 
-func roundtripKey(m Key, marshal func(v interface{}) ([]byte, error),
-	unmarshal func([]byte, interface{}) error) (Key, error) {
+func roundtripKey(m Key, marshal func(v any) ([]byte, error),
+	unmarshal func([]byte, any) error,
+) (Key, error) {
 	b, err := marshal(m)
 	if err != nil {
 		return Key{}, err

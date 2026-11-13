@@ -1,7 +1,7 @@
 // GENERATED CODE -- DO NOT EDIT!
 
 // Original file comments:
-// Copyright 2016-2018, Pulumi Corporation.
+// Copyright 2016, Pulumi Corporation.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,9 @@
 //
 'use strict';
 var grpc = require('@grpc/grpc-js');
-var engine_pb = require('./engine_pb.js');
+var pulumi_engine_pb = require('./engine_pb.js');
 var google_protobuf_empty_pb = require('google-protobuf/google/protobuf/empty_pb.js');
+var google_protobuf_struct_pb = require('google-protobuf/google/protobuf/struct_pb.js');
 
 function serialize_google_protobuf_Empty(arg) {
   if (!(arg instanceof google_protobuf_empty_pb.Empty)) {
@@ -32,58 +33,91 @@ function deserialize_google_protobuf_Empty(buffer_arg) {
 }
 
 function serialize_pulumirpc_GetRootResourceRequest(arg) {
-  if (!(arg instanceof engine_pb.GetRootResourceRequest)) {
+  if (!(arg instanceof pulumi_engine_pb.GetRootResourceRequest)) {
     throw new Error('Expected argument of type pulumirpc.GetRootResourceRequest');
   }
   return Buffer.from(arg.serializeBinary());
 }
 
 function deserialize_pulumirpc_GetRootResourceRequest(buffer_arg) {
-  return engine_pb.GetRootResourceRequest.deserializeBinary(new Uint8Array(buffer_arg));
+  return pulumi_engine_pb.GetRootResourceRequest.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
 function serialize_pulumirpc_GetRootResourceResponse(arg) {
-  if (!(arg instanceof engine_pb.GetRootResourceResponse)) {
+  if (!(arg instanceof pulumi_engine_pb.GetRootResourceResponse)) {
     throw new Error('Expected argument of type pulumirpc.GetRootResourceResponse');
   }
   return Buffer.from(arg.serializeBinary());
 }
 
 function deserialize_pulumirpc_GetRootResourceResponse(buffer_arg) {
-  return engine_pb.GetRootResourceResponse.deserializeBinary(new Uint8Array(buffer_arg));
+  return pulumi_engine_pb.GetRootResourceResponse.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
 function serialize_pulumirpc_LogRequest(arg) {
-  if (!(arg instanceof engine_pb.LogRequest)) {
+  if (!(arg instanceof pulumi_engine_pb.LogRequest)) {
     throw new Error('Expected argument of type pulumirpc.LogRequest');
   }
   return Buffer.from(arg.serializeBinary());
 }
 
 function deserialize_pulumirpc_LogRequest(buffer_arg) {
-  return engine_pb.LogRequest.deserializeBinary(new Uint8Array(buffer_arg));
+  return pulumi_engine_pb.LogRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_pulumirpc_RequirePulumiVersionRequest(arg) {
+  if (!(arg instanceof pulumi_engine_pb.RequirePulumiVersionRequest)) {
+    throw new Error('Expected argument of type pulumirpc.RequirePulumiVersionRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_pulumirpc_RequirePulumiVersionRequest(buffer_arg) {
+  return pulumi_engine_pb.RequirePulumiVersionRequest.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_pulumirpc_RequirePulumiVersionResponse(arg) {
+  if (!(arg instanceof pulumi_engine_pb.RequirePulumiVersionResponse)) {
+    throw new Error('Expected argument of type pulumirpc.RequirePulumiVersionResponse');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_pulumirpc_RequirePulumiVersionResponse(buffer_arg) {
+  return pulumi_engine_pb.RequirePulumiVersionResponse.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
 function serialize_pulumirpc_SetRootResourceRequest(arg) {
-  if (!(arg instanceof engine_pb.SetRootResourceRequest)) {
+  if (!(arg instanceof pulumi_engine_pb.SetRootResourceRequest)) {
     throw new Error('Expected argument of type pulumirpc.SetRootResourceRequest');
   }
   return Buffer.from(arg.serializeBinary());
 }
 
 function deserialize_pulumirpc_SetRootResourceRequest(buffer_arg) {
-  return engine_pb.SetRootResourceRequest.deserializeBinary(new Uint8Array(buffer_arg));
+  return pulumi_engine_pb.SetRootResourceRequest.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
 function serialize_pulumirpc_SetRootResourceResponse(arg) {
-  if (!(arg instanceof engine_pb.SetRootResourceResponse)) {
+  if (!(arg instanceof pulumi_engine_pb.SetRootResourceResponse)) {
     throw new Error('Expected argument of type pulumirpc.SetRootResourceResponse');
   }
   return Buffer.from(arg.serializeBinary());
 }
 
 function deserialize_pulumirpc_SetRootResourceResponse(buffer_arg) {
-  return engine_pb.SetRootResourceResponse.deserializeBinary(new Uint8Array(buffer_arg));
+  return pulumi_engine_pb.SetRootResourceResponse.deserializeBinary(new Uint8Array(buffer_arg));
+}
+
+function serialize_pulumirpc_StartDebuggingRequest(arg) {
+  if (!(arg instanceof pulumi_engine_pb.StartDebuggingRequest)) {
+    throw new Error('Expected argument of type pulumirpc.StartDebuggingRequest');
+  }
+  return Buffer.from(arg.serializeBinary());
+}
+
+function deserialize_pulumirpc_StartDebuggingRequest(buffer_arg) {
+  return pulumi_engine_pb.StartDebuggingRequest.deserializeBinary(new Uint8Array(buffer_arg));
 }
 
 
@@ -96,7 +130,7 @@ log: {
     path: '/pulumirpc.Engine/Log',
     requestStream: false,
     responseStream: false,
-    requestType: engine_pb.LogRequest,
+    requestType: pulumi_engine_pb.LogRequest,
     responseType: google_protobuf_empty_pb.Empty,
     requestSerialize: serialize_pulumirpc_LogRequest,
     requestDeserialize: deserialize_pulumirpc_LogRequest,
@@ -109,8 +143,8 @@ getRootResource: {
     path: '/pulumirpc.Engine/GetRootResource',
     requestStream: false,
     responseStream: false,
-    requestType: engine_pb.GetRootResourceRequest,
-    responseType: engine_pb.GetRootResourceResponse,
+    requestType: pulumi_engine_pb.GetRootResourceRequest,
+    responseType: pulumi_engine_pb.GetRootResourceResponse,
     requestSerialize: serialize_pulumirpc_GetRootResourceRequest,
     requestDeserialize: deserialize_pulumirpc_GetRootResourceRequest,
     responseSerialize: serialize_pulumirpc_GetRootResourceResponse,
@@ -121,13 +155,38 @@ setRootResource: {
     path: '/pulumirpc.Engine/SetRootResource',
     requestStream: false,
     responseStream: false,
-    requestType: engine_pb.SetRootResourceRequest,
-    responseType: engine_pb.SetRootResourceResponse,
+    requestType: pulumi_engine_pb.SetRootResourceRequest,
+    responseType: pulumi_engine_pb.SetRootResourceResponse,
     requestSerialize: serialize_pulumirpc_SetRootResourceRequest,
     requestDeserialize: deserialize_pulumirpc_SetRootResourceRequest,
     responseSerialize: serialize_pulumirpc_SetRootResourceResponse,
     responseDeserialize: deserialize_pulumirpc_SetRootResourceResponse,
   },
+  // StartDebugging indicates to the engine that the program has started under a debugger, and the engine
+// should notify the user of how to connect to the debugger.
+startDebugging: {
+    path: '/pulumirpc.Engine/StartDebugging',
+    requestStream: false,
+    responseStream: false,
+    requestType: pulumi_engine_pb.StartDebuggingRequest,
+    responseType: google_protobuf_empty_pb.Empty,
+    requestSerialize: serialize_pulumirpc_StartDebuggingRequest,
+    requestDeserialize: deserialize_pulumirpc_StartDebuggingRequest,
+    responseSerialize: serialize_google_protobuf_Empty,
+    responseDeserialize: deserialize_google_protobuf_Empty,
+  },
+  // RequirePulumiVersion checks that the version of the engine satisfies the passed in range.
+requirePulumiVersion: {
+    path: '/pulumirpc.Engine/RequirePulumiVersion',
+    requestStream: false,
+    responseStream: false,
+    requestType: pulumi_engine_pb.RequirePulumiVersionRequest,
+    responseType: pulumi_engine_pb.RequirePulumiVersionResponse,
+    requestSerialize: serialize_pulumirpc_RequirePulumiVersionRequest,
+    requestDeserialize: deserialize_pulumirpc_RequirePulumiVersionRequest,
+    responseSerialize: serialize_pulumirpc_RequirePulumiVersionResponse,
+    responseDeserialize: deserialize_pulumirpc_RequirePulumiVersionResponse,
+  },
 };
 
-exports.EngineClient = grpc.makeGenericClientConstructor(EngineService);
+exports.EngineClient = grpc.makeGenericClientConstructor(EngineService, 'Engine');

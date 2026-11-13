@@ -1,5 +1,16 @@
-// Copyright 2016-2018, Pulumi Corporation.  All rights reserved.
-// +build nodejs all
+// Copyright 2017, Pulumi Corporation.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package ints
 
@@ -7,11 +18,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/pulumi/pulumi/pkg/v2/resource/deploy/providers"
-	"github.com/pulumi/pulumi/pkg/v2/testing/integration"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/apitype"
-	"github.com/pulumi/pulumi/sdk/v2/go/common/resource"
+	"github.com/pulumi/pulumi/pkg/v3/testing/integration"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/providers"
+	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 )
 
 func validateResources(t *testing.T, resources []apitype.ResourceV3, expectedNames ...string) {
@@ -38,7 +50,7 @@ func validateResources(t *testing.T, resources []apitype.ResourceV3, expectedNam
 
 	// Ensure that exactly the provided resources are in the array.
 	for _, res := range resources {
-		name := string(res.URN.Name())
+		name := res.URN.Name()
 		_, ok := expectedNamesTable[name]
 		assert.True(t, ok)
 		delete(expectedNamesTable, name)
@@ -46,13 +58,15 @@ func validateResources(t *testing.T, resources []apitype.ResourceV3, expectedNam
 }
 
 // TestSteps tests many combinations of creates, updates, deletes, replacements, and so on.
+//
+//nolint:paralleltest // ProgramTest calls t.Parallel()
 func TestSteps(t *testing.T) {
 	integration.ProgramTest(t, &integration.ProgramTestOptions{
 		Dir:          "step1",
 		Dependencies: []string{"@pulumi/pulumi"},
 		Quick:        true,
 		ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
-			assert.NotNil(t, stackInfo.Deployment)
+			require.NotNil(t, stackInfo.Deployment)
 			validateResources(t, stackInfo.Deployment.Resources, "a", "b", "c", "d")
 		},
 		EditDirs: []integration.EditDir{
@@ -60,7 +74,7 @@ func TestSteps(t *testing.T) {
 				Dir:      "step2",
 				Additive: true,
 				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
-					assert.NotNil(t, stackInfo.Deployment)
+					require.NotNil(t, stackInfo.Deployment)
 					validateResources(t, stackInfo.Deployment.Resources, "a", "b", "c", "e")
 				},
 			},
@@ -68,7 +82,7 @@ func TestSteps(t *testing.T) {
 				Dir:      "step3",
 				Additive: true,
 				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
-					assert.NotNil(t, stackInfo.Deployment)
+					require.NotNil(t, stackInfo.Deployment)
 					validateResources(t, stackInfo.Deployment.Resources, "a", "c", "e")
 				},
 			},
@@ -76,7 +90,7 @@ func TestSteps(t *testing.T) {
 				Dir:      "step4",
 				Additive: true,
 				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
-					assert.NotNil(t, stackInfo.Deployment)
+					require.NotNil(t, stackInfo.Deployment)
 					validateResources(t, stackInfo.Deployment.Resources, "a", "c", "e")
 				},
 			},
@@ -84,7 +98,7 @@ func TestSteps(t *testing.T) {
 				Dir:      "step5",
 				Additive: true,
 				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
-					assert.NotNil(t, stackInfo.Deployment)
+					require.NotNil(t, stackInfo.Deployment)
 					validateResources(t, stackInfo.Deployment.Resources, "a", "c", "e")
 				},
 			},
@@ -92,7 +106,7 @@ func TestSteps(t *testing.T) {
 				Dir:      "step6",
 				Additive: true,
 				ExtraRuntimeValidation: func(t *testing.T, stackInfo integration.RuntimeValidationStackInfo) {
-					assert.NotNil(t, stackInfo.Deployment)
+					require.NotNil(t, stackInfo.Deployment)
 					validateResources(t, stackInfo.Deployment.Resources)
 				},
 			},

@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,10 @@ import asyncio
 from pulumi import export
 from pulumi.runtime import invoke
 
+
 async def await_invoke():
     return await invoke("test:index:MyFunction", {})
+
 
 export("f1", asyncio.ensure_future(await_invoke()))
 export("f2", asyncio.ensure_future(await_invoke()))

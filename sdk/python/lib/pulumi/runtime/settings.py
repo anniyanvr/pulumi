@@ -1,4 +1,4 @@
-# Copyright 2016-2018, Pulumi Corporation.
+# Copyright 2016, Pulumi Corporation.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,60 +15,77 @@
 """
 Runtime settings and configuration.
 """
+
+from __future__ import annotations
+
+from ._context import wrap_with_context
+
 import asyncio
+import base64
 import os
-import sys
-from typing import Optional, Awaitable, Union, Any, TYPE_CHECKING
+import threading
+from contextvars import ContextVar
+from typing import TYPE_CHECKING, Any, NoReturn, Optional, Union
 
 import grpc
-from ..runtime.proto import engine_pb2_grpc, resource_pb2, resource_pb2_grpc
+from google.protobuf import empty_pb2
+
+from .._utils import contextproperty
 from ..errors import RunError
+from ..runtime.proto import engine_pb2_grpc, resource_pb2, resource_pb2_grpc, engine_pb2
+from ._callbacks import _CallbackServicer
+from ._grpc_settings import _GRPC_CHANNEL_OPTIONS
+from ._state_migration_context import _ensure_not_in_state_migration
+from .rpc_manager import RPCManager
 
 if TYPE_CHECKING:
     from ..resource import Resource
 
-# _MAX_RPC_MESSAGE_SIZE raises the gRPC Max Message size from `4194304` (4mb) to `419430400` (400mb)
-_MAX_RPC_MESSAGE_SIZE = 1024 * 1024 * 400
-_GRPC_CHANNEL_OPTIONS = [('grpc.max_receive_message_length', _MAX_RPC_MESSAGE_SIZE)]
+# excessive_debug_output enables, well, pretty excessive debug output pertaining to resources and properties.
+excessive_debug_output = False
+
 
 class Settings:
-    monitor: Optional[Union[resource_pb2_grpc.ResourceMonitorStub, Any]]
-    engine: Optional[Union[engine_pb2_grpc.EngineStub, Any]]
-    project: Optional[str]
-    stack: Optional[str]
-    parallel: Optional[str]
-    dry_run: Optional[bool]
-    test_mode_enabled: Optional[bool]
-    legacy_apply_enabled: Optional[bool]
-    feature_support: dict
-
     """
     A bag of properties for configuring the Pulumi Python language runtime.
     """
-    def __init__(self,
-                 monitor: Optional[Union[str, Any]] = None,
-                 engine: Optional[Union[str, Any]] = None,
-                 project: Optional[str] = None,
-                 stack: Optional[str] = None,
-                 parallel: Optional[str] = None,
-                 dry_run: Optional[bool] = None,
-                 test_mode_enabled: Optional[bool] = None,
-                 legacy_apply_enabled: Optional[bool] = None):
+
+    def __init__(
+        self,
+        project: Optional[str],
+        stack: Optional[str],
+        monitor: Optional[Union[str, Any]] = None,
+        engine: Optional[Union[str, Any]] = None,
+        parallel: Optional[int] = None,
+        dry_run: Optional[bool] = None,
+        legacy_apply_enabled: Optional[bool] = None,
+        organization: Optional[str] = None,
+        root_directory: Optional[str] = None,
+    ):
+        self.rpc_manager = RPCManager()
+        self.outputs = set()
+        self.lock = threading.Lock()
+
         # Save the metadata information.
         self.project = project
+        self.root_directory = root_directory
         self.stack = stack
         self.parallel = parallel
         self.dry_run = dry_run
-        self.test_mode_enabled = test_mode_enabled
         self.legacy_apply_enabled = legacy_apply_enabled
-        self.feature_support = {}
-
-        if self.test_mode_enabled is None:
-            self.test_mode_enabled = os.getenv("PULUMI_TEST_MODE", "false") == "true"
+        self.monitor_features = set()
+        self.organization = organization
+        # Caches package references returned by `RegisterPackage` for
+        # parameterized providers. Scoped to the deployment so concurrent inline
+        # programs each register against their own engine and receive distinct
+        # refs.
+        self.package_refs = {}
+        self.base_providers_by_ref = {}
 
         if self.legacy_apply_enabled is None:
-            self.legacy_apply_enabled = os.getenv("PULUMI_ENABLE_LEGACY_APPLY", "false") == "true"
-
+            self.legacy_apply_enabled = (
+                os.getenv("PULUMI_ENABLE_LEGACY_APPLY", "false") == "true"
+            )
 
         # Actually connect to the monitor/engine over gRPC.
         if monitor is not None:
@@ -90,8 +107,69 @@ class Settings:
         else:
             self.engine = None
 
+        self.callbacks = None
+
+    @contextproperty
+    def rpc_manager(self) -> RPCManager:  # type: ignore
+        # The contextproperty decorator will fill the body of this method in, but mypy doesn't know that.
+        ...
+
+    @contextproperty
+    def lock(self) -> threading.Lock: ...  # type: ignore
+
+    @contextproperty
+    def outputs(self) -> set[asyncio.Task]: ...  # type: ignore
+
+    @contextproperty
+    def monitor(self) -> Optional[resource_pb2_grpc.ResourceMonitorStub]: ...
+
+    @contextproperty
+    def engine(self) -> Optional[engine_pb2_grpc.EngineStub]: ...
+
+    @contextproperty
+    def organization(self) -> Optional[str]: ...
+
+    @contextproperty
+    def project(self) -> Optional[str]: ...
+
+    @contextproperty
+    def root_directory(self) -> Optional[str]: ...
+
+    @contextproperty
+    def stack(self) -> Optional[str]: ...
+
+    @contextproperty
+    def parallel(self) -> Optional[bool]: ...
+
+    @contextproperty
+    def dry_run(self) -> Optional[bool]: ...
+
+    @contextproperty
+    def legacy_apply_enabled(self) -> Optional[bool]: ...
+
+    @contextproperty
+    def monitor_features(self) -> set[int]: ...  # type: ignore
+
+    @contextproperty
+    def package_refs(self) -> Optional[dict]: ...
+
+    @contextproperty
+    def base_providers_by_ref(self) -> Optional[dict]: ...
+
+    @contextproperty
+    def callbacks(self) -> Optional[_CallbackServicer]: ...
+
+    def __repr__(self):
+        return f"<class Settings[engine={self.engine.__repr__()} monitor={self.monitor.__repr__()} project={self.project.__repr__()} stack={self.stack.__repr__()}>"
+
+
 # default to "empty" settings.
-SETTINGS = Settings()
+SETTINGS = Settings(
+    stack="stack",
+    project="project",
+    root_directory="root_directory",
+    organization="organization",
+)
 
 
 def configure(settings: Settings):
@@ -99,49 +177,48 @@ def configure(settings: Settings):
     Configure sets the current ambient settings bag to the one given.
     """
     if not settings or not isinstance(settings, Settings):
-        raise TypeError('Settings is expected to be non-None and of type Settings')
-    global SETTINGS  # pylint: disable=global-statement
-    SETTINGS = settings
+        raise TypeError("Settings is expected to be non-None and of type Settings")
+    # The properties of SETTINGS are contextvars but SETTINGS itself isn't.
+    for key, value in settings.__dict__.items():
+        setattr(SETTINGS, key, value)
 
 
 def is_dry_run() -> bool:
     """
     Returns whether or not we are currently doing a preview.
+
+    When writing unit tests, you can set this flag via `pulumi.runtime.set_mocks` by supplying a value
+    for the argument `preview`.
     """
     return bool(SETTINGS.dry_run)
 
 
-def is_test_mode_enabled() -> bool:
-    """
-    Returns true if test mode is enabled (PULUMI_TEST_MODE).
-    """
-    return bool(SETTINGS.test_mode_enabled)
-
-
-def _set_test_mode_enabled(v: Optional[bool]):
-    """
-    Enable or disable testing mode programmatically -- meant for testing only.
-    """
-    SETTINGS.test_mode_enabled = v
-
-
-def require_test_mode_enabled():
-    if not is_test_mode_enabled():
-        raise RunError('Program run without the Pulumi engine available; re-run using the `pulumi` CLI')
-
 def is_legacy_apply_enabled():
     return bool(SETTINGS.legacy_apply_enabled)
+
+
+def get_organization() -> str:
+    """
+    Returns the current organization name.
+
+    When writing unit tests, you can set this flag via `pulumi.runtime.set_mocks` by supplying a value
+    for the argument `organization`.
+    """
+    return SETTINGS.organization
 
 
 def get_project() -> str:
     """
     Returns the current project name.
     """
-    project = SETTINGS.project
-    if not project:
-        require_test_mode_enabled()
-        raise RunError('Missing project name; for test mode, please call `pulumi.runtime.set_mocks`')
-    return project
+    return SETTINGS.project
+
+
+def get_root_directory() -> str:
+    """
+    Returns the project root, the location of Pulumi.yaml.
+    """
+    return SETTINGS.root_directory
 
 
 def _set_project(v: Optional[str]):
@@ -155,11 +232,7 @@ def get_stack() -> str:
     """
     Returns the current stack name.
     """
-    stack = SETTINGS.stack
-    if not stack:
-        require_test_mode_enabled()
-        raise RunError('Missing stack name; for test mode, please set PULUMI_NODEJS_STACK')
-    return stack
+    return SETTINGS.stack
 
 
 def _set_stack(v: Optional[str]):
@@ -169,14 +242,18 @@ def _set_stack(v: Optional[str]):
     SETTINGS.stack = v
 
 
+def _get_rpc_manager() -> RPCManager:
+    """
+    Returns the current rpc manager.
+    """
+    return SETTINGS.rpc_manager
+
+
 def get_monitor() -> Optional[Union[resource_pb2_grpc.ResourceMonitorStub, Any]]:
     """
     Returns the current resource monitoring service client for RPC communications.
     """
-    monitor = SETTINGS.monitor
-    if not monitor:
-        require_test_mode_enabled()
-    return monitor
+    return SETTINGS.monitor
 
 
 def get_engine() -> Optional[Union[engine_pb2_grpc.EngineStub, Any]]:
@@ -186,54 +263,264 @@ def get_engine() -> Optional[Union[engine_pb2_grpc.EngineStub, Any]]:
     return SETTINGS.engine
 
 
-ROOT: Optional['Resource'] = None
+async def _get_callbacks() -> Optional[_CallbackServicer]:
+    """
+    Returns the current callbacks for RPC communications.
+    """
+    callbacks = SETTINGS.callbacks
+    if callbacks is not None:
+        return callbacks
+
+    monitor = SETTINGS.monitor
+    if monitor is None:
+        return None
+
+    callbacks = _CallbackServicer(monitor)
+    await callbacks.serve()
+    SETTINGS.callbacks = callbacks
+    return callbacks
 
 
-def get_root_resource() -> Optional['Resource']:
+async def _shutdown_callbacks():
+    await _CallbackServicer.shutdown()
+
+
+def get_root_resource() -> Optional[Resource]:
     """
     Returns the implicit root stack resource for all resources created in this program.
     """
-    global ROOT
-    return ROOT
+    return ROOT.get()
 
 
-def set_root_resource(root: 'Resource'):
+def set_root_resource(root: Resource):
     """
     Sets the current root stack resource for all resources subsequently to be created in this program.
     """
-    global ROOT
-    ROOT = root
+    ROOT.set(root)
 
 
-async def monitor_supports_feature(feature: str) -> bool:
-    if feature not in SETTINGS.feature_support:
-        monitor = SETTINGS.monitor
-        if not monitor:
+ROOT: ContextVar[Optional[Resource]] = ContextVar("root_resource", default=None)
+
+
+def require_pulumi_version(rg: str) -> None:
+    """
+    Checks if the engine we are connected to is compatible with the passed in version range. If the version is not
+    compatible with the specified range, an exception is raised.
+
+    :param str rg: The range to check. The supported syntax for the range is that of
+           https://pkg.go.dev/github.com/blang/semver#ParseRange. For example ">=3.0.0", or "!3.1.2". Ranges can be
+           AND-ed together by concatenating with spaces ">=3.5.0 !3.7.7", meaning greater-or-equal to 3.5.0 and not
+           exactly 3.7.7. Ranges can be OR-ed with the `||` operator: "<3.4.0 || >3.8.0", meaning less-than 3.4.0 or
+           greater-than 3.8.0.
+    """
+    engine = get_engine()
+    if engine:
+        try:
+            engine.RequirePulumiVersion(
+                engine_pb2.RequirePulumiVersionRequest(pulumi_version_range=rg)
+            )
+        except grpc.RpcError as exn:
+            if exn.code() == grpc.StatusCode.UNIMPLEMENTED:
+                raise Exception(
+                    "The installed version of the CLI does not support the `RequirePulumiVersion` RPC. "
+                    + "Please upgrade the Pulumi CLI."
+                )
+            raise grpc_error_to_exception(exn) from None
+
+
+def monitor_supports_feature(feature: int) -> bool:
+    return feature in SETTINGS.monitor_features
+
+
+def grpc_error_to_exception(exn: grpc.RpcError) -> Exception:
+    # gRPC-python gets creative with their exceptions. grpc.RpcError as a type is useless;
+    # the usefulness come from the fact that it is polymorphically also a grpc.Call and thus has
+    # the .code() member. Pylint doesn't know this because it's not known statically.
+    #
+    # Neither pylint nor I are the only ones who find this confusing:
+    # https://github.com/grpc/grpc/issues/10885#issuecomment-302581315
+    if exn.code() == grpc.StatusCode.UNAVAILABLE:
+        # If the monitor is unavailable, it is in the process of
+        # shutting down or has already shut down.
+        return RunError("Resource monitor has terminated, shutting down")
+
+    details = exn.details()
+    return Exception(details)
+
+
+def handle_grpc_error(exn: grpc.RpcError) -> NoReturn:
+    raise grpc_error_to_exception(exn)
+
+
+async def register_package(
+    base_provider_name: str,
+    base_provider_version: str,
+    base_provider_download_url: str,
+    package_name: str,
+    package_version: str,
+    base64_parameter: str,
+    extension: bool = False,
+) -> str:
+    """
+    Registers a parameterized provider package with the resource monitor and
+    returns its package reference. The result is cached per deployment so that
+    concurrent inline programs each register against their own engine and
+    receive distinct refs. When extension is True, the package is registered as
+    an extension parameterization rather than a replacement.
+    """
+    _ensure_not_in_state_migration("register package")
+
+    key = "\0".join(
+        [
+            base_provider_name,
+            base_provider_version,
+            base_provider_download_url,
+            package_name,
+            package_version,
+            base64_parameter,
+            str(extension),
+        ]
+    )
+
+    package_refs = SETTINGS.package_refs
+    existing = package_refs.get(key)
+    if existing is not None:
+        return existing
+
+    if not monitor_supports_feature(
+        resource_pb2.RESOURCE_MONITOR_FEATURE_PARAMETERIZATION
+    ):
+        raise Exception(
+            "The Pulumi CLI does not support parameterization. Please update the Pulumi CLI."
+        )
+
+    monitor = get_monitor()
+    if monitor is None:
+        raise Exception("No monitor available")
+
+    parameterization = resource_pb2.Parameterization(
+        name=package_name,
+        version=package_version,
+        value=base64.b64decode(base64_parameter),
+    )
+    request = resource_pb2.RegisterPackageRequest(
+        name=base_provider_name,
+        version=base_provider_version,
+        download_url=base_provider_download_url,
+    )
+    if extension:
+        request.extension.CopyFrom(parameterization)
+    else:
+        request.parameterization.CopyFrom(parameterization)
+    response = monitor.RegisterPackage(request)
+    ref = response.ref
+    package_refs[key] = ref
+    if extension:
+        SETTINGS.base_providers_by_ref[ref] = base_provider_name
+    return ref
+
+
+def get_base_provider_for_ref(package_ref: Optional[str]) -> Optional[str]:
+    """
+    Returns the name of the base provider that serves the extension package the
+    reference was registered for, or None when the reference is not for an
+    extension package.
+    """
+    if package_ref is None:
+        return None
+    return SETTINGS.base_providers_by_ref.get(package_ref)
+
+
+def reset_options(
+    project: Optional[str] = None,
+    stack: Optional[str] = None,
+    root_directory: Optional[str] = None,
+    parallel: Optional[int] = None,
+    engine_address: Optional[str] = None,
+    monitor_address: Optional[str] = None,
+    preview: Optional[bool] = None,
+    organization: Optional[str] = None,
+):
+    """Resets globals to the values provided."""
+
+    ROOT.set(None)
+
+    configure(
+        Settings(
+            project=project,
+            monitor=monitor_address,
+            engine=engine_address,
+            stack=stack,
+            root_directory=root_directory,
+            parallel=parallel,
+            dry_run=preview,
+            organization=organization,
+        )
+    )
+
+
+async def _probe_monitor_feature(
+    monitor: resource_pb2_grpc.ResourceMonitorStub, feature: str
+) -> bool:
+    req = resource_pb2.SupportsFeatureRequest(id=feature)
+
+    def do_rpc_call():
+        try:
+            resp = monitor.SupportsFeature(req)
+            return resp.hasSupport
+        except grpc.RpcError as exn:
+            if exn.code() != grpc.StatusCode.UNIMPLEMENTED:
+                handle_grpc_error(exn)
             return False
 
-        req = resource_pb2.SupportsFeatureRequest(id=feature)
-        def do_rpc_call():
-            try:
-                resp = monitor.SupportsFeature(req)
-                return resp.hasSupport
-            except grpc.RpcError as exn:
-                # See the comment on invoke for the justification for disabling
-                # this warning
-                # pylint: disable=no-member
-                if exn.code() == grpc.StatusCode.UNAVAILABLE:
-                    sys.exit(0)
-                if exn.code() == grpc.StatusCode.UNIMPLEMENTED:
-                    return False
-                details = exn.details()
-            raise Exception(details)
+    return await asyncio.get_running_loop().run_in_executor(
+        None, wrap_with_context(do_rpc_call)
+    )
 
-        result = await asyncio.get_event_loop().run_in_executor(None, do_rpc_call)
-        SETTINGS.feature_support[feature] = result
 
-    return SETTINGS.feature_support[feature]
+# A frozen map of old feature IDs to the new resource monitor features.
+#
+# This map should never be updated.
+_LEGACY_FEATURE_MAPPING = {
+    "secrets": resource_pb2.RESOURCE_MONITOR_FEATURE_SECRETS,
+    "resourceReferences": resource_pb2.RESOURCE_MONITOR_FEATURE_RESOURCE_REFERENCES,
+    "outputValues": resource_pb2.RESOURCE_MONITOR_FEATURE_OUTPUT_VALUES,
+    "deletedWith": resource_pb2.RESOURCE_MONITOR_FEATURE_DELETED_WITH,
+    "replaceWith": resource_pb2.RESOURCE_MONITOR_FEATURE_REPLACE_WITH,
+    "aliasSpecs": resource_pb2.RESOURCE_MONITOR_FEATURE_ALIAS_SPECS,
+    "transforms": resource_pb2.RESOURCE_MONITOR_FEATURE_TRANSFORMS,
+    "invokeTransforms": resource_pb2.RESOURCE_MONITOR_FEATURE_INVOKE_TRANSFORMS,
+    "parameterization": resource_pb2.RESOURCE_MONITOR_FEATURE_PARAMETERIZATION,
+    "resourceHooks": resource_pb2.RESOURCE_MONITOR_FEATURE_RESOURCE_HOOKS,
+    "errorHooks": resource_pb2.RESOURCE_MONITOR_FEATURE_ERROR_HOOKS,
+}
 
-async def monitor_supports_secrets() -> bool:
-    return await monitor_supports_feature("secrets")
 
-async def monitor_supports_resource_references() -> bool:
-    return await monitor_supports_feature("resourceReferences")
+async def _load_monitor_feature_support():
+    if not SETTINGS.monitor:
+        return
+
+    try:
+        deployment_info = await asyncio.get_running_loop().run_in_executor(
+            None,
+            wrap_with_context(
+                lambda: SETTINGS.monitor.GetDeploymentInfo(empty_pb2.Empty())
+            ),
+        )
+        SETTINGS.monitor_features = set(deployment_info.supportedFeatures)
+
+    except grpc.RpcError as exn:
+        if exn.code() != grpc.StatusCode.UNIMPLEMENTED:
+            handle_grpc_error(exn)
+        legacy_features = list(_LEGACY_FEATURE_MAPPING)
+        supported = await asyncio.gather(
+            *(
+                _probe_monitor_feature(SETTINGS.monitor, feature)
+                for feature in legacy_features
+            )
+        )
+        SETTINGS.monitor_features = {
+            _LEGACY_FEATURE_MAPPING[feature]
+            for feature, has_support in zip(legacy_features, supported)
+            if has_support
+        }

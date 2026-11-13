@@ -1,32 +1,45 @@
-// source: provider.proto
+// source: pulumi/provider.proto
 /**
  * @fileoverview
  * @enhanceable
+ * @suppress {missingRequire} reports error on implicit type usages.
  * @suppress {messageConventions} JS Compiler reports an error if a variable or
  *     field starts with 'MSG_' and isn't a translatable message.
  * @public
  */
 // GENERATED CODE -- DO NOT EDIT!
+/* eslint-disable */
+// @ts-nocheck
 
 var jspb = require('google-protobuf');
 var goog = jspb;
-var proto = { pulumirpc: {} }, global = proto;
+var proto = { codegen: { }, pulumirpc: { codegen: { }, testing: { } } }, global = proto;
 
-var plugin_pb = require('./plugin_pb.js');
-goog.object.extend(proto, plugin_pb);
+var pulumi_alias_pb = require('./alias_pb.js');
+goog.object.extend(proto, pulumi_alias_pb);
+var pulumi_plugin_pb = require('./plugin_pb.js');
+goog.object.extend(proto, pulumi_plugin_pb);
 var google_protobuf_empty_pb = require('google-protobuf/google/protobuf/empty_pb.js');
 goog.object.extend(proto, google_protobuf_empty_pb);
 var google_protobuf_struct_pb = require('google-protobuf/google/protobuf/struct_pb.js');
 goog.object.extend(proto, google_protobuf_struct_pb);
+goog.exportSymbol('proto.pulumirpc.CallRequest', null, global);
+goog.exportSymbol('proto.pulumirpc.CallRequest.ArgumentDependencies', null, global);
+goog.exportSymbol('proto.pulumirpc.CallResponse', null, global);
+goog.exportSymbol('proto.pulumirpc.CallResponse.ReturnDependencies', null, global);
 goog.exportSymbol('proto.pulumirpc.CheckFailure', null, global);
 goog.exportSymbol('proto.pulumirpc.CheckRequest', null, global);
+goog.exportSymbol('proto.pulumirpc.CheckRequest.AutonamingOptions', null, global);
+goog.exportSymbol('proto.pulumirpc.CheckRequest.AutonamingOptions.Mode', null, global);
 goog.exportSymbol('proto.pulumirpc.CheckResponse', null, global);
 goog.exportSymbol('proto.pulumirpc.ConfigureErrorMissingKeys', null, global);
 goog.exportSymbol('proto.pulumirpc.ConfigureErrorMissingKeys.MissingKey', null, global);
 goog.exportSymbol('proto.pulumirpc.ConfigureRequest', null, global);
 goog.exportSymbol('proto.pulumirpc.ConfigureResponse', null, global);
 goog.exportSymbol('proto.pulumirpc.ConstructRequest', null, global);
+goog.exportSymbol('proto.pulumirpc.ConstructRequest.CustomTimeouts', null, global);
 goog.exportSymbol('proto.pulumirpc.ConstructRequest.PropertyDependencies', null, global);
+goog.exportSymbol('proto.pulumirpc.ConstructRequest.ResourceHooksBinding', null, global);
 goog.exportSymbol('proto.pulumirpc.ConstructResponse', null, global);
 goog.exportSymbol('proto.pulumirpc.ConstructResponse.PropertyDependencies', null, global);
 goog.exportSymbol('proto.pulumirpc.CreateRequest', null, global);
@@ -35,17 +48,162 @@ goog.exportSymbol('proto.pulumirpc.DeleteRequest', null, global);
 goog.exportSymbol('proto.pulumirpc.DiffRequest', null, global);
 goog.exportSymbol('proto.pulumirpc.DiffResponse', null, global);
 goog.exportSymbol('proto.pulumirpc.DiffResponse.DiffChanges', null, global);
+goog.exportSymbol('proto.pulumirpc.ErrorResourceAwaitFailed', null, global);
 goog.exportSymbol('proto.pulumirpc.ErrorResourceInitFailed', null, global);
+goog.exportSymbol('proto.pulumirpc.GetMappingRequest', null, global);
+goog.exportSymbol('proto.pulumirpc.GetMappingResponse', null, global);
+goog.exportSymbol('proto.pulumirpc.GetMappingsRequest', null, global);
+goog.exportSymbol('proto.pulumirpc.GetMappingsResponse', null, global);
 goog.exportSymbol('proto.pulumirpc.GetSchemaRequest', null, global);
 goog.exportSymbol('proto.pulumirpc.GetSchemaResponse', null, global);
 goog.exportSymbol('proto.pulumirpc.InvokeRequest', null, global);
 goog.exportSymbol('proto.pulumirpc.InvokeResponse', null, global);
+goog.exportSymbol('proto.pulumirpc.ListRequest', null, global);
+goog.exportSymbol('proto.pulumirpc.ListResponse', null, global);
+goog.exportSymbol('proto.pulumirpc.ListResponse.Computed', null, global);
+goog.exportSymbol('proto.pulumirpc.ListResponse.Continuation', null, global);
+goog.exportSymbol('proto.pulumirpc.ListResponse.ResponseCase', null, global);
+goog.exportSymbol('proto.pulumirpc.ListResponse.Result', null, global);
+goog.exportSymbol('proto.pulumirpc.ParameterizeRequest', null, global);
+goog.exportSymbol('proto.pulumirpc.ParameterizeRequest.ParametersArgs', null, global);
+goog.exportSymbol('proto.pulumirpc.ParameterizeRequest.ParametersCase', null, global);
+goog.exportSymbol('proto.pulumirpc.ParameterizeRequest.ParametersValue', null, global);
+goog.exportSymbol('proto.pulumirpc.ParameterizeResponse', null, global);
 goog.exportSymbol('proto.pulumirpc.PropertyDiff', null, global);
 goog.exportSymbol('proto.pulumirpc.PropertyDiff.Kind', null, global);
+goog.exportSymbol('proto.pulumirpc.ProviderHandshakeRequest', null, global);
+goog.exportSymbol('proto.pulumirpc.ProviderHandshakeResponse', null, global);
 goog.exportSymbol('proto.pulumirpc.ReadRequest', null, global);
 goog.exportSymbol('proto.pulumirpc.ReadResponse', null, global);
 goog.exportSymbol('proto.pulumirpc.UpdateRequest', null, global);
 goog.exportSymbol('proto.pulumirpc.UpdateResponse', null, global);
+goog.exportSymbol('proto.pulumirpc.View', null, global);
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ProviderHandshakeRequest = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.ProviderHandshakeRequest, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ProviderHandshakeRequest.displayName = 'proto.pulumirpc.ProviderHandshakeRequest';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ProviderHandshakeResponse = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.ProviderHandshakeResponse, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ProviderHandshakeResponse.displayName = 'proto.pulumirpc.ProviderHandshakeResponse';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ParameterizeRequest = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, proto.pulumirpc.ParameterizeRequest.oneofGroups_);
+};
+goog.inherits(proto.pulumirpc.ParameterizeRequest, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ParameterizeRequest.displayName = 'proto.pulumirpc.ParameterizeRequest';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pulumirpc.ParameterizeRequest.ParametersArgs.repeatedFields_, null);
+};
+goog.inherits(proto.pulumirpc.ParameterizeRequest.ParametersArgs, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ParameterizeRequest.ParametersArgs.displayName = 'proto.pulumirpc.ParameterizeRequest.ParametersArgs';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.ParameterizeRequest.ParametersValue, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ParameterizeRequest.ParametersValue.displayName = 'proto.pulumirpc.ParameterizeRequest.ParametersValue';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ParameterizeResponse = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.ParameterizeResponse, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ParameterizeResponse.displayName = 'proto.pulumirpc.ParameterizeResponse';
+}
 /**
  * Generated by JsPbCodeGenerator.
  * @param {Array=} opt_data Optional initial data array, typically from a
@@ -224,6 +382,90 @@ if (goog.DEBUG && !COMPILED) {
  * @extends {jspb.Message}
  * @constructor
  */
+proto.pulumirpc.CallRequest = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pulumirpc.CallRequest.repeatedFields_, null);
+};
+goog.inherits(proto.pulumirpc.CallRequest, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.CallRequest.displayName = 'proto.pulumirpc.CallRequest';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pulumirpc.CallRequest.ArgumentDependencies.repeatedFields_, null);
+};
+goog.inherits(proto.pulumirpc.CallRequest.ArgumentDependencies, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.CallRequest.ArgumentDependencies.displayName = 'proto.pulumirpc.CallRequest.ArgumentDependencies';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.CallResponse = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pulumirpc.CallResponse.repeatedFields_, null);
+};
+goog.inherits(proto.pulumirpc.CallResponse, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.CallResponse.displayName = 'proto.pulumirpc.CallResponse';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pulumirpc.CallResponse.ReturnDependencies.repeatedFields_, null);
+};
+goog.inherits(proto.pulumirpc.CallResponse.ReturnDependencies, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.CallResponse.ReturnDependencies.displayName = 'proto.pulumirpc.CallResponse.ReturnDependencies';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
 proto.pulumirpc.CheckRequest = function(opt_data) {
   jspb.Message.initialize(this, opt_data, 0, -1, null, null);
 };
@@ -234,6 +476,27 @@ if (goog.DEBUG && !COMPILED) {
    * @override
    */
   proto.pulumirpc.CheckRequest.displayName = 'proto.pulumirpc.CheckRequest';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.CheckRequest.AutonamingOptions, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.CheckRequest.AutonamingOptions.displayName = 'proto.pulumirpc.CheckRequest.AutonamingOptions';
 }
 /**
  * Generated by JsPbCodeGenerator.
@@ -393,7 +656,7 @@ if (goog.DEBUG && !COMPILED) {
  * @constructor
  */
 proto.pulumirpc.ReadRequest = function(opt_data) {
-  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pulumirpc.ReadRequest.repeatedFields_, null);
 };
 goog.inherits(proto.pulumirpc.ReadRequest, jspb.Message);
 if (goog.DEBUG && !COMPILED) {
@@ -423,6 +686,111 @@ if (goog.DEBUG && !COMPILED) {
    * @override
    */
   proto.pulumirpc.ReadResponse.displayName = 'proto.pulumirpc.ReadResponse';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ListRequest = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.ListRequest, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ListRequest.displayName = 'proto.pulumirpc.ListRequest';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ListResponse = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, proto.pulumirpc.ListResponse.oneofGroups_);
+};
+goog.inherits(proto.pulumirpc.ListResponse, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ListResponse.displayName = 'proto.pulumirpc.ListResponse';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ListResponse.Computed = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.ListResponse.Computed, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ListResponse.Computed.displayName = 'proto.pulumirpc.ListResponse.Computed';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ListResponse.Result = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.ListResponse.Result, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ListResponse.Result.displayName = 'proto.pulumirpc.ListResponse.Result';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ListResponse.Continuation = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.ListResponse.Continuation, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ListResponse.Continuation.displayName = 'proto.pulumirpc.ListResponse.Continuation';
 }
 /**
  * Generated by JsPbCodeGenerator.
@@ -477,7 +845,7 @@ if (goog.DEBUG && !COMPILED) {
  * @constructor
  */
 proto.pulumirpc.DeleteRequest = function(opt_data) {
-  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pulumirpc.DeleteRequest.repeatedFields_, null);
 };
 goog.inherits(proto.pulumirpc.DeleteRequest, jspb.Message);
 if (goog.DEBUG && !COMPILED) {
@@ -528,6 +896,48 @@ if (goog.DEBUG && !COMPILED) {
    * @override
    */
   proto.pulumirpc.ConstructRequest.PropertyDependencies.displayName = 'proto.pulumirpc.ConstructRequest.PropertyDependencies';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.ConstructRequest.CustomTimeouts, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ConstructRequest.CustomTimeouts.displayName = 'proto.pulumirpc.ConstructRequest.CustomTimeouts';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pulumirpc.ConstructRequest.ResourceHooksBinding.repeatedFields_, null);
+};
+goog.inherits(proto.pulumirpc.ConstructRequest.ResourceHooksBinding, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ConstructRequest.ResourceHooksBinding.displayName = 'proto.pulumirpc.ConstructRequest.ResourceHooksBinding';
 }
 /**
  * Generated by JsPbCodeGenerator.
@@ -592,6 +1002,1870 @@ if (goog.DEBUG && !COMPILED) {
    */
   proto.pulumirpc.ErrorResourceInitFailed.displayName = 'proto.pulumirpc.ErrorResourceInitFailed';
 }
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.ErrorResourceAwaitFailed = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.ErrorResourceAwaitFailed, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.ErrorResourceAwaitFailed.displayName = 'proto.pulumirpc.ErrorResourceAwaitFailed';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.GetMappingRequest = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.GetMappingRequest, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.GetMappingRequest.displayName = 'proto.pulumirpc.GetMappingRequest';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.GetMappingResponse = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.GetMappingResponse, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.GetMappingResponse.displayName = 'proto.pulumirpc.GetMappingResponse';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.GetMappingsRequest = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.GetMappingsRequest, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.GetMappingsRequest.displayName = 'proto.pulumirpc.GetMappingsRequest';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.GetMappingsResponse = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, proto.pulumirpc.GetMappingsResponse.repeatedFields_, null);
+};
+goog.inherits(proto.pulumirpc.GetMappingsResponse, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.GetMappingsResponse.displayName = 'proto.pulumirpc.GetMappingsResponse';
+}
+/**
+ * Generated by JsPbCodeGenerator.
+ * @param {Array=} opt_data Optional initial data array, typically from a
+ * server response, or constructed directly in Javascript. The array is used
+ * in place and becomes part of the constructed object. It is not cloned.
+ * If no data is provided, the constructed object will be empty, but still
+ * valid.
+ * @extends {jspb.Message}
+ * @constructor
+ */
+proto.pulumirpc.View = function(opt_data) {
+  jspb.Message.initialize(this, opt_data, 0, -1, null, null);
+};
+goog.inherits(proto.pulumirpc.View, jspb.Message);
+if (goog.DEBUG && !COMPILED) {
+  /**
+   * @public
+   * @override
+   */
+  proto.pulumirpc.View.displayName = 'proto.pulumirpc.View';
+}
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ProviderHandshakeRequest.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ProviderHandshakeRequest} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ProviderHandshakeRequest.toObject = function(includeInstance, msg) {
+  var f, obj = {
+engineAddress: jspb.Message.getFieldWithDefault(msg, 1, ""),
+rootDirectory: (f = jspb.Message.getField(msg, 2)) == null ? undefined : f,
+programDirectory: (f = jspb.Message.getField(msg, 3)) == null ? undefined : f,
+configureWithUrn: jspb.Message.getBooleanFieldWithDefault(msg, 4, false),
+supportsViews: jspb.Message.getBooleanFieldWithDefault(msg, 5, false),
+supportsRefreshBeforeUpdate: jspb.Message.getBooleanFieldWithDefault(msg, 6, false),
+invokeWithPreview: jspb.Message.getBooleanFieldWithDefault(msg, 7, false),
+mapperTarget: (f = jspb.Message.getField(msg, 8)) == null ? undefined : f,
+loaderTarget: (f = jspb.Message.getField(msg, 9)) == null ? undefined : f,
+resolverTarget: (f = jspb.Message.getField(msg, 10)) == null ? undefined : f,
+acceptsByteString: jspb.Message.getBooleanFieldWithDefault(msg, 11, false),
+sendsOldOutputsToCheck: jspb.Message.getBooleanFieldWithDefault(msg, 12, false),
+acceptsOutputsInInvoke: jspb.Message.getBooleanFieldWithDefault(msg, 13, false),
+acceptsOutputsInCall: jspb.Message.getBooleanFieldWithDefault(msg, 14, false),
+acceptsOutputsInCheck: jspb.Message.getBooleanFieldWithDefault(msg, 15, false)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ProviderHandshakeRequest;
+  return proto.pulumirpc.ProviderHandshakeRequest.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ProviderHandshakeRequest} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setEngineAddress(value);
+      break;
+    case 2:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setRootDirectory(value);
+      break;
+    case 3:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setProgramDirectory(value);
+      break;
+    case 4:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setConfigureWithUrn(value);
+      break;
+    case 5:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setSupportsViews(value);
+      break;
+    case 6:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setSupportsRefreshBeforeUpdate(value);
+      break;
+    case 7:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setInvokeWithPreview(value);
+      break;
+    case 8:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setMapperTarget(value);
+      break;
+    case 9:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setLoaderTarget(value);
+      break;
+    case 10:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setResolverTarget(value);
+      break;
+    case 11:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptsByteString(value);
+      break;
+    case 12:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setSendsOldOutputsToCheck(value);
+      break;
+    case 13:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptsOutputsInInvoke(value);
+      break;
+    case 14:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptsOutputsInCall(value);
+      break;
+    case 15:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptsOutputsInCheck(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ProviderHandshakeRequest.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ProviderHandshakeRequest} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ProviderHandshakeRequest.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getEngineAddress();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 2));
+  if (f != null) {
+    writer.writeString(
+      2,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 3));
+  if (f != null) {
+    writer.writeString(
+      3,
+      f
+    );
+  }
+  f = message.getConfigureWithUrn();
+  if (f) {
+    writer.writeBool(
+      4,
+      f
+    );
+  }
+  f = message.getSupportsViews();
+  if (f) {
+    writer.writeBool(
+      5,
+      f
+    );
+  }
+  f = message.getSupportsRefreshBeforeUpdate();
+  if (f) {
+    writer.writeBool(
+      6,
+      f
+    );
+  }
+  f = message.getInvokeWithPreview();
+  if (f) {
+    writer.writeBool(
+      7,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 8));
+  if (f != null) {
+    writer.writeString(
+      8,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 9));
+  if (f != null) {
+    writer.writeString(
+      9,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 10));
+  if (f != null) {
+    writer.writeString(
+      10,
+      f
+    );
+  }
+  f = message.getAcceptsByteString();
+  if (f) {
+    writer.writeBool(
+      11,
+      f
+    );
+  }
+  f = message.getSendsOldOutputsToCheck();
+  if (f) {
+    writer.writeBool(
+      12,
+      f
+    );
+  }
+  f = message.getAcceptsOutputsInInvoke();
+  if (f) {
+    writer.writeBool(
+      13,
+      f
+    );
+  }
+  f = message.getAcceptsOutputsInCall();
+  if (f) {
+    writer.writeBool(
+      14,
+      f
+    );
+  }
+  f = message.getAcceptsOutputsInCheck();
+  if (f) {
+    writer.writeBool(
+      15,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional string engine_address = 1;
+ * @return {string}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getEngineAddress = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setEngineAddress = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional string root_directory = 2;
+ * @return {string}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getRootDirectory = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setRootDirectory = function(value) {
+  return jspb.Message.setField(this, 2, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.clearRootDirectory = function() {
+  return jspb.Message.setField(this, 2, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.hasRootDirectory = function() {
+  return jspb.Message.getField(this, 2) != null;
+};
+
+
+/**
+ * optional string program_directory = 3;
+ * @return {string}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getProgramDirectory = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 3, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setProgramDirectory = function(value) {
+  return jspb.Message.setField(this, 3, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.clearProgramDirectory = function() {
+  return jspb.Message.setField(this, 3, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.hasProgramDirectory = function() {
+  return jspb.Message.getField(this, 3) != null;
+};
+
+
+/**
+ * optional bool configure_with_urn = 4;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getConfigureWithUrn = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 4, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setConfigureWithUrn = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 4, value);
+};
+
+
+/**
+ * optional bool supports_views = 5;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getSupportsViews = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 5, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setSupportsViews = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 5, value);
+};
+
+
+/**
+ * optional bool supports_refresh_before_update = 6;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getSupportsRefreshBeforeUpdate = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 6, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setSupportsRefreshBeforeUpdate = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 6, value);
+};
+
+
+/**
+ * optional bool invoke_with_preview = 7;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getInvokeWithPreview = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 7, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setInvokeWithPreview = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 7, value);
+};
+
+
+/**
+ * optional string mapper_target = 8;
+ * @return {string}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getMapperTarget = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 8, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setMapperTarget = function(value) {
+  return jspb.Message.setField(this, 8, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.clearMapperTarget = function() {
+  return jspb.Message.setField(this, 8, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.hasMapperTarget = function() {
+  return jspb.Message.getField(this, 8) != null;
+};
+
+
+/**
+ * optional string loader_target = 9;
+ * @return {string}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getLoaderTarget = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 9, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setLoaderTarget = function(value) {
+  return jspb.Message.setField(this, 9, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.clearLoaderTarget = function() {
+  return jspb.Message.setField(this, 9, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.hasLoaderTarget = function() {
+  return jspb.Message.getField(this, 9) != null;
+};
+
+
+/**
+ * optional string resolver_target = 10;
+ * @return {string}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getResolverTarget = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 10, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setResolverTarget = function(value) {
+  return jspb.Message.setField(this, 10, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.clearResolverTarget = function() {
+  return jspb.Message.setField(this, 10, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.hasResolverTarget = function() {
+  return jspb.Message.getField(this, 10) != null;
+};
+
+
+/**
+ * optional bool accepts_byte_string = 11;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getAcceptsByteString = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 11, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setAcceptsByteString = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 11, value);
+};
+
+
+/**
+ * optional bool sends_old_outputs_to_check = 12;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getSendsOldOutputsToCheck = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 12, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setSendsOldOutputsToCheck = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 12, value);
+};
+
+
+/**
+ * optional bool accepts_outputs_in_invoke = 13;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getAcceptsOutputsInInvoke = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 13, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setAcceptsOutputsInInvoke = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 13, value);
+};
+
+
+/**
+ * optional bool accepts_outputs_in_call = 14;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getAcceptsOutputsInCall = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 14, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setAcceptsOutputsInCall = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 14, value);
+};
+
+
+/**
+ * optional bool accepts_outputs_in_check = 15;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.getAcceptsOutputsInCheck = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 15, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeRequest} returns this
+ */
+proto.pulumirpc.ProviderHandshakeRequest.prototype.setAcceptsOutputsInCheck = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 15, value);
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ProviderHandshakeResponse.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ProviderHandshakeResponse} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ProviderHandshakeResponse.toObject = function(includeInstance, msg) {
+  var f, obj = {
+acceptSecrets: jspb.Message.getBooleanFieldWithDefault(msg, 1, false),
+acceptResources: jspb.Message.getBooleanFieldWithDefault(msg, 2, false),
+acceptOutputs: jspb.Message.getBooleanFieldWithDefault(msg, 3, false),
+supportsAutonamingConfiguration: jspb.Message.getBooleanFieldWithDefault(msg, 4, false),
+acceptsByteString: jspb.Message.getBooleanFieldWithDefault(msg, 6, false),
+acceptsOutputsInInvoke: jspb.Message.getBooleanFieldWithDefault(msg, 7, false),
+acceptsOutputsInCall: jspb.Message.getBooleanFieldWithDefault(msg, 8, false),
+acceptsOutputsInCheck: jspb.Message.getBooleanFieldWithDefault(msg, 9, false)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ProviderHandshakeResponse}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ProviderHandshakeResponse;
+  return proto.pulumirpc.ProviderHandshakeResponse.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ProviderHandshakeResponse} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ProviderHandshakeResponse}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptSecrets(value);
+      break;
+    case 2:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptResources(value);
+      break;
+    case 3:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptOutputs(value);
+      break;
+    case 4:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setSupportsAutonamingConfiguration(value);
+      break;
+    case 6:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptsByteString(value);
+      break;
+    case 7:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptsOutputsInInvoke(value);
+      break;
+    case 8:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptsOutputsInCall(value);
+      break;
+    case 9:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptsOutputsInCheck(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ProviderHandshakeResponse.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ProviderHandshakeResponse} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ProviderHandshakeResponse.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getAcceptSecrets();
+  if (f) {
+    writer.writeBool(
+      1,
+      f
+    );
+  }
+  f = message.getAcceptResources();
+  if (f) {
+    writer.writeBool(
+      2,
+      f
+    );
+  }
+  f = message.getAcceptOutputs();
+  if (f) {
+    writer.writeBool(
+      3,
+      f
+    );
+  }
+  f = message.getSupportsAutonamingConfiguration();
+  if (f) {
+    writer.writeBool(
+      4,
+      f
+    );
+  }
+  f = message.getAcceptsByteString();
+  if (f) {
+    writer.writeBool(
+      6,
+      f
+    );
+  }
+  f = message.getAcceptsOutputsInInvoke();
+  if (f) {
+    writer.writeBool(
+      7,
+      f
+    );
+  }
+  f = message.getAcceptsOutputsInCall();
+  if (f) {
+    writer.writeBool(
+      8,
+      f
+    );
+  }
+  f = message.getAcceptsOutputsInCheck();
+  if (f) {
+    writer.writeBool(
+      9,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional bool accept_secrets = 1;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.getAcceptSecrets = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 1, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeResponse} returns this
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.setAcceptSecrets = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 1, value);
+};
+
+
+/**
+ * optional bool accept_resources = 2;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.getAcceptResources = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 2, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeResponse} returns this
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.setAcceptResources = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 2, value);
+};
+
+
+/**
+ * optional bool accept_outputs = 3;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.getAcceptOutputs = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 3, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeResponse} returns this
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.setAcceptOutputs = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 3, value);
+};
+
+
+/**
+ * optional bool supports_autonaming_configuration = 4;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.getSupportsAutonamingConfiguration = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 4, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeResponse} returns this
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.setSupportsAutonamingConfiguration = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 4, value);
+};
+
+
+/**
+ * optional bool accepts_byte_string = 6;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.getAcceptsByteString = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 6, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeResponse} returns this
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.setAcceptsByteString = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 6, value);
+};
+
+
+/**
+ * optional bool accepts_outputs_in_invoke = 7;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.getAcceptsOutputsInInvoke = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 7, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeResponse} returns this
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.setAcceptsOutputsInInvoke = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 7, value);
+};
+
+
+/**
+ * optional bool accepts_outputs_in_call = 8;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.getAcceptsOutputsInCall = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 8, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeResponse} returns this
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.setAcceptsOutputsInCall = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 8, value);
+};
+
+
+/**
+ * optional bool accepts_outputs_in_check = 9;
+ * @return {boolean}
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.getAcceptsOutputsInCheck = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 9, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ProviderHandshakeResponse} returns this
+ */
+proto.pulumirpc.ProviderHandshakeResponse.prototype.setAcceptsOutputsInCheck = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 9, value);
+};
+
+
+
+/**
+ * Oneof group definitions for this message. Each group defines the field
+ * numbers belonging to that group. When of these fields' value is set, all
+ * other fields in the group are cleared. During deserialization, if multiple
+ * fields are encountered for a group, only the last value seen will be kept.
+ * @private {!Array<!Array<number>>}
+ * @const
+ */
+proto.pulumirpc.ParameterizeRequest.oneofGroups_ = [[1,2]];
+
+/**
+ * @enum {number}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersCase = {
+  PARAMETERS_NOT_SET: 0,
+  ARGS: 1,
+  VALUE: 2
+};
+
+/**
+ * @return {proto.pulumirpc.ParameterizeRequest.ParametersCase}
+ */
+proto.pulumirpc.ParameterizeRequest.prototype.getParametersCase = function() {
+  return /** @type {proto.pulumirpc.ParameterizeRequest.ParametersCase} */(jspb.Message.computeOneofCase(this, proto.pulumirpc.ParameterizeRequest.oneofGroups_[0]));
+};
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ParameterizeRequest.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ParameterizeRequest.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ParameterizeRequest} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ParameterizeRequest.toObject = function(includeInstance, msg) {
+  var f, obj = {
+args: (f = msg.getArgs()) && proto.pulumirpc.ParameterizeRequest.ParametersArgs.toObject(includeInstance, f),
+value: (f = msg.getValue()) && proto.pulumirpc.ParameterizeRequest.ParametersValue.toObject(includeInstance, f)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ParameterizeRequest}
+ */
+proto.pulumirpc.ParameterizeRequest.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ParameterizeRequest;
+  return proto.pulumirpc.ParameterizeRequest.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ParameterizeRequest} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ParameterizeRequest}
+ */
+proto.pulumirpc.ParameterizeRequest.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = new proto.pulumirpc.ParameterizeRequest.ParametersArgs;
+      reader.readMessage(value,proto.pulumirpc.ParameterizeRequest.ParametersArgs.deserializeBinaryFromReader);
+      msg.setArgs(value);
+      break;
+    case 2:
+      var value = new proto.pulumirpc.ParameterizeRequest.ParametersValue;
+      reader.readMessage(value,proto.pulumirpc.ParameterizeRequest.ParametersValue.deserializeBinaryFromReader);
+      msg.setValue(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ParameterizeRequest.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ParameterizeRequest.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ParameterizeRequest} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ParameterizeRequest.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getArgs();
+  if (f != null) {
+    writer.writeMessage(
+      1,
+      f,
+      proto.pulumirpc.ParameterizeRequest.ParametersArgs.serializeBinaryToWriter
+    );
+  }
+  f = message.getValue();
+  if (f != null) {
+    writer.writeMessage(
+      2,
+      f,
+      proto.pulumirpc.ParameterizeRequest.ParametersValue.serializeBinaryToWriter
+    );
+  }
+};
+
+
+
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.repeatedFields_ = [1];
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ParameterizeRequest.ParametersArgs.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ParameterizeRequest.ParametersArgs} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.toObject = function(includeInstance, msg) {
+  var f, obj = {
+argsList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ParameterizeRequest.ParametersArgs}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ParameterizeRequest.ParametersArgs;
+  return proto.pulumirpc.ParameterizeRequest.ParametersArgs.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ParameterizeRequest.ParametersArgs} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ParameterizeRequest.ParametersArgs}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addArgs(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ParameterizeRequest.ParametersArgs.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ParameterizeRequest.ParametersArgs} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getArgsList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      1,
+      f
+    );
+  }
+};
+
+
+/**
+ * repeated string args = 1;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.prototype.getArgsList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 1));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ParameterizeRequest.ParametersArgs} returns this
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.prototype.setArgsList = function(value) {
+  return jspb.Message.setField(this, 1, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ParameterizeRequest.ParametersArgs} returns this
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.prototype.addArgs = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 1, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ParameterizeRequest.ParametersArgs} returns this
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersArgs.prototype.clearArgsList = function() {
+  return this.setArgsList([]);
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ParameterizeRequest.ParametersValue.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ParameterizeRequest.ParametersValue} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.toObject = function(includeInstance, msg) {
+  var f, obj = {
+name: jspb.Message.getFieldWithDefault(msg, 1, ""),
+version: jspb.Message.getFieldWithDefault(msg, 2, ""),
+value: msg.getValue_asB64()
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ParameterizeRequest.ParametersValue}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ParameterizeRequest.ParametersValue;
+  return proto.pulumirpc.ParameterizeRequest.ParametersValue.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ParameterizeRequest.ParametersValue} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ParameterizeRequest.ParametersValue}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    case 2:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setVersion(value);
+      break;
+    case 3:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setValue(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ParameterizeRequest.ParametersValue.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ParameterizeRequest.ParametersValue} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getName();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = message.getVersion();
+  if (f.length > 0) {
+    writer.writeString(
+      2,
+      f
+    );
+  }
+  f = message.getValue_asU8();
+  if (f.length > 0) {
+    writer.writeBytes(
+      3,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional string name = 1;
+ * @return {string}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ParameterizeRequest.ParametersValue} returns this
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.prototype.setName = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional string version = 2;
+ * @return {string}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.prototype.getVersion = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ParameterizeRequest.ParametersValue} returns this
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.prototype.setVersion = function(value) {
+  return jspb.Message.setProto3StringField(this, 2, value);
+};
+
+
+/**
+ * optional bytes value = 3;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.prototype.getValue = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 3, ""));
+};
+
+
+/**
+ * optional bytes value = 3;
+ * This is a type-conversion wrapper around `getValue()`
+ * @return {string}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.prototype.getValue_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getValue()));
+};
+
+
+/**
+ * optional bytes value = 3;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getValue()`
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.prototype.getValue_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getValue()));
+};
+
+
+/**
+ * @param {!(string|Uint8Array)} value
+ * @return {!proto.pulumirpc.ParameterizeRequest.ParametersValue} returns this
+ */
+proto.pulumirpc.ParameterizeRequest.ParametersValue.prototype.setValue = function(value) {
+  return jspb.Message.setProto3BytesField(this, 3, value);
+};
+
+
+/**
+ * optional ParametersArgs args = 1;
+ * @return {?proto.pulumirpc.ParameterizeRequest.ParametersArgs}
+ */
+proto.pulumirpc.ParameterizeRequest.prototype.getArgs = function() {
+  return /** @type{?proto.pulumirpc.ParameterizeRequest.ParametersArgs} */ (
+    jspb.Message.getWrapperField(this, proto.pulumirpc.ParameterizeRequest.ParametersArgs, 1));
+};
+
+
+/**
+ * @param {?proto.pulumirpc.ParameterizeRequest.ParametersArgs|undefined} value
+ * @return {!proto.pulumirpc.ParameterizeRequest} returns this
+*/
+proto.pulumirpc.ParameterizeRequest.prototype.setArgs = function(value) {
+  return jspb.Message.setOneofWrapperField(this, 1, proto.pulumirpc.ParameterizeRequest.oneofGroups_[0], value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.ParameterizeRequest} returns this
+ */
+proto.pulumirpc.ParameterizeRequest.prototype.clearArgs = function() {
+  return this.setArgs(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ParameterizeRequest.prototype.hasArgs = function() {
+  return jspb.Message.getField(this, 1) != null;
+};
+
+
+/**
+ * optional ParametersValue value = 2;
+ * @return {?proto.pulumirpc.ParameterizeRequest.ParametersValue}
+ */
+proto.pulumirpc.ParameterizeRequest.prototype.getValue = function() {
+  return /** @type{?proto.pulumirpc.ParameterizeRequest.ParametersValue} */ (
+    jspb.Message.getWrapperField(this, proto.pulumirpc.ParameterizeRequest.ParametersValue, 2));
+};
+
+
+/**
+ * @param {?proto.pulumirpc.ParameterizeRequest.ParametersValue|undefined} value
+ * @return {!proto.pulumirpc.ParameterizeRequest} returns this
+*/
+proto.pulumirpc.ParameterizeRequest.prototype.setValue = function(value) {
+  return jspb.Message.setOneofWrapperField(this, 2, proto.pulumirpc.ParameterizeRequest.oneofGroups_[0], value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.ParameterizeRequest} returns this
+ */
+proto.pulumirpc.ParameterizeRequest.prototype.clearValue = function() {
+  return this.setValue(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ParameterizeRequest.prototype.hasValue = function() {
+  return jspb.Message.getField(this, 2) != null;
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ParameterizeResponse.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ParameterizeResponse.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ParameterizeResponse} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ParameterizeResponse.toObject = function(includeInstance, msg) {
+  var f, obj = {
+name: jspb.Message.getFieldWithDefault(msg, 1, ""),
+version: jspb.Message.getFieldWithDefault(msg, 2, "")
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ParameterizeResponse}
+ */
+proto.pulumirpc.ParameterizeResponse.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ParameterizeResponse;
+  return proto.pulumirpc.ParameterizeResponse.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ParameterizeResponse} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ParameterizeResponse}
+ */
+proto.pulumirpc.ParameterizeResponse.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    case 2:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setVersion(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ParameterizeResponse.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ParameterizeResponse.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ParameterizeResponse} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ParameterizeResponse.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getName();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = message.getVersion();
+  if (f.length > 0) {
+    writer.writeString(
+      2,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional string name = 1;
+ * @return {string}
+ */
+proto.pulumirpc.ParameterizeResponse.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ParameterizeResponse} returns this
+ */
+proto.pulumirpc.ParameterizeResponse.prototype.setName = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional string version = 2;
+ * @return {string}
+ */
+proto.pulumirpc.ParameterizeResponse.prototype.getVersion = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ParameterizeResponse} returns this
+ */
+proto.pulumirpc.ParameterizeResponse.prototype.setVersion = function(value) {
+  return jspb.Message.setProto3StringField(this, 2, value);
+};
+
+
 
 
 
@@ -624,7 +2898,9 @@ proto.pulumirpc.GetSchemaRequest.prototype.toObject = function(opt_includeInstan
  */
 proto.pulumirpc.GetSchemaRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    version: jspb.Message.getFieldWithDefault(msg, 1, 0)
+version: jspb.Message.getFieldWithDefault(msg, 1, 0),
+subpackageName: jspb.Message.getFieldWithDefault(msg, 2, ""),
+subpackageVersion: jspb.Message.getFieldWithDefault(msg, 3, "")
   };
 
   if (includeInstance) {
@@ -665,6 +2941,14 @@ proto.pulumirpc.GetSchemaRequest.deserializeBinaryFromReader = function(msg, rea
       var value = /** @type {number} */ (reader.readInt32());
       msg.setVersion(value);
       break;
+    case 2:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setSubpackageName(value);
+      break;
+    case 3:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setSubpackageVersion(value);
+      break;
     default:
       reader.skipField();
       break;
@@ -701,6 +2985,20 @@ proto.pulumirpc.GetSchemaRequest.serializeBinaryToWriter = function(message, wri
       f
     );
   }
+  f = message.getSubpackageName();
+  if (f.length > 0) {
+    writer.writeString(
+      2,
+      f
+    );
+  }
+  f = message.getSubpackageVersion();
+  if (f.length > 0) {
+    writer.writeString(
+      3,
+      f
+    );
+  }
 };
 
 
@@ -719,6 +3017,42 @@ proto.pulumirpc.GetSchemaRequest.prototype.getVersion = function() {
  */
 proto.pulumirpc.GetSchemaRequest.prototype.setVersion = function(value) {
   return jspb.Message.setProto3IntField(this, 1, value);
+};
+
+
+/**
+ * optional string subpackage_name = 2;
+ * @return {string}
+ */
+proto.pulumirpc.GetSchemaRequest.prototype.getSubpackageName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.GetSchemaRequest} returns this
+ */
+proto.pulumirpc.GetSchemaRequest.prototype.setSubpackageName = function(value) {
+  return jspb.Message.setProto3StringField(this, 2, value);
+};
+
+
+/**
+ * optional string subpackage_version = 3;
+ * @return {string}
+ */
+proto.pulumirpc.GetSchemaRequest.prototype.getSubpackageVersion = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 3, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.GetSchemaRequest} returns this
+ */
+proto.pulumirpc.GetSchemaRequest.prototype.setSubpackageVersion = function(value) {
+  return jspb.Message.setProto3StringField(this, 3, value);
 };
 
 
@@ -754,7 +3088,7 @@ proto.pulumirpc.GetSchemaResponse.prototype.toObject = function(opt_includeInsta
  */
 proto.pulumirpc.GetSchemaResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    schema: jspb.Message.getFieldWithDefault(msg, 1, "")
+schema: jspb.Message.getFieldWithDefault(msg, 1, "")
   };
 
   if (includeInstance) {
@@ -884,10 +3218,16 @@ proto.pulumirpc.ConfigureRequest.prototype.toObject = function(opt_includeInstan
  */
 proto.pulumirpc.ConfigureRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    variablesMap: (f = msg.getVariablesMap()) ? f.toObject(includeInstance, undefined) : [],
-    args: (f = msg.getArgs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    acceptsecrets: jspb.Message.getBooleanFieldWithDefault(msg, 3, false),
-    acceptresources: jspb.Message.getBooleanFieldWithDefault(msg, 4, false)
+variablesMap: (f = msg.getVariablesMap()) ? f.toObject(includeInstance, undefined) : [],
+args: (f = msg.getArgs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+acceptsecrets: jspb.Message.getBooleanFieldWithDefault(msg, 3, false),
+acceptresources: jspb.Message.getBooleanFieldWithDefault(msg, 4, false),
+sendsOldInputs: jspb.Message.getBooleanFieldWithDefault(msg, 5, false),
+sendsOldInputsToDelete: jspb.Message.getBooleanFieldWithDefault(msg, 6, false),
+id: (f = jspb.Message.getField(msg, 7)) == null ? undefined : f,
+urn: (f = jspb.Message.getField(msg, 8)) == null ? undefined : f,
+name: (f = jspb.Message.getField(msg, 9)) == null ? undefined : f,
+type: (f = jspb.Message.getField(msg, 10)) == null ? undefined : f
   };
 
   if (includeInstance) {
@@ -942,6 +3282,30 @@ proto.pulumirpc.ConfigureRequest.deserializeBinaryFromReader = function(msg, rea
     case 4:
       var value = /** @type {boolean} */ (reader.readBool());
       msg.setAcceptresources(value);
+      break;
+    case 5:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setSendsOldInputs(value);
+      break;
+    case 6:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setSendsOldInputsToDelete(value);
+      break;
+    case 7:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setId(value);
+      break;
+    case 8:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setUrn(value);
+      break;
+    case 9:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    case 10:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setType(value);
       break;
     default:
       reader.skipField();
@@ -998,6 +3362,48 @@ proto.pulumirpc.ConfigureRequest.serializeBinaryToWriter = function(message, wri
       f
     );
   }
+  f = message.getSendsOldInputs();
+  if (f) {
+    writer.writeBool(
+      5,
+      f
+    );
+  }
+  f = message.getSendsOldInputsToDelete();
+  if (f) {
+    writer.writeBool(
+      6,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 7));
+  if (f != null) {
+    writer.writeString(
+      7,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 8));
+  if (f != null) {
+    writer.writeString(
+      8,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 9));
+  if (f != null) {
+    writer.writeString(
+      9,
+      f
+    );
+  }
+  f = /** @type {string} */ (jspb.Message.getField(message, 10));
+  if (f != null) {
+    writer.writeString(
+      10,
+      f
+    );
+  }
 };
 
 
@@ -1020,7 +3426,8 @@ proto.pulumirpc.ConfigureRequest.prototype.getVariablesMap = function(opt_noLazy
  */
 proto.pulumirpc.ConfigureRequest.prototype.clearVariablesMap = function() {
   this.getVariablesMap().clear();
-  return this;};
+  return this;
+};
 
 
 /**
@@ -1096,6 +3503,186 @@ proto.pulumirpc.ConfigureRequest.prototype.setAcceptresources = function(value) 
 };
 
 
+/**
+ * optional bool sends_old_inputs = 5;
+ * @return {boolean}
+ */
+proto.pulumirpc.ConfigureRequest.prototype.getSendsOldInputs = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 5, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ConfigureRequest} returns this
+ */
+proto.pulumirpc.ConfigureRequest.prototype.setSendsOldInputs = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 5, value);
+};
+
+
+/**
+ * optional bool sends_old_inputs_to_delete = 6;
+ * @return {boolean}
+ */
+proto.pulumirpc.ConfigureRequest.prototype.getSendsOldInputsToDelete = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 6, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ConfigureRequest} returns this
+ */
+proto.pulumirpc.ConfigureRequest.prototype.setSendsOldInputsToDelete = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 6, value);
+};
+
+
+/**
+ * optional string id = 7;
+ * @return {string}
+ */
+proto.pulumirpc.ConfigureRequest.prototype.getId = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 7, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConfigureRequest} returns this
+ */
+proto.pulumirpc.ConfigureRequest.prototype.setId = function(value) {
+  return jspb.Message.setField(this, 7, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ConfigureRequest} returns this
+ */
+proto.pulumirpc.ConfigureRequest.prototype.clearId = function() {
+  return jspb.Message.setField(this, 7, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ConfigureRequest.prototype.hasId = function() {
+  return jspb.Message.getField(this, 7) != null;
+};
+
+
+/**
+ * optional string urn = 8;
+ * @return {string}
+ */
+proto.pulumirpc.ConfigureRequest.prototype.getUrn = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 8, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConfigureRequest} returns this
+ */
+proto.pulumirpc.ConfigureRequest.prototype.setUrn = function(value) {
+  return jspb.Message.setField(this, 8, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ConfigureRequest} returns this
+ */
+proto.pulumirpc.ConfigureRequest.prototype.clearUrn = function() {
+  return jspb.Message.setField(this, 8, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ConfigureRequest.prototype.hasUrn = function() {
+  return jspb.Message.getField(this, 8) != null;
+};
+
+
+/**
+ * optional string name = 9;
+ * @return {string}
+ */
+proto.pulumirpc.ConfigureRequest.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 9, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConfigureRequest} returns this
+ */
+proto.pulumirpc.ConfigureRequest.prototype.setName = function(value) {
+  return jspb.Message.setField(this, 9, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ConfigureRequest} returns this
+ */
+proto.pulumirpc.ConfigureRequest.prototype.clearName = function() {
+  return jspb.Message.setField(this, 9, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ConfigureRequest.prototype.hasName = function() {
+  return jspb.Message.getField(this, 9) != null;
+};
+
+
+/**
+ * optional string type = 10;
+ * @return {string}
+ */
+proto.pulumirpc.ConfigureRequest.prototype.getType = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 10, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConfigureRequest} returns this
+ */
+proto.pulumirpc.ConfigureRequest.prototype.setType = function(value) {
+  return jspb.Message.setField(this, 10, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ConfigureRequest} returns this
+ */
+proto.pulumirpc.ConfigureRequest.prototype.clearType = function() {
+  return jspb.Message.setField(this, 10, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ConfigureRequest.prototype.hasType = function() {
+  return jspb.Message.getField(this, 10) != null;
+};
+
+
 
 
 
@@ -1128,9 +3715,11 @@ proto.pulumirpc.ConfigureResponse.prototype.toObject = function(opt_includeInsta
  */
 proto.pulumirpc.ConfigureResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    acceptsecrets: jspb.Message.getBooleanFieldWithDefault(msg, 1, false),
-    supportspreview: jspb.Message.getBooleanFieldWithDefault(msg, 2, false),
-    acceptresources: jspb.Message.getBooleanFieldWithDefault(msg, 3, false)
+acceptsecrets: jspb.Message.getBooleanFieldWithDefault(msg, 1, false),
+supportspreview: jspb.Message.getBooleanFieldWithDefault(msg, 2, false),
+acceptresources: jspb.Message.getBooleanFieldWithDefault(msg, 3, false),
+acceptoutputs: jspb.Message.getBooleanFieldWithDefault(msg, 4, false),
+supportsAutonamingConfiguration: jspb.Message.getBooleanFieldWithDefault(msg, 5, false)
   };
 
   if (includeInstance) {
@@ -1179,6 +3768,14 @@ proto.pulumirpc.ConfigureResponse.deserializeBinaryFromReader = function(msg, re
       var value = /** @type {boolean} */ (reader.readBool());
       msg.setAcceptresources(value);
       break;
+    case 4:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptoutputs(value);
+      break;
+    case 5:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setSupportsAutonamingConfiguration(value);
+      break;
     default:
       reader.skipField();
       break;
@@ -1226,6 +3823,20 @@ proto.pulumirpc.ConfigureResponse.serializeBinaryToWriter = function(message, wr
   if (f) {
     writer.writeBool(
       3,
+      f
+    );
+  }
+  f = message.getAcceptoutputs();
+  if (f) {
+    writer.writeBool(
+      4,
+      f
+    );
+  }
+  f = message.getSupportsAutonamingConfiguration();
+  if (f) {
+    writer.writeBool(
+      5,
       f
     );
   }
@@ -1286,6 +3897,42 @@ proto.pulumirpc.ConfigureResponse.prototype.setAcceptresources = function(value)
 };
 
 
+/**
+ * optional bool acceptOutputs = 4;
+ * @return {boolean}
+ */
+proto.pulumirpc.ConfigureResponse.prototype.getAcceptoutputs = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 4, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ConfigureResponse} returns this
+ */
+proto.pulumirpc.ConfigureResponse.prototype.setAcceptoutputs = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 4, value);
+};
+
+
+/**
+ * optional bool supports_autonaming_configuration = 5;
+ * @return {boolean}
+ */
+proto.pulumirpc.ConfigureResponse.prototype.getSupportsAutonamingConfiguration = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 5, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ConfigureResponse} returns this
+ */
+proto.pulumirpc.ConfigureResponse.prototype.setSupportsAutonamingConfiguration = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 5, value);
+};
+
+
 
 /**
  * List of repeated fields within this message type.
@@ -1325,7 +3972,7 @@ proto.pulumirpc.ConfigureErrorMissingKeys.prototype.toObject = function(opt_incl
  */
 proto.pulumirpc.ConfigureErrorMissingKeys.toObject = function(includeInstance, msg) {
   var f, obj = {
-    missingkeysList: jspb.Message.toObjectList(msg.getMissingkeysList(),
+missingkeysList: jspb.Message.toObjectList(msg.getMissingkeysList(),
     proto.pulumirpc.ConfigureErrorMissingKeys.MissingKey.toObject, includeInstance)
   };
 
@@ -1440,8 +4087,8 @@ proto.pulumirpc.ConfigureErrorMissingKeys.MissingKey.prototype.toObject = functi
  */
 proto.pulumirpc.ConfigureErrorMissingKeys.MissingKey.toObject = function(includeInstance, msg) {
   var f, obj = {
-    name: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    description: jspb.Message.getFieldWithDefault(msg, 2, "")
+name: jspb.Message.getFieldWithDefault(msg, 1, ""),
+description: jspb.Message.getFieldWithDefault(msg, 2, "")
   };
 
   if (includeInstance) {
@@ -1638,11 +4285,9 @@ proto.pulumirpc.InvokeRequest.prototype.toObject = function(opt_includeInstance)
  */
 proto.pulumirpc.InvokeRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    tok: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    args: (f = msg.getArgs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    provider: jspb.Message.getFieldWithDefault(msg, 3, ""),
-    version: jspb.Message.getFieldWithDefault(msg, 4, ""),
-    acceptresources: jspb.Message.getBooleanFieldWithDefault(msg, 5, false)
+tok: jspb.Message.getFieldWithDefault(msg, 1, ""),
+args: (f = msg.getArgs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+preview: jspb.Message.getBooleanFieldWithDefault(msg, 7, false)
   };
 
   if (includeInstance) {
@@ -1688,17 +4333,9 @@ proto.pulumirpc.InvokeRequest.deserializeBinaryFromReader = function(msg, reader
       reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
       msg.setArgs(value);
       break;
-    case 3:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setProvider(value);
-      break;
-    case 4:
-      var value = /** @type {string} */ (reader.readString());
-      msg.setVersion(value);
-      break;
-    case 5:
+    case 7:
       var value = /** @type {boolean} */ (reader.readBool());
-      msg.setAcceptresources(value);
+      msg.setPreview(value);
       break;
     default:
       reader.skipField();
@@ -1744,24 +4381,10 @@ proto.pulumirpc.InvokeRequest.serializeBinaryToWriter = function(message, writer
       google_protobuf_struct_pb.Struct.serializeBinaryToWriter
     );
   }
-  f = message.getProvider();
-  if (f.length > 0) {
-    writer.writeString(
-      3,
-      f
-    );
-  }
-  f = message.getVersion();
-  if (f.length > 0) {
-    writer.writeString(
-      4,
-      f
-    );
-  }
-  f = message.getAcceptresources();
+  f = message.getPreview();
   if (f) {
     writer.writeBool(
-      5,
+      7,
       f
     );
   }
@@ -1824,47 +4447,11 @@ proto.pulumirpc.InvokeRequest.prototype.hasArgs = function() {
 
 
 /**
- * optional string provider = 3;
- * @return {string}
- */
-proto.pulumirpc.InvokeRequest.prototype.getProvider = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 3, ""));
-};
-
-
-/**
- * @param {string} value
- * @return {!proto.pulumirpc.InvokeRequest} returns this
- */
-proto.pulumirpc.InvokeRequest.prototype.setProvider = function(value) {
-  return jspb.Message.setProto3StringField(this, 3, value);
-};
-
-
-/**
- * optional string version = 4;
- * @return {string}
- */
-proto.pulumirpc.InvokeRequest.prototype.getVersion = function() {
-  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 4, ""));
-};
-
-
-/**
- * @param {string} value
- * @return {!proto.pulumirpc.InvokeRequest} returns this
- */
-proto.pulumirpc.InvokeRequest.prototype.setVersion = function(value) {
-  return jspb.Message.setProto3StringField(this, 4, value);
-};
-
-
-/**
- * optional bool acceptResources = 5;
+ * optional bool preview = 7;
  * @return {boolean}
  */
-proto.pulumirpc.InvokeRequest.prototype.getAcceptresources = function() {
-  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 5, false));
+proto.pulumirpc.InvokeRequest.prototype.getPreview = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 7, false));
 };
 
 
@@ -1872,8 +4459,8 @@ proto.pulumirpc.InvokeRequest.prototype.getAcceptresources = function() {
  * @param {boolean} value
  * @return {!proto.pulumirpc.InvokeRequest} returns this
  */
-proto.pulumirpc.InvokeRequest.prototype.setAcceptresources = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 5, value);
+proto.pulumirpc.InvokeRequest.prototype.setPreview = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 7, value);
 };
 
 
@@ -1916,8 +4503,8 @@ proto.pulumirpc.InvokeResponse.prototype.toObject = function(opt_includeInstance
  */
 proto.pulumirpc.InvokeResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    pb_return: (f = msg.getReturn()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    failuresList: jspb.Message.toObjectList(msg.getFailuresList(),
+pb_return: (f = msg.getReturn()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+failuresList: jspb.Message.toObjectList(msg.getFailuresList(),
     proto.pulumirpc.CheckFailure.toObject, includeInstance)
   };
 
@@ -2089,6 +4676,1108 @@ proto.pulumirpc.InvokeResponse.prototype.clearFailuresList = function() {
 
 
 
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pulumirpc.CallRequest.repeatedFields_ = [9];
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.CallRequest.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.CallRequest.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.CallRequest} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.CallRequest.toObject = function(includeInstance, msg) {
+  var f, obj = {
+tok: jspb.Message.getFieldWithDefault(msg, 1, ""),
+args: (f = msg.getArgs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+argdependenciesMap: (f = msg.getArgdependenciesMap()) ? f.toObject(includeInstance, proto.pulumirpc.CallRequest.ArgumentDependencies.toObject) : [],
+project: jspb.Message.getFieldWithDefault(msg, 6, ""),
+stack: jspb.Message.getFieldWithDefault(msg, 7, ""),
+configMap: (f = msg.getConfigMap()) ? f.toObject(includeInstance, undefined) : [],
+configsecretkeysList: (f = jspb.Message.getRepeatedField(msg, 9)) == null ? undefined : f,
+dryrun: jspb.Message.getBooleanFieldWithDefault(msg, 10, false),
+parallel: jspb.Message.getFieldWithDefault(msg, 11, 0),
+monitorendpoint: jspb.Message.getFieldWithDefault(msg, 12, ""),
+organization: jspb.Message.getFieldWithDefault(msg, 14, ""),
+acceptsOutputValues: jspb.Message.getBooleanFieldWithDefault(msg, 17, false),
+stackTraceHandle: jspb.Message.getFieldWithDefault(msg, 18, "")
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.CallRequest}
+ */
+proto.pulumirpc.CallRequest.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.CallRequest;
+  return proto.pulumirpc.CallRequest.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.CallRequest} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.CallRequest}
+ */
+proto.pulumirpc.CallRequest.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setTok(value);
+      break;
+    case 2:
+      var value = new google_protobuf_struct_pb.Struct;
+      reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
+      msg.setArgs(value);
+      break;
+    case 3:
+      var value = msg.getArgdependenciesMap();
+      reader.readMessage(value, function(message, reader) {
+        jspb.Map.deserializeBinary(message, reader, jspb.BinaryReader.prototype.readString, jspb.BinaryReader.prototype.readMessage, proto.pulumirpc.CallRequest.ArgumentDependencies.deserializeBinaryFromReader, "", new proto.pulumirpc.CallRequest.ArgumentDependencies());
+         });
+      break;
+    case 6:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setProject(value);
+      break;
+    case 7:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setStack(value);
+      break;
+    case 8:
+      var value = msg.getConfigMap();
+      reader.readMessage(value, function(message, reader) {
+        jspb.Map.deserializeBinary(message, reader, jspb.BinaryReader.prototype.readString, jspb.BinaryReader.prototype.readString, null, "", "");
+         });
+      break;
+    case 9:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addConfigsecretkeys(value);
+      break;
+    case 10:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setDryrun(value);
+      break;
+    case 11:
+      var value = /** @type {number} */ (reader.readInt32());
+      msg.setParallel(value);
+      break;
+    case 12:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setMonitorendpoint(value);
+      break;
+    case 14:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setOrganization(value);
+      break;
+    case 17:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptsOutputValues(value);
+      break;
+    case 18:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setStackTraceHandle(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.CallRequest.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.CallRequest.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.CallRequest} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.CallRequest.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getTok();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = message.getArgs();
+  if (f != null) {
+    writer.writeMessage(
+      2,
+      f,
+      google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getArgdependenciesMap(true);
+  if (f && f.getLength() > 0) {
+    f.serializeBinary(3, writer, jspb.BinaryWriter.prototype.writeString, jspb.BinaryWriter.prototype.writeMessage, proto.pulumirpc.CallRequest.ArgumentDependencies.serializeBinaryToWriter);
+  }
+  f = message.getProject();
+  if (f.length > 0) {
+    writer.writeString(
+      6,
+      f
+    );
+  }
+  f = message.getStack();
+  if (f.length > 0) {
+    writer.writeString(
+      7,
+      f
+    );
+  }
+  f = message.getConfigMap(true);
+  if (f && f.getLength() > 0) {
+    f.serializeBinary(8, writer, jspb.BinaryWriter.prototype.writeString, jspb.BinaryWriter.prototype.writeString);
+  }
+  f = message.getConfigsecretkeysList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      9,
+      f
+    );
+  }
+  f = message.getDryrun();
+  if (f) {
+    writer.writeBool(
+      10,
+      f
+    );
+  }
+  f = message.getParallel();
+  if (f !== 0) {
+    writer.writeInt32(
+      11,
+      f
+    );
+  }
+  f = message.getMonitorendpoint();
+  if (f.length > 0) {
+    writer.writeString(
+      12,
+      f
+    );
+  }
+  f = message.getOrganization();
+  if (f.length > 0) {
+    writer.writeString(
+      14,
+      f
+    );
+  }
+  f = message.getAcceptsOutputValues();
+  if (f) {
+    writer.writeBool(
+      17,
+      f
+    );
+  }
+  f = message.getStackTraceHandle();
+  if (f.length > 0) {
+    writer.writeString(
+      18,
+      f
+    );
+  }
+};
+
+
+
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.repeatedFields_ = [1];
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.CallRequest.ArgumentDependencies.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.CallRequest.ArgumentDependencies} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.toObject = function(includeInstance, msg) {
+  var f, obj = {
+urnsList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.CallRequest.ArgumentDependencies}
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.CallRequest.ArgumentDependencies;
+  return proto.pulumirpc.CallRequest.ArgumentDependencies.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.CallRequest.ArgumentDependencies} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.CallRequest.ArgumentDependencies}
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addUrns(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.CallRequest.ArgumentDependencies.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.CallRequest.ArgumentDependencies} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getUrnsList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      1,
+      f
+    );
+  }
+};
+
+
+/**
+ * repeated string urns = 1;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.prototype.getUrnsList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 1));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.CallRequest.ArgumentDependencies} returns this
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.prototype.setUrnsList = function(value) {
+  return jspb.Message.setField(this, 1, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.CallRequest.ArgumentDependencies} returns this
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.prototype.addUrns = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 1, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.CallRequest.ArgumentDependencies} returns this
+ */
+proto.pulumirpc.CallRequest.ArgumentDependencies.prototype.clearUrnsList = function() {
+  return this.setUrnsList([]);
+};
+
+
+/**
+ * optional string tok = 1;
+ * @return {string}
+ */
+proto.pulumirpc.CallRequest.prototype.getTok = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.setTok = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional google.protobuf.Struct args = 2;
+ * @return {?proto.google.protobuf.Struct}
+ */
+proto.pulumirpc.CallRequest.prototype.getArgs = function() {
+  return /** @type{?proto.google.protobuf.Struct} */ (
+    jspb.Message.getWrapperField(this, google_protobuf_struct_pb.Struct, 2));
+};
+
+
+/**
+ * @param {?proto.google.protobuf.Struct|undefined} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+*/
+proto.pulumirpc.CallRequest.prototype.setArgs = function(value) {
+  return jspb.Message.setWrapperField(this, 2, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.clearArgs = function() {
+  return this.setArgs(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.CallRequest.prototype.hasArgs = function() {
+  return jspb.Message.getField(this, 2) != null;
+};
+
+
+/**
+ * map<string, ArgumentDependencies> argDependencies = 3;
+ * @param {boolean=} opt_noLazyCreate Do not create the map if
+ * empty, instead returning `undefined`
+ * @return {!jspb.Map<string,!proto.pulumirpc.CallRequest.ArgumentDependencies>}
+ */
+proto.pulumirpc.CallRequest.prototype.getArgdependenciesMap = function(opt_noLazyCreate) {
+  return /** @type {!jspb.Map<string,!proto.pulumirpc.CallRequest.ArgumentDependencies>} */ (
+      jspb.Message.getMapField(this, 3, opt_noLazyCreate,
+      proto.pulumirpc.CallRequest.ArgumentDependencies));
+};
+
+
+/**
+ * Clears values from the map. The map will be non-null.
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.clearArgdependenciesMap = function() {
+  this.getArgdependenciesMap().clear();
+  return this;
+};
+
+
+/**
+ * optional string project = 6;
+ * @return {string}
+ */
+proto.pulumirpc.CallRequest.prototype.getProject = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 6, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.setProject = function(value) {
+  return jspb.Message.setProto3StringField(this, 6, value);
+};
+
+
+/**
+ * optional string stack = 7;
+ * @return {string}
+ */
+proto.pulumirpc.CallRequest.prototype.getStack = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 7, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.setStack = function(value) {
+  return jspb.Message.setProto3StringField(this, 7, value);
+};
+
+
+/**
+ * map<string, string> config = 8;
+ * @param {boolean=} opt_noLazyCreate Do not create the map if
+ * empty, instead returning `undefined`
+ * @return {!jspb.Map<string,string>}
+ */
+proto.pulumirpc.CallRequest.prototype.getConfigMap = function(opt_noLazyCreate) {
+  return /** @type {!jspb.Map<string,string>} */ (
+      jspb.Message.getMapField(this, 8, opt_noLazyCreate,
+      null));
+};
+
+
+/**
+ * Clears values from the map. The map will be non-null.
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.clearConfigMap = function() {
+  this.getConfigMap().clear();
+  return this;
+};
+
+
+/**
+ * repeated string configSecretKeys = 9;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.CallRequest.prototype.getConfigsecretkeysList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 9));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.setConfigsecretkeysList = function(value) {
+  return jspb.Message.setField(this, 9, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.addConfigsecretkeys = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 9, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.clearConfigsecretkeysList = function() {
+  return this.setConfigsecretkeysList([]);
+};
+
+
+/**
+ * optional bool dryRun = 10;
+ * @return {boolean}
+ */
+proto.pulumirpc.CallRequest.prototype.getDryrun = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 10, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.setDryrun = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 10, value);
+};
+
+
+/**
+ * optional int32 parallel = 11;
+ * @return {number}
+ */
+proto.pulumirpc.CallRequest.prototype.getParallel = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 11, 0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.setParallel = function(value) {
+  return jspb.Message.setProto3IntField(this, 11, value);
+};
+
+
+/**
+ * optional string monitorEndpoint = 12;
+ * @return {string}
+ */
+proto.pulumirpc.CallRequest.prototype.getMonitorendpoint = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 12, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.setMonitorendpoint = function(value) {
+  return jspb.Message.setProto3StringField(this, 12, value);
+};
+
+
+/**
+ * optional string organization = 14;
+ * @return {string}
+ */
+proto.pulumirpc.CallRequest.prototype.getOrganization = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 14, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.setOrganization = function(value) {
+  return jspb.Message.setProto3StringField(this, 14, value);
+};
+
+
+/**
+ * optional bool accepts_output_values = 17;
+ * @return {boolean}
+ */
+proto.pulumirpc.CallRequest.prototype.getAcceptsOutputValues = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 17, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.setAcceptsOutputValues = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 17, value);
+};
+
+
+/**
+ * optional string stack_trace_handle = 18;
+ * @return {string}
+ */
+proto.pulumirpc.CallRequest.prototype.getStackTraceHandle = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 18, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CallRequest} returns this
+ */
+proto.pulumirpc.CallRequest.prototype.setStackTraceHandle = function(value) {
+  return jspb.Message.setProto3StringField(this, 18, value);
+};
+
+
+
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pulumirpc.CallResponse.repeatedFields_ = [3];
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.CallResponse.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.CallResponse.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.CallResponse} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.CallResponse.toObject = function(includeInstance, msg) {
+  var f, obj = {
+pb_return: (f = msg.getReturn()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+failuresList: jspb.Message.toObjectList(msg.getFailuresList(),
+    proto.pulumirpc.CheckFailure.toObject, includeInstance),
+returndependenciesMap: (f = msg.getReturndependenciesMap()) ? f.toObject(includeInstance, proto.pulumirpc.CallResponse.ReturnDependencies.toObject) : []
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.CallResponse}
+ */
+proto.pulumirpc.CallResponse.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.CallResponse;
+  return proto.pulumirpc.CallResponse.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.CallResponse} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.CallResponse}
+ */
+proto.pulumirpc.CallResponse.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = new google_protobuf_struct_pb.Struct;
+      reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
+      msg.setReturn(value);
+      break;
+    case 3:
+      var value = new proto.pulumirpc.CheckFailure;
+      reader.readMessage(value,proto.pulumirpc.CheckFailure.deserializeBinaryFromReader);
+      msg.addFailures(value);
+      break;
+    case 2:
+      var value = msg.getReturndependenciesMap();
+      reader.readMessage(value, function(message, reader) {
+        jspb.Map.deserializeBinary(message, reader, jspb.BinaryReader.prototype.readString, jspb.BinaryReader.prototype.readMessage, proto.pulumirpc.CallResponse.ReturnDependencies.deserializeBinaryFromReader, "", new proto.pulumirpc.CallResponse.ReturnDependencies());
+         });
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.CallResponse.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.CallResponse.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.CallResponse} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.CallResponse.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getReturn();
+  if (f != null) {
+    writer.writeMessage(
+      1,
+      f,
+      google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getFailuresList();
+  if (f.length > 0) {
+    writer.writeRepeatedMessage(
+      3,
+      f,
+      proto.pulumirpc.CheckFailure.serializeBinaryToWriter
+    );
+  }
+  f = message.getReturndependenciesMap(true);
+  if (f && f.getLength() > 0) {
+    f.serializeBinary(2, writer, jspb.BinaryWriter.prototype.writeString, jspb.BinaryWriter.prototype.writeMessage, proto.pulumirpc.CallResponse.ReturnDependencies.serializeBinaryToWriter);
+  }
+};
+
+
+
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.repeatedFields_ = [1];
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.CallResponse.ReturnDependencies.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.CallResponse.ReturnDependencies} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.toObject = function(includeInstance, msg) {
+  var f, obj = {
+urnsList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.CallResponse.ReturnDependencies}
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.CallResponse.ReturnDependencies;
+  return proto.pulumirpc.CallResponse.ReturnDependencies.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.CallResponse.ReturnDependencies} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.CallResponse.ReturnDependencies}
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addUrns(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.CallResponse.ReturnDependencies.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.CallResponse.ReturnDependencies} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getUrnsList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      1,
+      f
+    );
+  }
+};
+
+
+/**
+ * repeated string urns = 1;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.prototype.getUrnsList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 1));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.CallResponse.ReturnDependencies} returns this
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.prototype.setUrnsList = function(value) {
+  return jspb.Message.setField(this, 1, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.CallResponse.ReturnDependencies} returns this
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.prototype.addUrns = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 1, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.CallResponse.ReturnDependencies} returns this
+ */
+proto.pulumirpc.CallResponse.ReturnDependencies.prototype.clearUrnsList = function() {
+  return this.setUrnsList([]);
+};
+
+
+/**
+ * optional google.protobuf.Struct return = 1;
+ * @return {?proto.google.protobuf.Struct}
+ */
+proto.pulumirpc.CallResponse.prototype.getReturn = function() {
+  return /** @type{?proto.google.protobuf.Struct} */ (
+    jspb.Message.getWrapperField(this, google_protobuf_struct_pb.Struct, 1));
+};
+
+
+/**
+ * @param {?proto.google.protobuf.Struct|undefined} value
+ * @return {!proto.pulumirpc.CallResponse} returns this
+*/
+proto.pulumirpc.CallResponse.prototype.setReturn = function(value) {
+  return jspb.Message.setWrapperField(this, 1, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.CallResponse} returns this
+ */
+proto.pulumirpc.CallResponse.prototype.clearReturn = function() {
+  return this.setReturn(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.CallResponse.prototype.hasReturn = function() {
+  return jspb.Message.getField(this, 1) != null;
+};
+
+
+/**
+ * repeated CheckFailure failures = 3;
+ * @return {!Array<!proto.pulumirpc.CheckFailure>}
+ */
+proto.pulumirpc.CallResponse.prototype.getFailuresList = function() {
+  return /** @type{!Array<!proto.pulumirpc.CheckFailure>} */ (
+    jspb.Message.getRepeatedWrapperField(this, proto.pulumirpc.CheckFailure, 3));
+};
+
+
+/**
+ * @param {!Array<!proto.pulumirpc.CheckFailure>} value
+ * @return {!proto.pulumirpc.CallResponse} returns this
+*/
+proto.pulumirpc.CallResponse.prototype.setFailuresList = function(value) {
+  return jspb.Message.setRepeatedWrapperField(this, 3, value);
+};
+
+
+/**
+ * @param {!proto.pulumirpc.CheckFailure=} opt_value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.CheckFailure}
+ */
+proto.pulumirpc.CallResponse.prototype.addFailures = function(opt_value, opt_index) {
+  return jspb.Message.addToRepeatedWrapperField(this, 3, opt_value, proto.pulumirpc.CheckFailure, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.CallResponse} returns this
+ */
+proto.pulumirpc.CallResponse.prototype.clearFailuresList = function() {
+  return this.setFailuresList([]);
+};
+
+
+/**
+ * map<string, ReturnDependencies> returnDependencies = 2;
+ * @param {boolean=} opt_noLazyCreate Do not create the map if
+ * empty, instead returning `undefined`
+ * @return {!jspb.Map<string,!proto.pulumirpc.CallResponse.ReturnDependencies>}
+ */
+proto.pulumirpc.CallResponse.prototype.getReturndependenciesMap = function(opt_noLazyCreate) {
+  return /** @type {!jspb.Map<string,!proto.pulumirpc.CallResponse.ReturnDependencies>} */ (
+      jspb.Message.getMapField(this, 2, opt_noLazyCreate,
+      proto.pulumirpc.CallResponse.ReturnDependencies));
+};
+
+
+/**
+ * Clears values from the map. The map will be non-null.
+ * @return {!proto.pulumirpc.CallResponse} returns this
+ */
+proto.pulumirpc.CallResponse.prototype.clearReturndependenciesMap = function() {
+  this.getReturndependenciesMap().clear();
+  return this;
+};
+
+
+
 
 
 if (jspb.Message.GENERATE_TO_OBJECT) {
@@ -2120,9 +5809,14 @@ proto.pulumirpc.CheckRequest.prototype.toObject = function(opt_includeInstance) 
  */
 proto.pulumirpc.CheckRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    urn: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    olds: (f = msg.getOlds()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    news: (f = msg.getNews()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f)
+urn: jspb.Message.getFieldWithDefault(msg, 1, ""),
+olds: (f = msg.getOlds()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+news: (f = msg.getNews()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+randomseed: msg.getRandomseed_asB64(),
+name: jspb.Message.getFieldWithDefault(msg, 6, ""),
+type: jspb.Message.getFieldWithDefault(msg, 7, ""),
+autonaming: (f = msg.getAutonaming()) && proto.pulumirpc.CheckRequest.AutonamingOptions.toObject(includeInstance, f),
+oldOutputs: (f = msg.getOldOutputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f)
   };
 
   if (includeInstance) {
@@ -2172,6 +5866,28 @@ proto.pulumirpc.CheckRequest.deserializeBinaryFromReader = function(msg, reader)
       var value = new google_protobuf_struct_pb.Struct;
       reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
       msg.setNews(value);
+      break;
+    case 5:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setRandomseed(value);
+      break;
+    case 6:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    case 7:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setType(value);
+      break;
+    case 8:
+      var value = new proto.pulumirpc.CheckRequest.AutonamingOptions;
+      reader.readMessage(value,proto.pulumirpc.CheckRequest.AutonamingOptions.deserializeBinaryFromReader);
+      msg.setAutonaming(value);
+      break;
+    case 9:
+      var value = new google_protobuf_struct_pb.Struct;
+      reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
+      msg.setOldOutputs(value);
       break;
     default:
       reader.skipField();
@@ -2225,6 +5941,212 @@ proto.pulumirpc.CheckRequest.serializeBinaryToWriter = function(message, writer)
       google_protobuf_struct_pb.Struct.serializeBinaryToWriter
     );
   }
+  f = message.getRandomseed_asU8();
+  if (f.length > 0) {
+    writer.writeBytes(
+      5,
+      f
+    );
+  }
+  f = message.getName();
+  if (f.length > 0) {
+    writer.writeString(
+      6,
+      f
+    );
+  }
+  f = message.getType();
+  if (f.length > 0) {
+    writer.writeString(
+      7,
+      f
+    );
+  }
+  f = message.getAutonaming();
+  if (f != null) {
+    writer.writeMessage(
+      8,
+      f,
+      proto.pulumirpc.CheckRequest.AutonamingOptions.serializeBinaryToWriter
+    );
+  }
+  f = message.getOldOutputs();
+  if (f != null) {
+    writer.writeMessage(
+      9,
+      f,
+      google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.CheckRequest.AutonamingOptions.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.CheckRequest.AutonamingOptions} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.toObject = function(includeInstance, msg) {
+  var f, obj = {
+proposedName: jspb.Message.getFieldWithDefault(msg, 1, ""),
+mode: jspb.Message.getFieldWithDefault(msg, 2, 0)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.CheckRequest.AutonamingOptions}
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.CheckRequest.AutonamingOptions;
+  return proto.pulumirpc.CheckRequest.AutonamingOptions.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.CheckRequest.AutonamingOptions} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.CheckRequest.AutonamingOptions}
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setProposedName(value);
+      break;
+    case 2:
+      var value = /** @type {!proto.pulumirpc.CheckRequest.AutonamingOptions.Mode} */ (reader.readEnum());
+      msg.setMode(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.CheckRequest.AutonamingOptions.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.CheckRequest.AutonamingOptions} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getProposedName();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = message.getMode();
+  if (f !== 0.0) {
+    writer.writeEnum(
+      2,
+      f
+    );
+  }
+};
+
+
+/**
+ * @enum {number}
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.Mode = {
+  PROPOSE: 0,
+  ENFORCE: 1,
+  DISABLE: 2
+};
+
+/**
+ * optional string proposed_name = 1;
+ * @return {string}
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.prototype.getProposedName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CheckRequest.AutonamingOptions} returns this
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.prototype.setProposedName = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional Mode mode = 2;
+ * @return {!proto.pulumirpc.CheckRequest.AutonamingOptions.Mode}
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.prototype.getMode = function() {
+  return /** @type {!proto.pulumirpc.CheckRequest.AutonamingOptions.Mode} */ (jspb.Message.getFieldWithDefault(this, 2, 0));
+};
+
+
+/**
+ * @param {!proto.pulumirpc.CheckRequest.AutonamingOptions.Mode} value
+ * @return {!proto.pulumirpc.CheckRequest.AutonamingOptions} returns this
+ */
+proto.pulumirpc.CheckRequest.AutonamingOptions.prototype.setMode = function(value) {
+  return jspb.Message.setProto3EnumField(this, 2, value);
 };
 
 
@@ -2320,6 +6242,158 @@ proto.pulumirpc.CheckRequest.prototype.hasNews = function() {
 };
 
 
+/**
+ * optional bytes randomSeed = 5;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pulumirpc.CheckRequest.prototype.getRandomseed = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 5, ""));
+};
+
+
+/**
+ * optional bytes randomSeed = 5;
+ * This is a type-conversion wrapper around `getRandomseed()`
+ * @return {string}
+ */
+proto.pulumirpc.CheckRequest.prototype.getRandomseed_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getRandomseed()));
+};
+
+
+/**
+ * optional bytes randomSeed = 5;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getRandomseed()`
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.CheckRequest.prototype.getRandomseed_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getRandomseed()));
+};
+
+
+/**
+ * @param {!(string|Uint8Array)} value
+ * @return {!proto.pulumirpc.CheckRequest} returns this
+ */
+proto.pulumirpc.CheckRequest.prototype.setRandomseed = function(value) {
+  return jspb.Message.setProto3BytesField(this, 5, value);
+};
+
+
+/**
+ * optional string name = 6;
+ * @return {string}
+ */
+proto.pulumirpc.CheckRequest.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 6, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CheckRequest} returns this
+ */
+proto.pulumirpc.CheckRequest.prototype.setName = function(value) {
+  return jspb.Message.setProto3StringField(this, 6, value);
+};
+
+
+/**
+ * optional string type = 7;
+ * @return {string}
+ */
+proto.pulumirpc.CheckRequest.prototype.getType = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 7, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CheckRequest} returns this
+ */
+proto.pulumirpc.CheckRequest.prototype.setType = function(value) {
+  return jspb.Message.setProto3StringField(this, 7, value);
+};
+
+
+/**
+ * optional AutonamingOptions autonaming = 8;
+ * @return {?proto.pulumirpc.CheckRequest.AutonamingOptions}
+ */
+proto.pulumirpc.CheckRequest.prototype.getAutonaming = function() {
+  return /** @type{?proto.pulumirpc.CheckRequest.AutonamingOptions} */ (
+    jspb.Message.getWrapperField(this, proto.pulumirpc.CheckRequest.AutonamingOptions, 8));
+};
+
+
+/**
+ * @param {?proto.pulumirpc.CheckRequest.AutonamingOptions|undefined} value
+ * @return {!proto.pulumirpc.CheckRequest} returns this
+*/
+proto.pulumirpc.CheckRequest.prototype.setAutonaming = function(value) {
+  return jspb.Message.setWrapperField(this, 8, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.CheckRequest} returns this
+ */
+proto.pulumirpc.CheckRequest.prototype.clearAutonaming = function() {
+  return this.setAutonaming(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.CheckRequest.prototype.hasAutonaming = function() {
+  return jspb.Message.getField(this, 8) != null;
+};
+
+
+/**
+ * optional google.protobuf.Struct old_outputs = 9;
+ * @return {?proto.google.protobuf.Struct}
+ */
+proto.pulumirpc.CheckRequest.prototype.getOldOutputs = function() {
+  return /** @type{?proto.google.protobuf.Struct} */ (
+    jspb.Message.getWrapperField(this, google_protobuf_struct_pb.Struct, 9));
+};
+
+
+/**
+ * @param {?proto.google.protobuf.Struct|undefined} value
+ * @return {!proto.pulumirpc.CheckRequest} returns this
+*/
+proto.pulumirpc.CheckRequest.prototype.setOldOutputs = function(value) {
+  return jspb.Message.setWrapperField(this, 9, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.CheckRequest} returns this
+ */
+proto.pulumirpc.CheckRequest.prototype.clearOldOutputs = function() {
+  return this.setOldOutputs(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.CheckRequest.prototype.hasOldOutputs = function() {
+  return jspb.Message.getField(this, 9) != null;
+};
+
+
 
 /**
  * List of repeated fields within this message type.
@@ -2359,8 +6433,8 @@ proto.pulumirpc.CheckResponse.prototype.toObject = function(opt_includeInstance)
  */
 proto.pulumirpc.CheckResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    failuresList: jspb.Message.toObjectList(msg.getFailuresList(),
+inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+failuresList: jspb.Message.toObjectList(msg.getFailuresList(),
     proto.pulumirpc.CheckFailure.toObject, includeInstance)
   };
 
@@ -2563,8 +6637,8 @@ proto.pulumirpc.CheckFailure.prototype.toObject = function(opt_includeInstance) 
  */
 proto.pulumirpc.CheckFailure.toObject = function(includeInstance, msg) {
   var f, obj = {
-    property: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    reason: jspb.Message.getFieldWithDefault(msg, 2, "")
+property: jspb.Message.getFieldWithDefault(msg, 1, ""),
+reason: jspb.Message.getFieldWithDefault(msg, 2, "")
   };
 
   if (includeInstance) {
@@ -2730,11 +6804,14 @@ proto.pulumirpc.DiffRequest.prototype.toObject = function(opt_includeInstance) {
  */
 proto.pulumirpc.DiffRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    id: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    urn: jspb.Message.getFieldWithDefault(msg, 2, ""),
-    olds: (f = msg.getOlds()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    news: (f = msg.getNews()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    ignorechangesList: (f = jspb.Message.getRepeatedField(msg, 5)) == null ? undefined : f
+id: jspb.Message.getFieldWithDefault(msg, 1, ""),
+urn: jspb.Message.getFieldWithDefault(msg, 2, ""),
+olds: (f = msg.getOlds()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+news: (f = msg.getNews()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+ignorechangesList: (f = jspb.Message.getRepeatedField(msg, 5)) == null ? undefined : f,
+oldInputs: (f = msg.getOldInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+name: jspb.Message.getFieldWithDefault(msg, 7, ""),
+type: jspb.Message.getFieldWithDefault(msg, 8, "")
   };
 
   if (includeInstance) {
@@ -2792,6 +6869,19 @@ proto.pulumirpc.DiffRequest.deserializeBinaryFromReader = function(msg, reader) 
     case 5:
       var value = /** @type {string} */ (reader.readString());
       msg.addIgnorechanges(value);
+      break;
+    case 6:
+      var value = new google_protobuf_struct_pb.Struct;
+      reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
+      msg.setOldInputs(value);
+      break;
+    case 7:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    case 8:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setType(value);
       break;
     default:
       reader.skipField();
@@ -2856,6 +6946,28 @@ proto.pulumirpc.DiffRequest.serializeBinaryToWriter = function(message, writer) 
   if (f.length > 0) {
     writer.writeRepeatedString(
       5,
+      f
+    );
+  }
+  f = message.getOldInputs();
+  if (f != null) {
+    writer.writeMessage(
+      6,
+      f,
+      google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getName();
+  if (f.length > 0) {
+    writer.writeString(
+      7,
+      f
+    );
+  }
+  f = message.getType();
+  if (f.length > 0) {
+    writer.writeString(
+      8,
       f
     );
   }
@@ -3009,6 +7121,79 @@ proto.pulumirpc.DiffRequest.prototype.clearIgnorechangesList = function() {
 };
 
 
+/**
+ * optional google.protobuf.Struct old_inputs = 6;
+ * @return {?proto.google.protobuf.Struct}
+ */
+proto.pulumirpc.DiffRequest.prototype.getOldInputs = function() {
+  return /** @type{?proto.google.protobuf.Struct} */ (
+    jspb.Message.getWrapperField(this, google_protobuf_struct_pb.Struct, 6));
+};
+
+
+/**
+ * @param {?proto.google.protobuf.Struct|undefined} value
+ * @return {!proto.pulumirpc.DiffRequest} returns this
+*/
+proto.pulumirpc.DiffRequest.prototype.setOldInputs = function(value) {
+  return jspb.Message.setWrapperField(this, 6, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.DiffRequest} returns this
+ */
+proto.pulumirpc.DiffRequest.prototype.clearOldInputs = function() {
+  return this.setOldInputs(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.DiffRequest.prototype.hasOldInputs = function() {
+  return jspb.Message.getField(this, 6) != null;
+};
+
+
+/**
+ * optional string name = 7;
+ * @return {string}
+ */
+proto.pulumirpc.DiffRequest.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 7, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.DiffRequest} returns this
+ */
+proto.pulumirpc.DiffRequest.prototype.setName = function(value) {
+  return jspb.Message.setProto3StringField(this, 7, value);
+};
+
+
+/**
+ * optional string type = 8;
+ * @return {string}
+ */
+proto.pulumirpc.DiffRequest.prototype.getType = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 8, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.DiffRequest} returns this
+ */
+proto.pulumirpc.DiffRequest.prototype.setType = function(value) {
+  return jspb.Message.setProto3StringField(this, 8, value);
+};
+
+
 
 
 
@@ -3041,8 +7226,8 @@ proto.pulumirpc.PropertyDiff.prototype.toObject = function(opt_includeInstance) 
  */
 proto.pulumirpc.PropertyDiff.toObject = function(includeInstance, msg) {
   var f, obj = {
-    kind: jspb.Message.getFieldWithDefault(msg, 1, 0),
-    inputdiff: jspb.Message.getBooleanFieldWithDefault(msg, 2, false)
+kind: jspb.Message.getFieldWithDefault(msg, 1, 0),
+inputdiff: jspb.Message.getBooleanFieldWithDefault(msg, 2, false)
   };
 
   if (includeInstance) {
@@ -3220,13 +7405,13 @@ proto.pulumirpc.DiffResponse.prototype.toObject = function(opt_includeInstance) 
  */
 proto.pulumirpc.DiffResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    replacesList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f,
-    stablesList: (f = jspb.Message.getRepeatedField(msg, 2)) == null ? undefined : f,
-    deletebeforereplace: jspb.Message.getBooleanFieldWithDefault(msg, 3, false),
-    changes: jspb.Message.getFieldWithDefault(msg, 4, 0),
-    diffsList: (f = jspb.Message.getRepeatedField(msg, 5)) == null ? undefined : f,
-    detaileddiffMap: (f = msg.getDetaileddiffMap()) ? f.toObject(includeInstance, proto.pulumirpc.PropertyDiff.toObject) : [],
-    hasdetaileddiff: jspb.Message.getBooleanFieldWithDefault(msg, 7, false)
+replacesList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f,
+stablesList: (f = jspb.Message.getRepeatedField(msg, 2)) == null ? undefined : f,
+deletebeforereplace: jspb.Message.getBooleanFieldWithDefault(msg, 3, false),
+changes: jspb.Message.getFieldWithDefault(msg, 4, 0),
+diffsList: (f = jspb.Message.getRepeatedField(msg, 5)) == null ? undefined : f,
+detaileddiffMap: (f = msg.getDetaileddiffMap()) ? f.toObject(includeInstance, proto.pulumirpc.PropertyDiff.toObject) : [],
+hasdetaileddiff: jspb.Message.getBooleanFieldWithDefault(msg, 7, false)
   };
 
   if (includeInstance) {
@@ -3546,7 +7731,8 @@ proto.pulumirpc.DiffResponse.prototype.getDetaileddiffMap = function(opt_noLazyC
  */
 proto.pulumirpc.DiffResponse.prototype.clearDetaileddiffMap = function() {
   this.getDetaileddiffMap().clear();
-  return this;};
+  return this;
+};
 
 
 /**
@@ -3599,10 +7785,14 @@ proto.pulumirpc.CreateRequest.prototype.toObject = function(opt_includeInstance)
  */
 proto.pulumirpc.CreateRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    urn: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    timeout: jspb.Message.getFloatingPointFieldWithDefault(msg, 3, 0.0),
-    preview: jspb.Message.getBooleanFieldWithDefault(msg, 4, false)
+urn: jspb.Message.getFieldWithDefault(msg, 1, ""),
+properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+timeout: jspb.Message.getFloatingPointFieldWithDefault(msg, 3, 0.0),
+preview: jspb.Message.getBooleanFieldWithDefault(msg, 4, false),
+name: jspb.Message.getFieldWithDefault(msg, 5, ""),
+type: jspb.Message.getFieldWithDefault(msg, 6, ""),
+resourceStatusAddress: jspb.Message.getFieldWithDefault(msg, 7, ""),
+resourceStatusToken: jspb.Message.getFieldWithDefault(msg, 8, "")
   };
 
   if (includeInstance) {
@@ -3655,6 +7845,22 @@ proto.pulumirpc.CreateRequest.deserializeBinaryFromReader = function(msg, reader
     case 4:
       var value = /** @type {boolean} */ (reader.readBool());
       msg.setPreview(value);
+      break;
+    case 5:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    case 6:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setType(value);
+      break;
+    case 7:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setResourceStatusAddress(value);
+      break;
+    case 8:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setResourceStatusToken(value);
       break;
     default:
       reader.skipField();
@@ -3711,6 +7917,34 @@ proto.pulumirpc.CreateRequest.serializeBinaryToWriter = function(message, writer
   if (f) {
     writer.writeBool(
       4,
+      f
+    );
+  }
+  f = message.getName();
+  if (f.length > 0) {
+    writer.writeString(
+      5,
+      f
+    );
+  }
+  f = message.getType();
+  if (f.length > 0) {
+    writer.writeString(
+      6,
+      f
+    );
+  }
+  f = message.getResourceStatusAddress();
+  if (f.length > 0) {
+    writer.writeString(
+      7,
+      f
+    );
+  }
+  f = message.getResourceStatusToken();
+  if (f.length > 0) {
+    writer.writeString(
+      8,
       f
     );
   }
@@ -3808,6 +8042,78 @@ proto.pulumirpc.CreateRequest.prototype.setPreview = function(value) {
 };
 
 
+/**
+ * optional string name = 5;
+ * @return {string}
+ */
+proto.pulumirpc.CreateRequest.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 5, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CreateRequest} returns this
+ */
+proto.pulumirpc.CreateRequest.prototype.setName = function(value) {
+  return jspb.Message.setProto3StringField(this, 5, value);
+};
+
+
+/**
+ * optional string type = 6;
+ * @return {string}
+ */
+proto.pulumirpc.CreateRequest.prototype.getType = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 6, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CreateRequest} returns this
+ */
+proto.pulumirpc.CreateRequest.prototype.setType = function(value) {
+  return jspb.Message.setProto3StringField(this, 6, value);
+};
+
+
+/**
+ * optional string resource_status_address = 7;
+ * @return {string}
+ */
+proto.pulumirpc.CreateRequest.prototype.getResourceStatusAddress = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 7, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CreateRequest} returns this
+ */
+proto.pulumirpc.CreateRequest.prototype.setResourceStatusAddress = function(value) {
+  return jspb.Message.setProto3StringField(this, 7, value);
+};
+
+
+/**
+ * optional string resource_status_token = 8;
+ * @return {string}
+ */
+proto.pulumirpc.CreateRequest.prototype.getResourceStatusToken = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 8, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.CreateRequest} returns this
+ */
+proto.pulumirpc.CreateRequest.prototype.setResourceStatusToken = function(value) {
+  return jspb.Message.setProto3StringField(this, 8, value);
+};
+
+
 
 
 
@@ -3840,8 +8146,9 @@ proto.pulumirpc.CreateResponse.prototype.toObject = function(opt_includeInstance
  */
 proto.pulumirpc.CreateResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    id: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f)
+id: jspb.Message.getFieldWithDefault(msg, 1, ""),
+properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+refreshBeforeUpdate: jspb.Message.getBooleanFieldWithDefault(msg, 3, false)
   };
 
   if (includeInstance) {
@@ -3887,6 +8194,10 @@ proto.pulumirpc.CreateResponse.deserializeBinaryFromReader = function(msg, reade
       reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
       msg.setProperties(value);
       break;
+    case 3:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setRefreshBeforeUpdate(value);
+      break;
     default:
       reader.skipField();
       break;
@@ -3929,6 +8240,13 @@ proto.pulumirpc.CreateResponse.serializeBinaryToWriter = function(message, write
       2,
       f,
       google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getRefreshBeforeUpdate();
+  if (f) {
+    writer.writeBool(
+      3,
+      f
     );
   }
 };
@@ -3989,6 +8307,31 @@ proto.pulumirpc.CreateResponse.prototype.hasProperties = function() {
 };
 
 
+/**
+ * optional bool refresh_before_update = 3;
+ * @return {boolean}
+ */
+proto.pulumirpc.CreateResponse.prototype.getRefreshBeforeUpdate = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 3, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.CreateResponse} returns this
+ */
+proto.pulumirpc.CreateResponse.prototype.setRefreshBeforeUpdate = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 3, value);
+};
+
+
+
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pulumirpc.ReadRequest.repeatedFields_ = [9];
 
 
 
@@ -4021,10 +8364,17 @@ proto.pulumirpc.ReadRequest.prototype.toObject = function(opt_includeInstance) {
  */
 proto.pulumirpc.ReadRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    id: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    urn: jspb.Message.getFieldWithDefault(msg, 2, ""),
-    properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f)
+id: jspb.Message.getFieldWithDefault(msg, 1, ""),
+urn: jspb.Message.getFieldWithDefault(msg, 2, ""),
+properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+name: jspb.Message.getFieldWithDefault(msg, 5, ""),
+type: jspb.Message.getFieldWithDefault(msg, 6, ""),
+resourceStatusAddress: jspb.Message.getFieldWithDefault(msg, 7, ""),
+resourceStatusToken: jspb.Message.getFieldWithDefault(msg, 8, ""),
+oldViewsList: jspb.Message.toObjectList(msg.getOldViewsList(),
+    proto.pulumirpc.View.toObject, includeInstance),
+timeout: jspb.Message.getFloatingPointFieldWithDefault(msg, 10, 0.0)
   };
 
   if (includeInstance) {
@@ -4078,6 +8428,31 @@ proto.pulumirpc.ReadRequest.deserializeBinaryFromReader = function(msg, reader) 
       var value = new google_protobuf_struct_pb.Struct;
       reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
       msg.setInputs(value);
+      break;
+    case 5:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    case 6:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setType(value);
+      break;
+    case 7:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setResourceStatusAddress(value);
+      break;
+    case 8:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setResourceStatusToken(value);
+      break;
+    case 9:
+      var value = new proto.pulumirpc.View;
+      reader.readMessage(value,proto.pulumirpc.View.deserializeBinaryFromReader);
+      msg.addOldViews(value);
+      break;
+    case 10:
+      var value = /** @type {number} */ (reader.readDouble());
+      msg.setTimeout(value);
       break;
     default:
       reader.skipField();
@@ -4136,6 +8511,49 @@ proto.pulumirpc.ReadRequest.serializeBinaryToWriter = function(message, writer) 
       4,
       f,
       google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getName();
+  if (f.length > 0) {
+    writer.writeString(
+      5,
+      f
+    );
+  }
+  f = message.getType();
+  if (f.length > 0) {
+    writer.writeString(
+      6,
+      f
+    );
+  }
+  f = message.getResourceStatusAddress();
+  if (f.length > 0) {
+    writer.writeString(
+      7,
+      f
+    );
+  }
+  f = message.getResourceStatusToken();
+  if (f.length > 0) {
+    writer.writeString(
+      8,
+      f
+    );
+  }
+  f = message.getOldViewsList();
+  if (f.length > 0) {
+    writer.writeRepeatedMessage(
+      9,
+      f,
+      proto.pulumirpc.View.serializeBinaryToWriter
+    );
+  }
+  f = message.getTimeout();
+  if (f !== 0.0) {
+    writer.writeDouble(
+      10,
+      f
     );
   }
 };
@@ -4251,6 +8669,134 @@ proto.pulumirpc.ReadRequest.prototype.hasInputs = function() {
 };
 
 
+/**
+ * optional string name = 5;
+ * @return {string}
+ */
+proto.pulumirpc.ReadRequest.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 5, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ReadRequest} returns this
+ */
+proto.pulumirpc.ReadRequest.prototype.setName = function(value) {
+  return jspb.Message.setProto3StringField(this, 5, value);
+};
+
+
+/**
+ * optional string type = 6;
+ * @return {string}
+ */
+proto.pulumirpc.ReadRequest.prototype.getType = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 6, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ReadRequest} returns this
+ */
+proto.pulumirpc.ReadRequest.prototype.setType = function(value) {
+  return jspb.Message.setProto3StringField(this, 6, value);
+};
+
+
+/**
+ * optional string resource_status_address = 7;
+ * @return {string}
+ */
+proto.pulumirpc.ReadRequest.prototype.getResourceStatusAddress = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 7, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ReadRequest} returns this
+ */
+proto.pulumirpc.ReadRequest.prototype.setResourceStatusAddress = function(value) {
+  return jspb.Message.setProto3StringField(this, 7, value);
+};
+
+
+/**
+ * optional string resource_status_token = 8;
+ * @return {string}
+ */
+proto.pulumirpc.ReadRequest.prototype.getResourceStatusToken = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 8, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ReadRequest} returns this
+ */
+proto.pulumirpc.ReadRequest.prototype.setResourceStatusToken = function(value) {
+  return jspb.Message.setProto3StringField(this, 8, value);
+};
+
+
+/**
+ * repeated View old_views = 9;
+ * @return {!Array<!proto.pulumirpc.View>}
+ */
+proto.pulumirpc.ReadRequest.prototype.getOldViewsList = function() {
+  return /** @type{!Array<!proto.pulumirpc.View>} */ (
+    jspb.Message.getRepeatedWrapperField(this, proto.pulumirpc.View, 9));
+};
+
+
+/**
+ * @param {!Array<!proto.pulumirpc.View>} value
+ * @return {!proto.pulumirpc.ReadRequest} returns this
+*/
+proto.pulumirpc.ReadRequest.prototype.setOldViewsList = function(value) {
+  return jspb.Message.setRepeatedWrapperField(this, 9, value);
+};
+
+
+/**
+ * @param {!proto.pulumirpc.View=} opt_value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.View}
+ */
+proto.pulumirpc.ReadRequest.prototype.addOldViews = function(opt_value, opt_index) {
+  return jspb.Message.addToRepeatedWrapperField(this, 9, opt_value, proto.pulumirpc.View, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ReadRequest} returns this
+ */
+proto.pulumirpc.ReadRequest.prototype.clearOldViewsList = function() {
+  return this.setOldViewsList([]);
+};
+
+
+/**
+ * optional double timeout = 10;
+ * @return {number}
+ */
+proto.pulumirpc.ReadRequest.prototype.getTimeout = function() {
+  return /** @type {number} */ (jspb.Message.getFloatingPointFieldWithDefault(this, 10, 0.0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.pulumirpc.ReadRequest} returns this
+ */
+proto.pulumirpc.ReadRequest.prototype.setTimeout = function(value) {
+  return jspb.Message.setProto3FloatField(this, 10, value);
+};
+
+
 
 
 
@@ -4283,9 +8829,10 @@ proto.pulumirpc.ReadResponse.prototype.toObject = function(opt_includeInstance) 
  */
 proto.pulumirpc.ReadResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    id: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f)
+id: jspb.Message.getFieldWithDefault(msg, 1, ""),
+properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+refreshBeforeUpdate: jspb.Message.getBooleanFieldWithDefault(msg, 4, false)
   };
 
   if (includeInstance) {
@@ -4335,6 +8882,10 @@ proto.pulumirpc.ReadResponse.deserializeBinaryFromReader = function(msg, reader)
       var value = new google_protobuf_struct_pb.Struct;
       reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
       msg.setInputs(value);
+      break;
+    case 4:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setRefreshBeforeUpdate(value);
       break;
     default:
       reader.skipField();
@@ -4386,6 +8937,13 @@ proto.pulumirpc.ReadResponse.serializeBinaryToWriter = function(message, writer)
       3,
       f,
       google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getRefreshBeforeUpdate();
+  if (f) {
+    writer.writeBool(
+      4,
+      f
     );
   }
 };
@@ -4483,13 +9041,973 @@ proto.pulumirpc.ReadResponse.prototype.hasInputs = function() {
 };
 
 
+/**
+ * optional bool refresh_before_update = 4;
+ * @return {boolean}
+ */
+proto.pulumirpc.ReadResponse.prototype.getRefreshBeforeUpdate = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 4, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ReadResponse} returns this
+ */
+proto.pulumirpc.ReadResponse.prototype.setRefreshBeforeUpdate = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 4, value);
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ListRequest.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ListRequest.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ListRequest} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ListRequest.toObject = function(includeInstance, msg) {
+  var f, obj = {
+token: jspb.Message.getFieldWithDefault(msg, 1, ""),
+query: (f = msg.getQuery()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+limit: jspb.Message.getFieldWithDefault(msg, 3, 0),
+pageSize: jspb.Message.getFieldWithDefault(msg, 4, 0),
+continuationToken: jspb.Message.getFieldWithDefault(msg, 5, "")
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ListRequest}
+ */
+proto.pulumirpc.ListRequest.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ListRequest;
+  return proto.pulumirpc.ListRequest.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ListRequest} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ListRequest}
+ */
+proto.pulumirpc.ListRequest.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setToken(value);
+      break;
+    case 2:
+      var value = new google_protobuf_struct_pb.Struct;
+      reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
+      msg.setQuery(value);
+      break;
+    case 3:
+      var value = /** @type {number} */ (reader.readInt64());
+      msg.setLimit(value);
+      break;
+    case 4:
+      var value = /** @type {number} */ (reader.readInt64());
+      msg.setPageSize(value);
+      break;
+    case 5:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setContinuationToken(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ListRequest.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ListRequest.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ListRequest} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ListRequest.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getToken();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = message.getQuery();
+  if (f != null) {
+    writer.writeMessage(
+      2,
+      f,
+      google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getLimit();
+  if (f !== 0) {
+    writer.writeInt64(
+      3,
+      f
+    );
+  }
+  f = message.getPageSize();
+  if (f !== 0) {
+    writer.writeInt64(
+      4,
+      f
+    );
+  }
+  f = message.getContinuationToken();
+  if (f.length > 0) {
+    writer.writeString(
+      5,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional string token = 1;
+ * @return {string}
+ */
+proto.pulumirpc.ListRequest.prototype.getToken = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ListRequest} returns this
+ */
+proto.pulumirpc.ListRequest.prototype.setToken = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional google.protobuf.Struct query = 2;
+ * @return {?proto.google.protobuf.Struct}
+ */
+proto.pulumirpc.ListRequest.prototype.getQuery = function() {
+  return /** @type{?proto.google.protobuf.Struct} */ (
+    jspb.Message.getWrapperField(this, google_protobuf_struct_pb.Struct, 2));
+};
+
+
+/**
+ * @param {?proto.google.protobuf.Struct|undefined} value
+ * @return {!proto.pulumirpc.ListRequest} returns this
+*/
+proto.pulumirpc.ListRequest.prototype.setQuery = function(value) {
+  return jspb.Message.setWrapperField(this, 2, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.ListRequest} returns this
+ */
+proto.pulumirpc.ListRequest.prototype.clearQuery = function() {
+  return this.setQuery(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ListRequest.prototype.hasQuery = function() {
+  return jspb.Message.getField(this, 2) != null;
+};
+
+
+/**
+ * optional int64 limit = 3;
+ * @return {number}
+ */
+proto.pulumirpc.ListRequest.prototype.getLimit = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 3, 0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.pulumirpc.ListRequest} returns this
+ */
+proto.pulumirpc.ListRequest.prototype.setLimit = function(value) {
+  return jspb.Message.setProto3IntField(this, 3, value);
+};
+
+
+/**
+ * optional int64 page_size = 4;
+ * @return {number}
+ */
+proto.pulumirpc.ListRequest.prototype.getPageSize = function() {
+  return /** @type {number} */ (jspb.Message.getFieldWithDefault(this, 4, 0));
+};
+
+
+/**
+ * @param {number} value
+ * @return {!proto.pulumirpc.ListRequest} returns this
+ */
+proto.pulumirpc.ListRequest.prototype.setPageSize = function(value) {
+  return jspb.Message.setProto3IntField(this, 4, value);
+};
+
+
+/**
+ * optional string continuation_token = 5;
+ * @return {string}
+ */
+proto.pulumirpc.ListRequest.prototype.getContinuationToken = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 5, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ListRequest} returns this
+ */
+proto.pulumirpc.ListRequest.prototype.setContinuationToken = function(value) {
+  return jspb.Message.setProto3StringField(this, 5, value);
+};
+
+
+
+/**
+ * Oneof group definitions for this message. Each group defines the field
+ * numbers belonging to that group. When of these fields' value is set, all
+ * other fields in the group are cleared. During deserialization, if multiple
+ * fields are encountered for a group, only the last value seen will be kept.
+ * @private {!Array<!Array<number>>}
+ * @const
+ */
+proto.pulumirpc.ListResponse.oneofGroups_ = [[1,2,3]];
+
+/**
+ * @enum {number}
+ */
+proto.pulumirpc.ListResponse.ResponseCase = {
+  RESPONSE_NOT_SET: 0,
+  COMPUTED: 1,
+  RESULT: 2,
+  CONTINUATION: 3
+};
+
+/**
+ * @return {proto.pulumirpc.ListResponse.ResponseCase}
+ */
+proto.pulumirpc.ListResponse.prototype.getResponseCase = function() {
+  return /** @type {proto.pulumirpc.ListResponse.ResponseCase} */(jspb.Message.computeOneofCase(this, proto.pulumirpc.ListResponse.oneofGroups_[0]));
+};
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ListResponse.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ListResponse.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ListResponse} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ListResponse.toObject = function(includeInstance, msg) {
+  var f, obj = {
+computed: (f = msg.getComputed()) && proto.pulumirpc.ListResponse.Computed.toObject(includeInstance, f),
+result: (f = msg.getResult()) && proto.pulumirpc.ListResponse.Result.toObject(includeInstance, f),
+continuation: (f = msg.getContinuation()) && proto.pulumirpc.ListResponse.Continuation.toObject(includeInstance, f)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ListResponse}
+ */
+proto.pulumirpc.ListResponse.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ListResponse;
+  return proto.pulumirpc.ListResponse.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ListResponse} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ListResponse}
+ */
+proto.pulumirpc.ListResponse.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = new proto.pulumirpc.ListResponse.Computed;
+      reader.readMessage(value,proto.pulumirpc.ListResponse.Computed.deserializeBinaryFromReader);
+      msg.setComputed(value);
+      break;
+    case 2:
+      var value = new proto.pulumirpc.ListResponse.Result;
+      reader.readMessage(value,proto.pulumirpc.ListResponse.Result.deserializeBinaryFromReader);
+      msg.setResult(value);
+      break;
+    case 3:
+      var value = new proto.pulumirpc.ListResponse.Continuation;
+      reader.readMessage(value,proto.pulumirpc.ListResponse.Continuation.deserializeBinaryFromReader);
+      msg.setContinuation(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ListResponse.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ListResponse.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ListResponse} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ListResponse.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getComputed();
+  if (f != null) {
+    writer.writeMessage(
+      1,
+      f,
+      proto.pulumirpc.ListResponse.Computed.serializeBinaryToWriter
+    );
+  }
+  f = message.getResult();
+  if (f != null) {
+    writer.writeMessage(
+      2,
+      f,
+      proto.pulumirpc.ListResponse.Result.serializeBinaryToWriter
+    );
+  }
+  f = message.getContinuation();
+  if (f != null) {
+    writer.writeMessage(
+      3,
+      f,
+      proto.pulumirpc.ListResponse.Continuation.serializeBinaryToWriter
+    );
+  }
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ListResponse.Computed.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ListResponse.Computed.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ListResponse.Computed} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ListResponse.Computed.toObject = function(includeInstance, msg) {
+  var f, obj = {
+
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ListResponse.Computed}
+ */
+proto.pulumirpc.ListResponse.Computed.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ListResponse.Computed;
+  return proto.pulumirpc.ListResponse.Computed.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ListResponse.Computed} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ListResponse.Computed}
+ */
+proto.pulumirpc.ListResponse.Computed.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ListResponse.Computed.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ListResponse.Computed.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ListResponse.Computed} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ListResponse.Computed.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ListResponse.Result.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ListResponse.Result.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ListResponse.Result} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ListResponse.Result.toObject = function(includeInstance, msg) {
+  var f, obj = {
+id: jspb.Message.getFieldWithDefault(msg, 1, ""),
+name: jspb.Message.getFieldWithDefault(msg, 2, "")
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ListResponse.Result}
+ */
+proto.pulumirpc.ListResponse.Result.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ListResponse.Result;
+  return proto.pulumirpc.ListResponse.Result.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ListResponse.Result} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ListResponse.Result}
+ */
+proto.pulumirpc.ListResponse.Result.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setId(value);
+      break;
+    case 2:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ListResponse.Result.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ListResponse.Result.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ListResponse.Result} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ListResponse.Result.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getId();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = message.getName();
+  if (f.length > 0) {
+    writer.writeString(
+      2,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional string id = 1;
+ * @return {string}
+ */
+proto.pulumirpc.ListResponse.Result.prototype.getId = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ListResponse.Result} returns this
+ */
+proto.pulumirpc.ListResponse.Result.prototype.setId = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional string name = 2;
+ * @return {string}
+ */
+proto.pulumirpc.ListResponse.Result.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ListResponse.Result} returns this
+ */
+proto.pulumirpc.ListResponse.Result.prototype.setName = function(value) {
+  return jspb.Message.setProto3StringField(this, 2, value);
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ListResponse.Continuation.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ListResponse.Continuation.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ListResponse.Continuation} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ListResponse.Continuation.toObject = function(includeInstance, msg) {
+  var f, obj = {
+continuationToken: jspb.Message.getFieldWithDefault(msg, 1, "")
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ListResponse.Continuation}
+ */
+proto.pulumirpc.ListResponse.Continuation.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ListResponse.Continuation;
+  return proto.pulumirpc.ListResponse.Continuation.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ListResponse.Continuation} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ListResponse.Continuation}
+ */
+proto.pulumirpc.ListResponse.Continuation.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setContinuationToken(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ListResponse.Continuation.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ListResponse.Continuation.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ListResponse.Continuation} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ListResponse.Continuation.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getContinuationToken();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional string continuation_token = 1;
+ * @return {string}
+ */
+proto.pulumirpc.ListResponse.Continuation.prototype.getContinuationToken = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ListResponse.Continuation} returns this
+ */
+proto.pulumirpc.ListResponse.Continuation.prototype.setContinuationToken = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional Computed computed = 1;
+ * @return {?proto.pulumirpc.ListResponse.Computed}
+ */
+proto.pulumirpc.ListResponse.prototype.getComputed = function() {
+  return /** @type{?proto.pulumirpc.ListResponse.Computed} */ (
+    jspb.Message.getWrapperField(this, proto.pulumirpc.ListResponse.Computed, 1));
+};
+
+
+/**
+ * @param {?proto.pulumirpc.ListResponse.Computed|undefined} value
+ * @return {!proto.pulumirpc.ListResponse} returns this
+*/
+proto.pulumirpc.ListResponse.prototype.setComputed = function(value) {
+  return jspb.Message.setOneofWrapperField(this, 1, proto.pulumirpc.ListResponse.oneofGroups_[0], value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.ListResponse} returns this
+ */
+proto.pulumirpc.ListResponse.prototype.clearComputed = function() {
+  return this.setComputed(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ListResponse.prototype.hasComputed = function() {
+  return jspb.Message.getField(this, 1) != null;
+};
+
+
+/**
+ * optional Result result = 2;
+ * @return {?proto.pulumirpc.ListResponse.Result}
+ */
+proto.pulumirpc.ListResponse.prototype.getResult = function() {
+  return /** @type{?proto.pulumirpc.ListResponse.Result} */ (
+    jspb.Message.getWrapperField(this, proto.pulumirpc.ListResponse.Result, 2));
+};
+
+
+/**
+ * @param {?proto.pulumirpc.ListResponse.Result|undefined} value
+ * @return {!proto.pulumirpc.ListResponse} returns this
+*/
+proto.pulumirpc.ListResponse.prototype.setResult = function(value) {
+  return jspb.Message.setOneofWrapperField(this, 2, proto.pulumirpc.ListResponse.oneofGroups_[0], value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.ListResponse} returns this
+ */
+proto.pulumirpc.ListResponse.prototype.clearResult = function() {
+  return this.setResult(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ListResponse.prototype.hasResult = function() {
+  return jspb.Message.getField(this, 2) != null;
+};
+
+
+/**
+ * optional Continuation continuation = 3;
+ * @return {?proto.pulumirpc.ListResponse.Continuation}
+ */
+proto.pulumirpc.ListResponse.prototype.getContinuation = function() {
+  return /** @type{?proto.pulumirpc.ListResponse.Continuation} */ (
+    jspb.Message.getWrapperField(this, proto.pulumirpc.ListResponse.Continuation, 3));
+};
+
+
+/**
+ * @param {?proto.pulumirpc.ListResponse.Continuation|undefined} value
+ * @return {!proto.pulumirpc.ListResponse} returns this
+*/
+proto.pulumirpc.ListResponse.prototype.setContinuation = function(value) {
+  return jspb.Message.setOneofWrapperField(this, 3, proto.pulumirpc.ListResponse.oneofGroups_[0], value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.ListResponse} returns this
+ */
+proto.pulumirpc.ListResponse.prototype.clearContinuation = function() {
+  return this.setContinuation(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ListResponse.prototype.hasContinuation = function() {
+  return jspb.Message.getField(this, 3) != null;
+};
+
+
 
 /**
  * List of repeated fields within this message type.
  * @private {!Array<number>}
  * @const
  */
-proto.pulumirpc.UpdateRequest.repeatedFields_ = [6];
+proto.pulumirpc.UpdateRequest.repeatedFields_ = [6,13];
 
 
 
@@ -4522,13 +10040,20 @@ proto.pulumirpc.UpdateRequest.prototype.toObject = function(opt_includeInstance)
  */
 proto.pulumirpc.UpdateRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    id: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    urn: jspb.Message.getFieldWithDefault(msg, 2, ""),
-    olds: (f = msg.getOlds()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    news: (f = msg.getNews()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    timeout: jspb.Message.getFloatingPointFieldWithDefault(msg, 5, 0.0),
-    ignorechangesList: (f = jspb.Message.getRepeatedField(msg, 6)) == null ? undefined : f,
-    preview: jspb.Message.getBooleanFieldWithDefault(msg, 7, false)
+id: jspb.Message.getFieldWithDefault(msg, 1, ""),
+urn: jspb.Message.getFieldWithDefault(msg, 2, ""),
+olds: (f = msg.getOlds()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+news: (f = msg.getNews()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+timeout: jspb.Message.getFloatingPointFieldWithDefault(msg, 5, 0.0),
+ignorechangesList: (f = jspb.Message.getRepeatedField(msg, 6)) == null ? undefined : f,
+preview: jspb.Message.getBooleanFieldWithDefault(msg, 7, false),
+oldInputs: (f = msg.getOldInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+name: jspb.Message.getFieldWithDefault(msg, 9, ""),
+type: jspb.Message.getFieldWithDefault(msg, 10, ""),
+resourceStatusAddress: jspb.Message.getFieldWithDefault(msg, 11, ""),
+resourceStatusToken: jspb.Message.getFieldWithDefault(msg, 12, ""),
+oldViewsList: jspb.Message.toObjectList(msg.getOldViewsList(),
+    proto.pulumirpc.View.toObject, includeInstance)
   };
 
   if (includeInstance) {
@@ -4594,6 +10119,32 @@ proto.pulumirpc.UpdateRequest.deserializeBinaryFromReader = function(msg, reader
     case 7:
       var value = /** @type {boolean} */ (reader.readBool());
       msg.setPreview(value);
+      break;
+    case 8:
+      var value = new google_protobuf_struct_pb.Struct;
+      reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
+      msg.setOldInputs(value);
+      break;
+    case 9:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    case 10:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setType(value);
+      break;
+    case 11:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setResourceStatusAddress(value);
+      break;
+    case 12:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setResourceStatusToken(value);
+      break;
+    case 13:
+      var value = new proto.pulumirpc.View;
+      reader.readMessage(value,proto.pulumirpc.View.deserializeBinaryFromReader);
+      msg.addOldViews(value);
       break;
     default:
       reader.skipField();
@@ -4673,6 +10224,50 @@ proto.pulumirpc.UpdateRequest.serializeBinaryToWriter = function(message, writer
     writer.writeBool(
       7,
       f
+    );
+  }
+  f = message.getOldInputs();
+  if (f != null) {
+    writer.writeMessage(
+      8,
+      f,
+      google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getName();
+  if (f.length > 0) {
+    writer.writeString(
+      9,
+      f
+    );
+  }
+  f = message.getType();
+  if (f.length > 0) {
+    writer.writeString(
+      10,
+      f
+    );
+  }
+  f = message.getResourceStatusAddress();
+  if (f.length > 0) {
+    writer.writeString(
+      11,
+      f
+    );
+  }
+  f = message.getResourceStatusToken();
+  if (f.length > 0) {
+    writer.writeString(
+      12,
+      f
+    );
+  }
+  f = message.getOldViewsList();
+  if (f.length > 0) {
+    writer.writeRepeatedMessage(
+      13,
+      f,
+      proto.pulumirpc.View.serializeBinaryToWriter
     );
   }
 };
@@ -4861,6 +10456,153 @@ proto.pulumirpc.UpdateRequest.prototype.setPreview = function(value) {
 };
 
 
+/**
+ * optional google.protobuf.Struct old_inputs = 8;
+ * @return {?proto.google.protobuf.Struct}
+ */
+proto.pulumirpc.UpdateRequest.prototype.getOldInputs = function() {
+  return /** @type{?proto.google.protobuf.Struct} */ (
+    jspb.Message.getWrapperField(this, google_protobuf_struct_pb.Struct, 8));
+};
+
+
+/**
+ * @param {?proto.google.protobuf.Struct|undefined} value
+ * @return {!proto.pulumirpc.UpdateRequest} returns this
+*/
+proto.pulumirpc.UpdateRequest.prototype.setOldInputs = function(value) {
+  return jspb.Message.setWrapperField(this, 8, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.UpdateRequest} returns this
+ */
+proto.pulumirpc.UpdateRequest.prototype.clearOldInputs = function() {
+  return this.setOldInputs(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.UpdateRequest.prototype.hasOldInputs = function() {
+  return jspb.Message.getField(this, 8) != null;
+};
+
+
+/**
+ * optional string name = 9;
+ * @return {string}
+ */
+proto.pulumirpc.UpdateRequest.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 9, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.UpdateRequest} returns this
+ */
+proto.pulumirpc.UpdateRequest.prototype.setName = function(value) {
+  return jspb.Message.setProto3StringField(this, 9, value);
+};
+
+
+/**
+ * optional string type = 10;
+ * @return {string}
+ */
+proto.pulumirpc.UpdateRequest.prototype.getType = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 10, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.UpdateRequest} returns this
+ */
+proto.pulumirpc.UpdateRequest.prototype.setType = function(value) {
+  return jspb.Message.setProto3StringField(this, 10, value);
+};
+
+
+/**
+ * optional string resource_status_address = 11;
+ * @return {string}
+ */
+proto.pulumirpc.UpdateRequest.prototype.getResourceStatusAddress = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 11, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.UpdateRequest} returns this
+ */
+proto.pulumirpc.UpdateRequest.prototype.setResourceStatusAddress = function(value) {
+  return jspb.Message.setProto3StringField(this, 11, value);
+};
+
+
+/**
+ * optional string resource_status_token = 12;
+ * @return {string}
+ */
+proto.pulumirpc.UpdateRequest.prototype.getResourceStatusToken = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 12, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.UpdateRequest} returns this
+ */
+proto.pulumirpc.UpdateRequest.prototype.setResourceStatusToken = function(value) {
+  return jspb.Message.setProto3StringField(this, 12, value);
+};
+
+
+/**
+ * repeated View old_views = 13;
+ * @return {!Array<!proto.pulumirpc.View>}
+ */
+proto.pulumirpc.UpdateRequest.prototype.getOldViewsList = function() {
+  return /** @type{!Array<!proto.pulumirpc.View>} */ (
+    jspb.Message.getRepeatedWrapperField(this, proto.pulumirpc.View, 13));
+};
+
+
+/**
+ * @param {!Array<!proto.pulumirpc.View>} value
+ * @return {!proto.pulumirpc.UpdateRequest} returns this
+*/
+proto.pulumirpc.UpdateRequest.prototype.setOldViewsList = function(value) {
+  return jspb.Message.setRepeatedWrapperField(this, 13, value);
+};
+
+
+/**
+ * @param {!proto.pulumirpc.View=} opt_value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.View}
+ */
+proto.pulumirpc.UpdateRequest.prototype.addOldViews = function(opt_value, opt_index) {
+  return jspb.Message.addToRepeatedWrapperField(this, 13, opt_value, proto.pulumirpc.View, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.UpdateRequest} returns this
+ */
+proto.pulumirpc.UpdateRequest.prototype.clearOldViewsList = function() {
+  return this.setOldViewsList([]);
+};
+
+
 
 
 
@@ -4893,7 +10635,8 @@ proto.pulumirpc.UpdateResponse.prototype.toObject = function(opt_includeInstance
  */
 proto.pulumirpc.UpdateResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f)
+properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+refreshBeforeUpdate: jspb.Message.getBooleanFieldWithDefault(msg, 2, false)
   };
 
   if (includeInstance) {
@@ -4935,6 +10678,10 @@ proto.pulumirpc.UpdateResponse.deserializeBinaryFromReader = function(msg, reade
       reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
       msg.setProperties(value);
       break;
+    case 2:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setRefreshBeforeUpdate(value);
+      break;
     default:
       reader.skipField();
       break;
@@ -4970,6 +10717,13 @@ proto.pulumirpc.UpdateResponse.serializeBinaryToWriter = function(message, write
       1,
       f,
       google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getRefreshBeforeUpdate();
+  if (f) {
+    writer.writeBool(
+      2,
+      f
     );
   }
 };
@@ -5012,6 +10766,31 @@ proto.pulumirpc.UpdateResponse.prototype.hasProperties = function() {
 };
 
 
+/**
+ * optional bool refresh_before_update = 2;
+ * @return {boolean}
+ */
+proto.pulumirpc.UpdateResponse.prototype.getRefreshBeforeUpdate = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 2, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.UpdateResponse} returns this
+ */
+proto.pulumirpc.UpdateResponse.prototype.setRefreshBeforeUpdate = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 2, value);
+};
+
+
+
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pulumirpc.DeleteRequest.repeatedFields_ = [10];
 
 
 
@@ -5044,10 +10823,17 @@ proto.pulumirpc.DeleteRequest.prototype.toObject = function(opt_includeInstance)
  */
 proto.pulumirpc.DeleteRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    id: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    urn: jspb.Message.getFieldWithDefault(msg, 2, ""),
-    properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    timeout: jspb.Message.getFloatingPointFieldWithDefault(msg, 4, 0.0)
+id: jspb.Message.getFieldWithDefault(msg, 1, ""),
+urn: jspb.Message.getFieldWithDefault(msg, 2, ""),
+properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+timeout: jspb.Message.getFloatingPointFieldWithDefault(msg, 4, 0.0),
+oldInputs: (f = msg.getOldInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+name: jspb.Message.getFieldWithDefault(msg, 6, ""),
+type: jspb.Message.getFieldWithDefault(msg, 7, ""),
+resourceStatusAddress: jspb.Message.getFieldWithDefault(msg, 8, ""),
+resourceStatusToken: jspb.Message.getFieldWithDefault(msg, 9, ""),
+oldViewsList: jspb.Message.toObjectList(msg.getOldViewsList(),
+    proto.pulumirpc.View.toObject, includeInstance)
   };
 
   if (includeInstance) {
@@ -5100,6 +10886,32 @@ proto.pulumirpc.DeleteRequest.deserializeBinaryFromReader = function(msg, reader
     case 4:
       var value = /** @type {number} */ (reader.readDouble());
       msg.setTimeout(value);
+      break;
+    case 5:
+      var value = new google_protobuf_struct_pb.Struct;
+      reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
+      msg.setOldInputs(value);
+      break;
+    case 6:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    case 7:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setType(value);
+      break;
+    case 8:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setResourceStatusAddress(value);
+      break;
+    case 9:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setResourceStatusToken(value);
+      break;
+    case 10:
+      var value = new proto.pulumirpc.View;
+      reader.readMessage(value,proto.pulumirpc.View.deserializeBinaryFromReader);
+      msg.addOldViews(value);
       break;
     default:
       reader.skipField();
@@ -5157,6 +10969,50 @@ proto.pulumirpc.DeleteRequest.serializeBinaryToWriter = function(message, writer
     writer.writeDouble(
       4,
       f
+    );
+  }
+  f = message.getOldInputs();
+  if (f != null) {
+    writer.writeMessage(
+      5,
+      f,
+      google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getName();
+  if (f.length > 0) {
+    writer.writeString(
+      6,
+      f
+    );
+  }
+  f = message.getType();
+  if (f.length > 0) {
+    writer.writeString(
+      7,
+      f
+    );
+  }
+  f = message.getResourceStatusAddress();
+  if (f.length > 0) {
+    writer.writeString(
+      8,
+      f
+    );
+  }
+  f = message.getResourceStatusToken();
+  if (f.length > 0) {
+    writer.writeString(
+      9,
+      f
+    );
+  }
+  f = message.getOldViewsList();
+  if (f.length > 0) {
+    writer.writeRepeatedMessage(
+      10,
+      f,
+      proto.pulumirpc.View.serializeBinaryToWriter
     );
   }
 };
@@ -5253,13 +11109,160 @@ proto.pulumirpc.DeleteRequest.prototype.setTimeout = function(value) {
 };
 
 
+/**
+ * optional google.protobuf.Struct old_inputs = 5;
+ * @return {?proto.google.protobuf.Struct}
+ */
+proto.pulumirpc.DeleteRequest.prototype.getOldInputs = function() {
+  return /** @type{?proto.google.protobuf.Struct} */ (
+    jspb.Message.getWrapperField(this, google_protobuf_struct_pb.Struct, 5));
+};
+
+
+/**
+ * @param {?proto.google.protobuf.Struct|undefined} value
+ * @return {!proto.pulumirpc.DeleteRequest} returns this
+*/
+proto.pulumirpc.DeleteRequest.prototype.setOldInputs = function(value) {
+  return jspb.Message.setWrapperField(this, 5, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.DeleteRequest} returns this
+ */
+proto.pulumirpc.DeleteRequest.prototype.clearOldInputs = function() {
+  return this.setOldInputs(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.DeleteRequest.prototype.hasOldInputs = function() {
+  return jspb.Message.getField(this, 5) != null;
+};
+
+
+/**
+ * optional string name = 6;
+ * @return {string}
+ */
+proto.pulumirpc.DeleteRequest.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 6, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.DeleteRequest} returns this
+ */
+proto.pulumirpc.DeleteRequest.prototype.setName = function(value) {
+  return jspb.Message.setProto3StringField(this, 6, value);
+};
+
+
+/**
+ * optional string type = 7;
+ * @return {string}
+ */
+proto.pulumirpc.DeleteRequest.prototype.getType = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 7, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.DeleteRequest} returns this
+ */
+proto.pulumirpc.DeleteRequest.prototype.setType = function(value) {
+  return jspb.Message.setProto3StringField(this, 7, value);
+};
+
+
+/**
+ * optional string resource_status_address = 8;
+ * @return {string}
+ */
+proto.pulumirpc.DeleteRequest.prototype.getResourceStatusAddress = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 8, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.DeleteRequest} returns this
+ */
+proto.pulumirpc.DeleteRequest.prototype.setResourceStatusAddress = function(value) {
+  return jspb.Message.setProto3StringField(this, 8, value);
+};
+
+
+/**
+ * optional string resource_status_token = 9;
+ * @return {string}
+ */
+proto.pulumirpc.DeleteRequest.prototype.getResourceStatusToken = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 9, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.DeleteRequest} returns this
+ */
+proto.pulumirpc.DeleteRequest.prototype.setResourceStatusToken = function(value) {
+  return jspb.Message.setProto3StringField(this, 9, value);
+};
+
+
+/**
+ * repeated View old_views = 10;
+ * @return {!Array<!proto.pulumirpc.View>}
+ */
+proto.pulumirpc.DeleteRequest.prototype.getOldViewsList = function() {
+  return /** @type{!Array<!proto.pulumirpc.View>} */ (
+    jspb.Message.getRepeatedWrapperField(this, proto.pulumirpc.View, 10));
+};
+
+
+/**
+ * @param {!Array<!proto.pulumirpc.View>} value
+ * @return {!proto.pulumirpc.DeleteRequest} returns this
+*/
+proto.pulumirpc.DeleteRequest.prototype.setOldViewsList = function(value) {
+  return jspb.Message.setRepeatedWrapperField(this, 10, value);
+};
+
+
+/**
+ * @param {!proto.pulumirpc.View=} opt_value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.View}
+ */
+proto.pulumirpc.DeleteRequest.prototype.addOldViews = function(opt_value, opt_index) {
+  return jspb.Message.addToRepeatedWrapperField(this, 10, opt_value, proto.pulumirpc.View, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.DeleteRequest} returns this
+ */
+proto.pulumirpc.DeleteRequest.prototype.clearOldViewsList = function() {
+  return this.setOldViewsList([]);
+};
+
+
 
 /**
  * List of repeated fields within this message type.
  * @private {!Array<number>}
  * @const
  */
-proto.pulumirpc.ConstructRequest.repeatedFields_ = [14,15];
+proto.pulumirpc.ConstructRequest.repeatedFields_ = [15,16,18,22,23,28,29];
 
 
 
@@ -5292,21 +11295,36 @@ proto.pulumirpc.ConstructRequest.prototype.toObject = function(opt_includeInstan
  */
 proto.pulumirpc.ConstructRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    project: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    stack: jspb.Message.getFieldWithDefault(msg, 2, ""),
-    configMap: (f = msg.getConfigMap()) ? f.toObject(includeInstance, undefined) : [],
-    dryrun: jspb.Message.getBooleanFieldWithDefault(msg, 4, false),
-    parallel: jspb.Message.getFieldWithDefault(msg, 5, 0),
-    monitorendpoint: jspb.Message.getFieldWithDefault(msg, 6, ""),
-    type: jspb.Message.getFieldWithDefault(msg, 7, ""),
-    name: jspb.Message.getFieldWithDefault(msg, 8, ""),
-    parent: jspb.Message.getFieldWithDefault(msg, 9, ""),
-    inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    inputdependenciesMap: (f = msg.getInputdependenciesMap()) ? f.toObject(includeInstance, proto.pulumirpc.ConstructRequest.PropertyDependencies.toObject) : [],
-    protect: jspb.Message.getBooleanFieldWithDefault(msg, 12, false),
-    providersMap: (f = msg.getProvidersMap()) ? f.toObject(includeInstance, undefined) : [],
-    aliasesList: (f = jspb.Message.getRepeatedField(msg, 14)) == null ? undefined : f,
-    dependenciesList: (f = jspb.Message.getRepeatedField(msg, 15)) == null ? undefined : f
+project: jspb.Message.getFieldWithDefault(msg, 1, ""),
+stack: jspb.Message.getFieldWithDefault(msg, 2, ""),
+configMap: (f = msg.getConfigMap()) ? f.toObject(includeInstance, undefined) : [],
+dryrun: jspb.Message.getBooleanFieldWithDefault(msg, 4, false),
+parallel: jspb.Message.getFieldWithDefault(msg, 5, 0),
+monitorendpoint: jspb.Message.getFieldWithDefault(msg, 6, ""),
+type: jspb.Message.getFieldWithDefault(msg, 7, ""),
+name: jspb.Message.getFieldWithDefault(msg, 8, ""),
+parent: jspb.Message.getFieldWithDefault(msg, 9, ""),
+inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+inputdependenciesMap: (f = msg.getInputdependenciesMap()) ? f.toObject(includeInstance, proto.pulumirpc.ConstructRequest.PropertyDependencies.toObject) : [],
+providersMap: (f = msg.getProvidersMap()) ? f.toObject(includeInstance, undefined) : [],
+dependenciesList: (f = jspb.Message.getRepeatedField(msg, 15)) == null ? undefined : f,
+configsecretkeysList: (f = jspb.Message.getRepeatedField(msg, 16)) == null ? undefined : f,
+organization: jspb.Message.getFieldWithDefault(msg, 17, ""),
+protect: (f = jspb.Message.getBooleanField(msg, 12)) == null ? undefined : f,
+additionalsecretoutputsList: (f = jspb.Message.getRepeatedField(msg, 18)) == null ? undefined : f,
+customtimeouts: (f = msg.getCustomtimeouts()) && proto.pulumirpc.ConstructRequest.CustomTimeouts.toObject(includeInstance, f),
+deletedwith: jspb.Message.getFieldWithDefault(msg, 20, ""),
+deletebeforereplace: (f = jspb.Message.getBooleanField(msg, 21)) == null ? undefined : f,
+ignorechangesList: (f = jspb.Message.getRepeatedField(msg, 22)) == null ? undefined : f,
+replaceonchangesList: (f = jspb.Message.getRepeatedField(msg, 23)) == null ? undefined : f,
+retainondelete: (f = jspb.Message.getBooleanField(msg, 24)) == null ? undefined : f,
+acceptsOutputValues: jspb.Message.getBooleanFieldWithDefault(msg, 25, false),
+resourceHooks: (f = msg.getResourceHooks()) && proto.pulumirpc.ConstructRequest.ResourceHooksBinding.toObject(includeInstance, f),
+stackTraceHandle: jspb.Message.getFieldWithDefault(msg, 27, ""),
+replaceWithList: (f = jspb.Message.getRepeatedField(msg, 28)) == null ? undefined : f,
+aliasesList: jspb.Message.toObjectList(msg.getAliasesList(),
+    pulumi_alias_pb.Alias.toObject, includeInstance),
+replacementTrigger: (f = msg.getReplacementTrigger()) && google_protobuf_struct_pb.Value.toObject(includeInstance, f)
   };
 
   if (includeInstance) {
@@ -5392,23 +11410,83 @@ proto.pulumirpc.ConstructRequest.deserializeBinaryFromReader = function(msg, rea
         jspb.Map.deserializeBinary(message, reader, jspb.BinaryReader.prototype.readString, jspb.BinaryReader.prototype.readMessage, proto.pulumirpc.ConstructRequest.PropertyDependencies.deserializeBinaryFromReader, "", new proto.pulumirpc.ConstructRequest.PropertyDependencies());
          });
       break;
-    case 12:
-      var value = /** @type {boolean} */ (reader.readBool());
-      msg.setProtect(value);
-      break;
     case 13:
       var value = msg.getProvidersMap();
       reader.readMessage(value, function(message, reader) {
         jspb.Map.deserializeBinary(message, reader, jspb.BinaryReader.prototype.readString, jspb.BinaryReader.prototype.readString, null, "", "");
          });
       break;
-    case 14:
-      var value = /** @type {string} */ (reader.readString());
-      msg.addAliases(value);
-      break;
     case 15:
       var value = /** @type {string} */ (reader.readString());
       msg.addDependencies(value);
+      break;
+    case 16:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addConfigsecretkeys(value);
+      break;
+    case 17:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setOrganization(value);
+      break;
+    case 12:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setProtect(value);
+      break;
+    case 18:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addAdditionalsecretoutputs(value);
+      break;
+    case 19:
+      var value = new proto.pulumirpc.ConstructRequest.CustomTimeouts;
+      reader.readMessage(value,proto.pulumirpc.ConstructRequest.CustomTimeouts.deserializeBinaryFromReader);
+      msg.setCustomtimeouts(value);
+      break;
+    case 20:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setDeletedwith(value);
+      break;
+    case 21:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setDeletebeforereplace(value);
+      break;
+    case 22:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addIgnorechanges(value);
+      break;
+    case 23:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addReplaceonchanges(value);
+      break;
+    case 24:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setRetainondelete(value);
+      break;
+    case 25:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setAcceptsOutputValues(value);
+      break;
+    case 26:
+      var value = new proto.pulumirpc.ConstructRequest.ResourceHooksBinding;
+      reader.readMessage(value,proto.pulumirpc.ConstructRequest.ResourceHooksBinding.deserializeBinaryFromReader);
+      msg.setResourceHooks(value);
+      break;
+    case 27:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setStackTraceHandle(value);
+      break;
+    case 28:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addReplaceWith(value);
+      break;
+    case 29:
+      var value = new pulumi_alias_pb.Alias;
+      reader.readMessage(value,pulumi_alias_pb.Alias.deserializeBinaryFromReader);
+      msg.addAliases(value);
+      break;
+    case 30:
+      var value = new google_protobuf_struct_pb.Value;
+      reader.readMessage(value,google_protobuf_struct_pb.Value.deserializeBinaryFromReader);
+      msg.setReplacementTrigger(value);
       break;
     default:
       reader.skipField();
@@ -5511,29 +11589,131 @@ proto.pulumirpc.ConstructRequest.serializeBinaryToWriter = function(message, wri
   if (f && f.getLength() > 0) {
     f.serializeBinary(11, writer, jspb.BinaryWriter.prototype.writeString, jspb.BinaryWriter.prototype.writeMessage, proto.pulumirpc.ConstructRequest.PropertyDependencies.serializeBinaryToWriter);
   }
-  f = message.getProtect();
-  if (f) {
-    writer.writeBool(
-      12,
-      f
-    );
-  }
   f = message.getProvidersMap(true);
   if (f && f.getLength() > 0) {
     f.serializeBinary(13, writer, jspb.BinaryWriter.prototype.writeString, jspb.BinaryWriter.prototype.writeString);
-  }
-  f = message.getAliasesList();
-  if (f.length > 0) {
-    writer.writeRepeatedString(
-      14,
-      f
-    );
   }
   f = message.getDependenciesList();
   if (f.length > 0) {
     writer.writeRepeatedString(
       15,
       f
+    );
+  }
+  f = message.getConfigsecretkeysList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      16,
+      f
+    );
+  }
+  f = message.getOrganization();
+  if (f.length > 0) {
+    writer.writeString(
+      17,
+      f
+    );
+  }
+  f = /** @type {boolean} */ (jspb.Message.getField(message, 12));
+  if (f != null) {
+    writer.writeBool(
+      12,
+      f
+    );
+  }
+  f = message.getAdditionalsecretoutputsList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      18,
+      f
+    );
+  }
+  f = message.getCustomtimeouts();
+  if (f != null) {
+    writer.writeMessage(
+      19,
+      f,
+      proto.pulumirpc.ConstructRequest.CustomTimeouts.serializeBinaryToWriter
+    );
+  }
+  f = message.getDeletedwith();
+  if (f.length > 0) {
+    writer.writeString(
+      20,
+      f
+    );
+  }
+  f = /** @type {boolean} */ (jspb.Message.getField(message, 21));
+  if (f != null) {
+    writer.writeBool(
+      21,
+      f
+    );
+  }
+  f = message.getIgnorechangesList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      22,
+      f
+    );
+  }
+  f = message.getReplaceonchangesList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      23,
+      f
+    );
+  }
+  f = /** @type {boolean} */ (jspb.Message.getField(message, 24));
+  if (f != null) {
+    writer.writeBool(
+      24,
+      f
+    );
+  }
+  f = message.getAcceptsOutputValues();
+  if (f) {
+    writer.writeBool(
+      25,
+      f
+    );
+  }
+  f = message.getResourceHooks();
+  if (f != null) {
+    writer.writeMessage(
+      26,
+      f,
+      proto.pulumirpc.ConstructRequest.ResourceHooksBinding.serializeBinaryToWriter
+    );
+  }
+  f = message.getStackTraceHandle();
+  if (f.length > 0) {
+    writer.writeString(
+      27,
+      f
+    );
+  }
+  f = message.getReplaceWithList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      28,
+      f
+    );
+  }
+  f = message.getAliasesList();
+  if (f.length > 0) {
+    writer.writeRepeatedMessage(
+      29,
+      f,
+      pulumi_alias_pb.Alias.serializeBinaryToWriter
+    );
+  }
+  f = message.getReplacementTrigger();
+  if (f != null) {
+    writer.writeMessage(
+      30,
+      f,
+      google_protobuf_struct_pb.Value.serializeBinaryToWriter
     );
   }
 };
@@ -5578,7 +11758,7 @@ proto.pulumirpc.ConstructRequest.PropertyDependencies.prototype.toObject = funct
  */
 proto.pulumirpc.ConstructRequest.PropertyDependencies.toObject = function(includeInstance, msg) {
   var f, obj = {
-    urnsList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f
+urnsList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f
   };
 
   if (includeInstance) {
@@ -5695,6 +11875,676 @@ proto.pulumirpc.ConstructRequest.PropertyDependencies.prototype.clearUrnsList = 
 };
 
 
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ConstructRequest.CustomTimeouts.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ConstructRequest.CustomTimeouts} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.toObject = function(includeInstance, msg) {
+  var f, obj = {
+create: jspb.Message.getFieldWithDefault(msg, 1, ""),
+update: jspb.Message.getFieldWithDefault(msg, 2, ""),
+pb_delete: jspb.Message.getFieldWithDefault(msg, 3, ""),
+read: jspb.Message.getFieldWithDefault(msg, 4, "")
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ConstructRequest.CustomTimeouts}
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ConstructRequest.CustomTimeouts;
+  return proto.pulumirpc.ConstructRequest.CustomTimeouts.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ConstructRequest.CustomTimeouts} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ConstructRequest.CustomTimeouts}
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setCreate(value);
+      break;
+    case 2:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setUpdate(value);
+      break;
+    case 3:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setDelete(value);
+      break;
+    case 4:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setRead(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ConstructRequest.CustomTimeouts.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ConstructRequest.CustomTimeouts} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getCreate();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = message.getUpdate();
+  if (f.length > 0) {
+    writer.writeString(
+      2,
+      f
+    );
+  }
+  f = message.getDelete();
+  if (f.length > 0) {
+    writer.writeString(
+      3,
+      f
+    );
+  }
+  f = message.getRead();
+  if (f.length > 0) {
+    writer.writeString(
+      4,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional string create = 1;
+ * @return {string}
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.prototype.getCreate = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConstructRequest.CustomTimeouts} returns this
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.prototype.setCreate = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional string update = 2;
+ * @return {string}
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.prototype.getUpdate = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConstructRequest.CustomTimeouts} returns this
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.prototype.setUpdate = function(value) {
+  return jspb.Message.setProto3StringField(this, 2, value);
+};
+
+
+/**
+ * optional string delete = 3;
+ * @return {string}
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.prototype.getDelete = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 3, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConstructRequest.CustomTimeouts} returns this
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.prototype.setDelete = function(value) {
+  return jspb.Message.setProto3StringField(this, 3, value);
+};
+
+
+/**
+ * optional string read = 4;
+ * @return {string}
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.prototype.getRead = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 4, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConstructRequest.CustomTimeouts} returns this
+ */
+proto.pulumirpc.ConstructRequest.CustomTimeouts.prototype.setRead = function(value) {
+  return jspb.Message.setProto3StringField(this, 4, value);
+};
+
+
+
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.repeatedFields_ = [1,2,3,4,5,6,7];
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ConstructRequest.ResourceHooksBinding.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.toObject = function(includeInstance, msg) {
+  var f, obj = {
+beforeCreateList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f,
+afterCreateList: (f = jspb.Message.getRepeatedField(msg, 2)) == null ? undefined : f,
+beforeUpdateList: (f = jspb.Message.getRepeatedField(msg, 3)) == null ? undefined : f,
+afterUpdateList: (f = jspb.Message.getRepeatedField(msg, 4)) == null ? undefined : f,
+beforeDeleteList: (f = jspb.Message.getRepeatedField(msg, 5)) == null ? undefined : f,
+afterDeleteList: (f = jspb.Message.getRepeatedField(msg, 6)) == null ? undefined : f,
+onErrorList: (f = jspb.Message.getRepeatedField(msg, 7)) == null ? undefined : f
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ConstructRequest.ResourceHooksBinding;
+  return proto.pulumirpc.ConstructRequest.ResourceHooksBinding.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addBeforeCreate(value);
+      break;
+    case 2:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addAfterCreate(value);
+      break;
+    case 3:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addBeforeUpdate(value);
+      break;
+    case 4:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addAfterUpdate(value);
+      break;
+    case 5:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addBeforeDelete(value);
+      break;
+    case 6:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addAfterDelete(value);
+      break;
+    case 7:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addOnError(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ConstructRequest.ResourceHooksBinding.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getBeforeCreateList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      1,
+      f
+    );
+  }
+  f = message.getAfterCreateList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      2,
+      f
+    );
+  }
+  f = message.getBeforeUpdateList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      3,
+      f
+    );
+  }
+  f = message.getAfterUpdateList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      4,
+      f
+    );
+  }
+  f = message.getBeforeDeleteList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      5,
+      f
+    );
+  }
+  f = message.getAfterDeleteList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      6,
+      f
+    );
+  }
+  f = message.getOnErrorList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      7,
+      f
+    );
+  }
+};
+
+
+/**
+ * repeated string before_create = 1;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.getBeforeCreateList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 1));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.setBeforeCreateList = function(value) {
+  return jspb.Message.setField(this, 1, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.addBeforeCreate = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 1, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.clearBeforeCreateList = function() {
+  return this.setBeforeCreateList([]);
+};
+
+
+/**
+ * repeated string after_create = 2;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.getAfterCreateList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 2));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.setAfterCreateList = function(value) {
+  return jspb.Message.setField(this, 2, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.addAfterCreate = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 2, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.clearAfterCreateList = function() {
+  return this.setAfterCreateList([]);
+};
+
+
+/**
+ * repeated string before_update = 3;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.getBeforeUpdateList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 3));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.setBeforeUpdateList = function(value) {
+  return jspb.Message.setField(this, 3, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.addBeforeUpdate = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 3, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.clearBeforeUpdateList = function() {
+  return this.setBeforeUpdateList([]);
+};
+
+
+/**
+ * repeated string after_update = 4;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.getAfterUpdateList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 4));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.setAfterUpdateList = function(value) {
+  return jspb.Message.setField(this, 4, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.addAfterUpdate = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 4, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.clearAfterUpdateList = function() {
+  return this.setAfterUpdateList([]);
+};
+
+
+/**
+ * repeated string before_delete = 5;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.getBeforeDeleteList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 5));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.setBeforeDeleteList = function(value) {
+  return jspb.Message.setField(this, 5, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.addBeforeDelete = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 5, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.clearBeforeDeleteList = function() {
+  return this.setBeforeDeleteList([]);
+};
+
+
+/**
+ * repeated string after_delete = 6;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.getAfterDeleteList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 6));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.setAfterDeleteList = function(value) {
+  return jspb.Message.setField(this, 6, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.addAfterDelete = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 6, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.clearAfterDeleteList = function() {
+  return this.setAfterDeleteList([]);
+};
+
+
+/**
+ * repeated string on_error = 7;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.getOnErrorList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 7));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.setOnErrorList = function(value) {
+  return jspb.Message.setField(this, 7, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.addOnError = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 7, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest.ResourceHooksBinding} returns this
+ */
+proto.pulumirpc.ConstructRequest.ResourceHooksBinding.prototype.clearOnErrorList = function() {
+  return this.setOnErrorList([]);
+};
+
+
 /**
  * optional string project = 1;
  * @return {string}
@@ -5750,7 +12600,8 @@ proto.pulumirpc.ConstructRequest.prototype.getConfigMap = function(opt_noLazyCre
  */
 proto.pulumirpc.ConstructRequest.prototype.clearConfigMap = function() {
   this.getConfigMap().clear();
-  return this;};
+  return this;
+};
 
 
 /**
@@ -5917,24 +12768,7 @@ proto.pulumirpc.ConstructRequest.prototype.getInputdependenciesMap = function(op
  */
 proto.pulumirpc.ConstructRequest.prototype.clearInputdependenciesMap = function() {
   this.getInputdependenciesMap().clear();
-  return this;};
-
-
-/**
- * optional bool protect = 12;
- * @return {boolean}
- */
-proto.pulumirpc.ConstructRequest.prototype.getProtect = function() {
-  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 12, false));
-};
-
-
-/**
- * @param {boolean} value
- * @return {!proto.pulumirpc.ConstructRequest} returns this
- */
-proto.pulumirpc.ConstructRequest.prototype.setProtect = function(value) {
-  return jspb.Message.setProto3BooleanField(this, 12, value);
+  return this;
 };
 
 
@@ -5957,43 +12791,7 @@ proto.pulumirpc.ConstructRequest.prototype.getProvidersMap = function(opt_noLazy
  */
 proto.pulumirpc.ConstructRequest.prototype.clearProvidersMap = function() {
   this.getProvidersMap().clear();
-  return this;};
-
-
-/**
- * repeated string aliases = 14;
- * @return {!Array<string>}
- */
-proto.pulumirpc.ConstructRequest.prototype.getAliasesList = function() {
-  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 14));
-};
-
-
-/**
- * @param {!Array<string>} value
- * @return {!proto.pulumirpc.ConstructRequest} returns this
- */
-proto.pulumirpc.ConstructRequest.prototype.setAliasesList = function(value) {
-  return jspb.Message.setField(this, 14, value || []);
-};
-
-
-/**
- * @param {string} value
- * @param {number=} opt_index
- * @return {!proto.pulumirpc.ConstructRequest} returns this
- */
-proto.pulumirpc.ConstructRequest.prototype.addAliases = function(value, opt_index) {
-  return jspb.Message.addToRepeatedField(this, 14, value, opt_index);
-};
-
-
-/**
- * Clears the list making it empty but non-null.
- * @return {!proto.pulumirpc.ConstructRequest} returns this
- */
-proto.pulumirpc.ConstructRequest.prototype.clearAliasesList = function() {
-  return this.setAliasesList([]);
+  return this;
 };
 
 
@@ -6034,6 +12832,520 @@ proto.pulumirpc.ConstructRequest.prototype.clearDependenciesList = function() {
 };
 
 
+/**
+ * repeated string configSecretKeys = 16;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getConfigsecretkeysList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 16));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setConfigsecretkeysList = function(value) {
+  return jspb.Message.setField(this, 16, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.addConfigsecretkeys = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 16, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearConfigsecretkeysList = function() {
+  return this.setConfigsecretkeysList([]);
+};
+
+
+/**
+ * optional string organization = 17;
+ * @return {string}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getOrganization = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 17, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setOrganization = function(value) {
+  return jspb.Message.setProto3StringField(this, 17, value);
+};
+
+
+/**
+ * optional bool protect = 12;
+ * @return {boolean}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getProtect = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 12, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setProtect = function(value) {
+  return jspb.Message.setField(this, 12, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearProtect = function() {
+  return jspb.Message.setField(this, 12, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ConstructRequest.prototype.hasProtect = function() {
+  return jspb.Message.getField(this, 12) != null;
+};
+
+
+/**
+ * repeated string additionalSecretOutputs = 18;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getAdditionalsecretoutputsList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 18));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setAdditionalsecretoutputsList = function(value) {
+  return jspb.Message.setField(this, 18, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.addAdditionalsecretoutputs = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 18, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearAdditionalsecretoutputsList = function() {
+  return this.setAdditionalsecretoutputsList([]);
+};
+
+
+/**
+ * optional CustomTimeouts customTimeouts = 19;
+ * @return {?proto.pulumirpc.ConstructRequest.CustomTimeouts}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getCustomtimeouts = function() {
+  return /** @type{?proto.pulumirpc.ConstructRequest.CustomTimeouts} */ (
+    jspb.Message.getWrapperField(this, proto.pulumirpc.ConstructRequest.CustomTimeouts, 19));
+};
+
+
+/**
+ * @param {?proto.pulumirpc.ConstructRequest.CustomTimeouts|undefined} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+*/
+proto.pulumirpc.ConstructRequest.prototype.setCustomtimeouts = function(value) {
+  return jspb.Message.setWrapperField(this, 19, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearCustomtimeouts = function() {
+  return this.setCustomtimeouts(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ConstructRequest.prototype.hasCustomtimeouts = function() {
+  return jspb.Message.getField(this, 19) != null;
+};
+
+
+/**
+ * optional string deletedWith = 20;
+ * @return {string}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getDeletedwith = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 20, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setDeletedwith = function(value) {
+  return jspb.Message.setProto3StringField(this, 20, value);
+};
+
+
+/**
+ * optional bool deleteBeforeReplace = 21;
+ * @return {boolean}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getDeletebeforereplace = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 21, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setDeletebeforereplace = function(value) {
+  return jspb.Message.setField(this, 21, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearDeletebeforereplace = function() {
+  return jspb.Message.setField(this, 21, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ConstructRequest.prototype.hasDeletebeforereplace = function() {
+  return jspb.Message.getField(this, 21) != null;
+};
+
+
+/**
+ * repeated string ignoreChanges = 22;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getIgnorechangesList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 22));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setIgnorechangesList = function(value) {
+  return jspb.Message.setField(this, 22, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.addIgnorechanges = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 22, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearIgnorechangesList = function() {
+  return this.setIgnorechangesList([]);
+};
+
+
+/**
+ * repeated string replaceOnChanges = 23;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getReplaceonchangesList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 23));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setReplaceonchangesList = function(value) {
+  return jspb.Message.setField(this, 23, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.addReplaceonchanges = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 23, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearReplaceonchangesList = function() {
+  return this.setReplaceonchangesList([]);
+};
+
+
+/**
+ * optional bool retainOnDelete = 24;
+ * @return {boolean}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getRetainondelete = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 24, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setRetainondelete = function(value) {
+  return jspb.Message.setField(this, 24, value);
+};
+
+
+/**
+ * Clears the field making it undefined.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearRetainondelete = function() {
+  return jspb.Message.setField(this, 24, undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ConstructRequest.prototype.hasRetainondelete = function() {
+  return jspb.Message.getField(this, 24) != null;
+};
+
+
+/**
+ * optional bool accepts_output_values = 25;
+ * @return {boolean}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getAcceptsOutputValues = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 25, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setAcceptsOutputValues = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 25, value);
+};
+
+
+/**
+ * optional ResourceHooksBinding resource_hooks = 26;
+ * @return {?proto.pulumirpc.ConstructRequest.ResourceHooksBinding}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getResourceHooks = function() {
+  return /** @type{?proto.pulumirpc.ConstructRequest.ResourceHooksBinding} */ (
+    jspb.Message.getWrapperField(this, proto.pulumirpc.ConstructRequest.ResourceHooksBinding, 26));
+};
+
+
+/**
+ * @param {?proto.pulumirpc.ConstructRequest.ResourceHooksBinding|undefined} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+*/
+proto.pulumirpc.ConstructRequest.prototype.setResourceHooks = function(value) {
+  return jspb.Message.setWrapperField(this, 26, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearResourceHooks = function() {
+  return this.setResourceHooks(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ConstructRequest.prototype.hasResourceHooks = function() {
+  return jspb.Message.getField(this, 26) != null;
+};
+
+
+/**
+ * optional string stack_trace_handle = 27;
+ * @return {string}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getStackTraceHandle = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 27, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setStackTraceHandle = function(value) {
+  return jspb.Message.setProto3StringField(this, 27, value);
+};
+
+
+/**
+ * repeated string replace_with = 28;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getReplaceWithList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 28));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.setReplaceWithList = function(value) {
+  return jspb.Message.setField(this, 28, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.addReplaceWith = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 28, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearReplaceWithList = function() {
+  return this.setReplaceWithList([]);
+};
+
+
+/**
+ * repeated Alias aliases = 29;
+ * @return {!Array<!proto.pulumirpc.Alias>}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getAliasesList = function() {
+  return /** @type{!Array<!proto.pulumirpc.Alias>} */ (
+    jspb.Message.getRepeatedWrapperField(this, pulumi_alias_pb.Alias, 29));
+};
+
+
+/**
+ * @param {!Array<!proto.pulumirpc.Alias>} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+*/
+proto.pulumirpc.ConstructRequest.prototype.setAliasesList = function(value) {
+  return jspb.Message.setRepeatedWrapperField(this, 29, value);
+};
+
+
+/**
+ * @param {!proto.pulumirpc.Alias=} opt_value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.Alias}
+ */
+proto.pulumirpc.ConstructRequest.prototype.addAliases = function(opt_value, opt_index) {
+  return jspb.Message.addToRepeatedWrapperField(this, 29, opt_value, proto.pulumirpc.Alias, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearAliasesList = function() {
+  return this.setAliasesList([]);
+};
+
+
+/**
+ * optional google.protobuf.Value replacement_trigger = 30;
+ * @return {?proto.google.protobuf.Value}
+ */
+proto.pulumirpc.ConstructRequest.prototype.getReplacementTrigger = function() {
+  return /** @type{?proto.google.protobuf.Value} */ (
+    jspb.Message.getWrapperField(this, google_protobuf_struct_pb.Value, 30));
+};
+
+
+/**
+ * @param {?proto.google.protobuf.Value|undefined} value
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+*/
+proto.pulumirpc.ConstructRequest.prototype.setReplacementTrigger = function(value) {
+  return jspb.Message.setWrapperField(this, 30, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.ConstructRequest} returns this
+ */
+proto.pulumirpc.ConstructRequest.prototype.clearReplacementTrigger = function() {
+  return this.setReplacementTrigger(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.ConstructRequest.prototype.hasReplacementTrigger = function() {
+  return jspb.Message.getField(this, 30) != null;
+};
+
+
 
 
 
@@ -6066,9 +13378,9 @@ proto.pulumirpc.ConstructResponse.prototype.toObject = function(opt_includeInsta
  */
 proto.pulumirpc.ConstructResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    urn: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    state: (f = msg.getState()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    statedependenciesMap: (f = msg.getStatedependenciesMap()) ? f.toObject(includeInstance, proto.pulumirpc.ConstructResponse.PropertyDependencies.toObject) : []
+urn: jspb.Message.getFieldWithDefault(msg, 1, ""),
+state: (f = msg.getState()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+statedependenciesMap: (f = msg.getStatedependenciesMap()) ? f.toObject(includeInstance, proto.pulumirpc.ConstructResponse.PropertyDependencies.toObject) : []
   };
 
   if (includeInstance) {
@@ -6210,7 +13522,7 @@ proto.pulumirpc.ConstructResponse.PropertyDependencies.prototype.toObject = func
  */
 proto.pulumirpc.ConstructResponse.PropertyDependencies.toObject = function(includeInstance, msg) {
   var f, obj = {
-    urnsList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f
+urnsList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f
   };
 
   if (includeInstance) {
@@ -6401,7 +13713,8 @@ proto.pulumirpc.ConstructResponse.prototype.getStatedependenciesMap = function(o
  */
 proto.pulumirpc.ConstructResponse.prototype.clearStatedependenciesMap = function() {
   this.getStatedependenciesMap().clear();
-  return this;};
+  return this;
+};
 
 
 
@@ -6443,10 +13756,11 @@ proto.pulumirpc.ErrorResourceInitFailed.prototype.toObject = function(opt_includ
  */
 proto.pulumirpc.ErrorResourceInitFailed.toObject = function(includeInstance, msg) {
   var f, obj = {
-    id: jspb.Message.getFieldWithDefault(msg, 1, ""),
-    properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
-    reasonsList: (f = jspb.Message.getRepeatedField(msg, 3)) == null ? undefined : f,
-    inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f)
+id: jspb.Message.getFieldWithDefault(msg, 1, ""),
+properties: (f = msg.getProperties()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+reasonsList: (f = jspb.Message.getRepeatedField(msg, 3)) == null ? undefined : f,
+inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+refreshBeforeUpdate: jspb.Message.getBooleanFieldWithDefault(msg, 5, false)
   };
 
   if (includeInstance) {
@@ -6500,6 +13814,10 @@ proto.pulumirpc.ErrorResourceInitFailed.deserializeBinaryFromReader = function(m
       var value = new google_protobuf_struct_pb.Struct;
       reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
       msg.setInputs(value);
+      break;
+    case 5:
+      var value = /** @type {boolean} */ (reader.readBool());
+      msg.setRefreshBeforeUpdate(value);
       break;
     default:
       reader.skipField();
@@ -6558,6 +13876,13 @@ proto.pulumirpc.ErrorResourceInitFailed.serializeBinaryToWriter = function(messa
       4,
       f,
       google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getRefreshBeforeUpdate();
+  if (f) {
+    writer.writeBool(
+      5,
+      f
     );
   }
 };
@@ -6689,6 +14014,1077 @@ proto.pulumirpc.ErrorResourceInitFailed.prototype.clearInputs = function() {
  */
 proto.pulumirpc.ErrorResourceInitFailed.prototype.hasInputs = function() {
   return jspb.Message.getField(this, 4) != null;
+};
+
+
+/**
+ * optional bool refresh_before_update = 5;
+ * @return {boolean}
+ */
+proto.pulumirpc.ErrorResourceInitFailed.prototype.getRefreshBeforeUpdate = function() {
+  return /** @type {boolean} */ (jspb.Message.getBooleanFieldWithDefault(this, 5, false));
+};
+
+
+/**
+ * @param {boolean} value
+ * @return {!proto.pulumirpc.ErrorResourceInitFailed} returns this
+ */
+proto.pulumirpc.ErrorResourceInitFailed.prototype.setRefreshBeforeUpdate = function(value) {
+  return jspb.Message.setProto3BooleanField(this, 5, value);
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.ErrorResourceAwaitFailed.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.ErrorResourceAwaitFailed.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.ErrorResourceAwaitFailed} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ErrorResourceAwaitFailed.toObject = function(includeInstance, msg) {
+  var f, obj = {
+
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.ErrorResourceAwaitFailed}
+ */
+proto.pulumirpc.ErrorResourceAwaitFailed.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.ErrorResourceAwaitFailed;
+  return proto.pulumirpc.ErrorResourceAwaitFailed.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.ErrorResourceAwaitFailed} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.ErrorResourceAwaitFailed}
+ */
+proto.pulumirpc.ErrorResourceAwaitFailed.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.ErrorResourceAwaitFailed.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.ErrorResourceAwaitFailed.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.ErrorResourceAwaitFailed} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.ErrorResourceAwaitFailed.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.GetMappingRequest.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.GetMappingRequest.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.GetMappingRequest} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.GetMappingRequest.toObject = function(includeInstance, msg) {
+  var f, obj = {
+key: jspb.Message.getFieldWithDefault(msg, 1, ""),
+provider: jspb.Message.getFieldWithDefault(msg, 2, "")
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.GetMappingRequest}
+ */
+proto.pulumirpc.GetMappingRequest.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.GetMappingRequest;
+  return proto.pulumirpc.GetMappingRequest.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.GetMappingRequest} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.GetMappingRequest}
+ */
+proto.pulumirpc.GetMappingRequest.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setKey(value);
+      break;
+    case 2:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setProvider(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.GetMappingRequest.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.GetMappingRequest.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.GetMappingRequest} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.GetMappingRequest.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getKey();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = message.getProvider();
+  if (f.length > 0) {
+    writer.writeString(
+      2,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional string key = 1;
+ * @return {string}
+ */
+proto.pulumirpc.GetMappingRequest.prototype.getKey = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.GetMappingRequest} returns this
+ */
+proto.pulumirpc.GetMappingRequest.prototype.setKey = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional string provider = 2;
+ * @return {string}
+ */
+proto.pulumirpc.GetMappingRequest.prototype.getProvider = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.GetMappingRequest} returns this
+ */
+proto.pulumirpc.GetMappingRequest.prototype.setProvider = function(value) {
+  return jspb.Message.setProto3StringField(this, 2, value);
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.GetMappingResponse.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.GetMappingResponse.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.GetMappingResponse} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.GetMappingResponse.toObject = function(includeInstance, msg) {
+  var f, obj = {
+provider: jspb.Message.getFieldWithDefault(msg, 1, ""),
+data: msg.getData_asB64()
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.GetMappingResponse}
+ */
+proto.pulumirpc.GetMappingResponse.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.GetMappingResponse;
+  return proto.pulumirpc.GetMappingResponse.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.GetMappingResponse} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.GetMappingResponse}
+ */
+proto.pulumirpc.GetMappingResponse.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setProvider(value);
+      break;
+    case 2:
+      var value = /** @type {!Uint8Array} */ (reader.readBytes());
+      msg.setData(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.GetMappingResponse.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.GetMappingResponse.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.GetMappingResponse} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.GetMappingResponse.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getProvider();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = message.getData_asU8();
+  if (f.length > 0) {
+    writer.writeBytes(
+      2,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional string provider = 1;
+ * @return {string}
+ */
+proto.pulumirpc.GetMappingResponse.prototype.getProvider = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.GetMappingResponse} returns this
+ */
+proto.pulumirpc.GetMappingResponse.prototype.setProvider = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional bytes data = 2;
+ * @return {!(string|Uint8Array)}
+ */
+proto.pulumirpc.GetMappingResponse.prototype.getData = function() {
+  return /** @type {!(string|Uint8Array)} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * optional bytes data = 2;
+ * This is a type-conversion wrapper around `getData()`
+ * @return {string}
+ */
+proto.pulumirpc.GetMappingResponse.prototype.getData_asB64 = function() {
+  return /** @type {string} */ (jspb.Message.bytesAsB64(
+      this.getData()));
+};
+
+
+/**
+ * optional bytes data = 2;
+ * Note that Uint8Array is not supported on all browsers.
+ * @see http://caniuse.com/Uint8Array
+ * This is a type-conversion wrapper around `getData()`
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.GetMappingResponse.prototype.getData_asU8 = function() {
+  return /** @type {!Uint8Array} */ (jspb.Message.bytesAsU8(
+      this.getData()));
+};
+
+
+/**
+ * @param {!(string|Uint8Array)} value
+ * @return {!proto.pulumirpc.GetMappingResponse} returns this
+ */
+proto.pulumirpc.GetMappingResponse.prototype.setData = function(value) {
+  return jspb.Message.setProto3BytesField(this, 2, value);
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.GetMappingsRequest.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.GetMappingsRequest.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.GetMappingsRequest} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.GetMappingsRequest.toObject = function(includeInstance, msg) {
+  var f, obj = {
+key: jspb.Message.getFieldWithDefault(msg, 1, "")
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.GetMappingsRequest}
+ */
+proto.pulumirpc.GetMappingsRequest.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.GetMappingsRequest;
+  return proto.pulumirpc.GetMappingsRequest.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.GetMappingsRequest} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.GetMappingsRequest}
+ */
+proto.pulumirpc.GetMappingsRequest.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setKey(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.GetMappingsRequest.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.GetMappingsRequest.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.GetMappingsRequest} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.GetMappingsRequest.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getKey();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+};
+
+
+/**
+ * optional string key = 1;
+ * @return {string}
+ */
+proto.pulumirpc.GetMappingsRequest.prototype.getKey = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.GetMappingsRequest} returns this
+ */
+proto.pulumirpc.GetMappingsRequest.prototype.setKey = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+
+/**
+ * List of repeated fields within this message type.
+ * @private {!Array<number>}
+ * @const
+ */
+proto.pulumirpc.GetMappingsResponse.repeatedFields_ = [1];
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.GetMappingsResponse.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.GetMappingsResponse.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.GetMappingsResponse} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.GetMappingsResponse.toObject = function(includeInstance, msg) {
+  var f, obj = {
+providersList: (f = jspb.Message.getRepeatedField(msg, 1)) == null ? undefined : f
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.GetMappingsResponse}
+ */
+proto.pulumirpc.GetMappingsResponse.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.GetMappingsResponse;
+  return proto.pulumirpc.GetMappingsResponse.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.GetMappingsResponse} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.GetMappingsResponse}
+ */
+proto.pulumirpc.GetMappingsResponse.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.addProviders(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.GetMappingsResponse.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.GetMappingsResponse.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.GetMappingsResponse} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.GetMappingsResponse.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getProvidersList();
+  if (f.length > 0) {
+    writer.writeRepeatedString(
+      1,
+      f
+    );
+  }
+};
+
+
+/**
+ * repeated string providers = 1;
+ * @return {!Array<string>}
+ */
+proto.pulumirpc.GetMappingsResponse.prototype.getProvidersList = function() {
+  return /** @type {!Array<string>} */ (jspb.Message.getRepeatedField(this, 1));
+};
+
+
+/**
+ * @param {!Array<string>} value
+ * @return {!proto.pulumirpc.GetMappingsResponse} returns this
+ */
+proto.pulumirpc.GetMappingsResponse.prototype.setProvidersList = function(value) {
+  return jspb.Message.setField(this, 1, value || []);
+};
+
+
+/**
+ * @param {string} value
+ * @param {number=} opt_index
+ * @return {!proto.pulumirpc.GetMappingsResponse} returns this
+ */
+proto.pulumirpc.GetMappingsResponse.prototype.addProviders = function(value, opt_index) {
+  return jspb.Message.addToRepeatedField(this, 1, value, opt_index);
+};
+
+
+/**
+ * Clears the list making it empty but non-null.
+ * @return {!proto.pulumirpc.GetMappingsResponse} returns this
+ */
+proto.pulumirpc.GetMappingsResponse.prototype.clearProvidersList = function() {
+  return this.setProvidersList([]);
+};
+
+
+
+
+
+if (jspb.Message.GENERATE_TO_OBJECT) {
+/**
+ * Creates an object representation of this proto.
+ * Field names that are reserved in JavaScript and will be renamed to pb_name.
+ * Optional fields that are not set will be set to undefined.
+ * To access a reserved field use, foo.pb_<name>, eg, foo.pb_default.
+ * For the list of reserved names please see:
+ *     net/proto2/compiler/js/internal/generator.cc#kKeyword.
+ * @param {boolean=} opt_includeInstance Deprecated. whether to include the
+ *     JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @return {!Object}
+ */
+proto.pulumirpc.View.prototype.toObject = function(opt_includeInstance) {
+  return proto.pulumirpc.View.toObject(opt_includeInstance, this);
+};
+
+
+/**
+ * Static version of the {@see toObject} method.
+ * @param {boolean|undefined} includeInstance Deprecated. Whether to include
+ *     the JSPB instance for transitional soy proto support:
+ *     http://goto/soy-param-migration
+ * @param {!proto.pulumirpc.View} msg The msg instance to transform.
+ * @return {!Object}
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.View.toObject = function(includeInstance, msg) {
+  var f, obj = {
+type: jspb.Message.getFieldWithDefault(msg, 1, ""),
+name: jspb.Message.getFieldWithDefault(msg, 2, ""),
+parentType: jspb.Message.getFieldWithDefault(msg, 3, ""),
+parentName: jspb.Message.getFieldWithDefault(msg, 4, ""),
+inputs: (f = msg.getInputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f),
+outputs: (f = msg.getOutputs()) && google_protobuf_struct_pb.Struct.toObject(includeInstance, f)
+  };
+
+  if (includeInstance) {
+    obj.$jspbMessageInstance = msg;
+  }
+  return obj;
+};
+}
+
+
+/**
+ * Deserializes binary data (in protobuf wire format).
+ * @param {jspb.ByteSource} bytes The bytes to deserialize.
+ * @return {!proto.pulumirpc.View}
+ */
+proto.pulumirpc.View.deserializeBinary = function(bytes) {
+  var reader = new jspb.BinaryReader(bytes);
+  var msg = new proto.pulumirpc.View;
+  return proto.pulumirpc.View.deserializeBinaryFromReader(msg, reader);
+};
+
+
+/**
+ * Deserializes binary data (in protobuf wire format) from the
+ * given reader into the given message object.
+ * @param {!proto.pulumirpc.View} msg The message object to deserialize into.
+ * @param {!jspb.BinaryReader} reader The BinaryReader to use.
+ * @return {!proto.pulumirpc.View}
+ */
+proto.pulumirpc.View.deserializeBinaryFromReader = function(msg, reader) {
+  while (reader.nextField()) {
+    if (reader.isEndGroup()) {
+      break;
+    }
+    var field = reader.getFieldNumber();
+    switch (field) {
+    case 1:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setType(value);
+      break;
+    case 2:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setName(value);
+      break;
+    case 3:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setParentType(value);
+      break;
+    case 4:
+      var value = /** @type {string} */ (reader.readString());
+      msg.setParentName(value);
+      break;
+    case 5:
+      var value = new google_protobuf_struct_pb.Struct;
+      reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
+      msg.setInputs(value);
+      break;
+    case 6:
+      var value = new google_protobuf_struct_pb.Struct;
+      reader.readMessage(value,google_protobuf_struct_pb.Struct.deserializeBinaryFromReader);
+      msg.setOutputs(value);
+      break;
+    default:
+      reader.skipField();
+      break;
+    }
+  }
+  return msg;
+};
+
+
+/**
+ * Serializes the message to binary data (in protobuf wire format).
+ * @return {!Uint8Array}
+ */
+proto.pulumirpc.View.prototype.serializeBinary = function() {
+  var writer = new jspb.BinaryWriter();
+  proto.pulumirpc.View.serializeBinaryToWriter(this, writer);
+  return writer.getResultBuffer();
+};
+
+
+/**
+ * Serializes the given message to binary data (in protobuf wire
+ * format), writing to the given BinaryWriter.
+ * @param {!proto.pulumirpc.View} message
+ * @param {!jspb.BinaryWriter} writer
+ * @suppress {unusedLocalVariables} f is only used for nested messages
+ */
+proto.pulumirpc.View.serializeBinaryToWriter = function(message, writer) {
+  var f = undefined;
+  f = message.getType();
+  if (f.length > 0) {
+    writer.writeString(
+      1,
+      f
+    );
+  }
+  f = message.getName();
+  if (f.length > 0) {
+    writer.writeString(
+      2,
+      f
+    );
+  }
+  f = message.getParentType();
+  if (f.length > 0) {
+    writer.writeString(
+      3,
+      f
+    );
+  }
+  f = message.getParentName();
+  if (f.length > 0) {
+    writer.writeString(
+      4,
+      f
+    );
+  }
+  f = message.getInputs();
+  if (f != null) {
+    writer.writeMessage(
+      5,
+      f,
+      google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+  f = message.getOutputs();
+  if (f != null) {
+    writer.writeMessage(
+      6,
+      f,
+      google_protobuf_struct_pb.Struct.serializeBinaryToWriter
+    );
+  }
+};
+
+
+/**
+ * optional string type = 1;
+ * @return {string}
+ */
+proto.pulumirpc.View.prototype.getType = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.View} returns this
+ */
+proto.pulumirpc.View.prototype.setType = function(value) {
+  return jspb.Message.setProto3StringField(this, 1, value);
+};
+
+
+/**
+ * optional string name = 2;
+ * @return {string}
+ */
+proto.pulumirpc.View.prototype.getName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 2, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.View} returns this
+ */
+proto.pulumirpc.View.prototype.setName = function(value) {
+  return jspb.Message.setProto3StringField(this, 2, value);
+};
+
+
+/**
+ * optional string parent_type = 3;
+ * @return {string}
+ */
+proto.pulumirpc.View.prototype.getParentType = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 3, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.View} returns this
+ */
+proto.pulumirpc.View.prototype.setParentType = function(value) {
+  return jspb.Message.setProto3StringField(this, 3, value);
+};
+
+
+/**
+ * optional string parent_name = 4;
+ * @return {string}
+ */
+proto.pulumirpc.View.prototype.getParentName = function() {
+  return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 4, ""));
+};
+
+
+/**
+ * @param {string} value
+ * @return {!proto.pulumirpc.View} returns this
+ */
+proto.pulumirpc.View.prototype.setParentName = function(value) {
+  return jspb.Message.setProto3StringField(this, 4, value);
+};
+
+
+/**
+ * optional google.protobuf.Struct inputs = 5;
+ * @return {?proto.google.protobuf.Struct}
+ */
+proto.pulumirpc.View.prototype.getInputs = function() {
+  return /** @type{?proto.google.protobuf.Struct} */ (
+    jspb.Message.getWrapperField(this, google_protobuf_struct_pb.Struct, 5));
+};
+
+
+/**
+ * @param {?proto.google.protobuf.Struct|undefined} value
+ * @return {!proto.pulumirpc.View} returns this
+*/
+proto.pulumirpc.View.prototype.setInputs = function(value) {
+  return jspb.Message.setWrapperField(this, 5, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.View} returns this
+ */
+proto.pulumirpc.View.prototype.clearInputs = function() {
+  return this.setInputs(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.View.prototype.hasInputs = function() {
+  return jspb.Message.getField(this, 5) != null;
+};
+
+
+/**
+ * optional google.protobuf.Struct outputs = 6;
+ * @return {?proto.google.protobuf.Struct}
+ */
+proto.pulumirpc.View.prototype.getOutputs = function() {
+  return /** @type{?proto.google.protobuf.Struct} */ (
+    jspb.Message.getWrapperField(this, google_protobuf_struct_pb.Struct, 6));
+};
+
+
+/**
+ * @param {?proto.google.protobuf.Struct|undefined} value
+ * @return {!proto.pulumirpc.View} returns this
+*/
+proto.pulumirpc.View.prototype.setOutputs = function(value) {
+  return jspb.Message.setWrapperField(this, 6, value);
+};
+
+
+/**
+ * Clears the message field making it undefined.
+ * @return {!proto.pulumirpc.View} returns this
+ */
+proto.pulumirpc.View.prototype.clearOutputs = function() {
+  return this.setOutputs(undefined);
+};
+
+
+/**
+ * Returns whether this field is set.
+ * @return {boolean}
+ */
+proto.pulumirpc.View.prototype.hasOutputs = function() {
+  return jspb.Message.getField(this, 6) != null;
 };
 
 
